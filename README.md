@@ -7,23 +7,28 @@
 ゲーム画面や配信画面へのオーバーレイ表示と音声読み上げにより、あなたの頼れる秘書や相棒へと成長していくAIアシスタントです。
 
 1. 同梱内容の確認
-配布されたZIPファイルを展開すると、以下の構成になっています。
-AI_Secretary_Hub.exe : 操作用のメインパネル（ハブ）です。
-python_env/ : システムを動かすための専用エンジンです。
+インストーラーによって以下の構成で配置されます（デフォルト：%LOCALAPPDATA%\SecreAI）。
+secreAI.exe : 操作用のメインパネル（ハブ）です。
 scripts/ : AIの各機能（会話、記憶整理、学習）を司るプログラム群です。
-config/ : 設定を保存します。
-data/ : あなたのAIとの思い出や学習データが保存される場所です。
+config/ : 設定ファイル（config.json）を保存します。
+data/ : 言語ファイル、会話履歴、一時音声データが保存されます。
+memory_db/ : ChromaDBによる長期記憶データベースが構築されます。
 
 2. 事前準備
 ・GEMINI_API_KEY
 　APIキーは Google AI Studio（https://ai.google.dev/aistudio?hl=ja） から取得可能です。
 　クレジットカードの登録が必要ですが、本ソフトの想定する使用の範囲では３か月程度は無料枠で使用可能です。（後ほど詳細は説明します）
 　完全無料で使用することも可能ですが使用回数の制限が厳しいです。
-・VOICEVOX（https://voicevox.hiroshiba.jp/）
-　読み上げに必要なテキスト読み上げ・歌声合成ソフトウェア。（フリーソフト）
 ・Elgato Stream Deck（https://www.elgato.com/jp/ja/s/stream-deck-app?srsltid=AfmBOoqTtWrEY_AAh35KTHT3jIzpZ5JF6nHuThISU61Ykg20VBoMVCMm）
 　スマートフォンからPCを操作できるアプリ。（無料の機能制限版で使用可能です）
 　こちらはスマートフォン、PC両方にインストールしてください。
+また次のものを用意すると機能をフルで使用できます
+・OpenAIのAPIkey
+　GPT-5などが使用できるようになります
+・VOICEVOX（https://voicevox.hiroshiba.jp/）
+　日本語の読み上げに必要なテキスト読み上げ・歌声合成ソフトウェア。（フリーソフト）
+・Ollama (https://ollama.com/)
+　ローカルでの高度な記憶整理や推論に使用します。別途インストールが必要です。
 
 3. 基本的な使い方とシステム説明
 ① ハブを起動する
