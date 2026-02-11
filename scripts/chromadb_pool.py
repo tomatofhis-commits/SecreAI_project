@@ -10,7 +10,7 @@ class ChromaDBPool:
     複数のスクリプトで同じクライアントを再利用してパフォーマンスを向上
     """
     _instance = None
-    _lock = threading.Lock()
+    _lock = threading.RLock()  # RLockに変更してデッドロックを回避
     
     def __new__(cls):
         if cls._instance is None:
@@ -36,6 +36,8 @@ class ChromaDBPool:
         if key not in self._collections:
             with self._lock:
                 if key not in self._collections:
+                    # ロック内では_get_client_unlocked()ではなくget_client()を使う
+                    # threading.RLockを使うことでデッドロックを回避
                     client = self.get_client(db_path)
                     self._collections[key] = client.get_or_create_collection(name=collection_name)
         return self._collections[key]
