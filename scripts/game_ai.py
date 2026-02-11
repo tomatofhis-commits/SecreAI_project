@@ -608,10 +608,10 @@ def run_voicevox_speak(text, config, root, session_data):
     with speaker_lock, managed_mixer(config):
         wav_dir = os.path.join(root, "data", "wav")
         os.makedirs(wav_dir, exist_ok=True)
-        temp_wav_path = os.path.join(wav_dir, "current_speech.wav")
 
         vol = 1.0  # エンジン側でコントロールするため固定
-
+        
+        sentence_idx = 0
         while True:
             audio_data = audio_queue.get()  # 生成が終わるまで待機
             if audio_data is None: 
@@ -621,6 +621,10 @@ def run_voicevox_speak(text, config, root, session_data):
                 pygame.mixer.music.stop()
                 break
 
+            # 各文ごとにユニークなファイル名を使用してPermission deniedを回避
+            temp_wav_path = os.path.join(wav_dir, f"current_speech_{sentence_idx}.wav")
+            sentence_idx += 1
+            
             with open(temp_wav_path, "wb") as f:
                 f.write(audio_data)
             
@@ -633,6 +637,13 @@ def run_voicevox_speak(text, config, root, session_data):
                     pygame.mixer.music.stop()
                     break
                 time.sleep(0.01)
+            
+            # 再生完了後にファイルを削除
+            try:
+                pygame.mixer.music.unload()
+                os.remove(temp_wav_path)
+            except:
+                pass
 
 # Edge-TTS 言語コードから音声名へのマッピング
 EDGE_TTS_VOICES = {
