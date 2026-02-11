@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# PyInstaller / Nuitka
+*.spec
+*.onefile-build/
+nuitka-crash-report.xml
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# SecreAI specific
+memory_db/
+data/chat_history.json
+data/wav/
+data/temp_ss.png
+data/temp_query_image.png
+data/api_cache/
+data/tags_counter.json
+data/current_tags.json
+data/feedback_memory.json
+config/config.json
+stop.flag
+*.wav
+*.mp3
+
+# Backup
+scripts - コピー/
+
+# Build artifacts
+dist/
+build/
+*.dist/
+main_hub.build/
+main_hub.onefile-build/
