@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "SecreAI"
-#define MyAppVersion "0.9.5"
+#define MyAppVersion "0.9.6"
 #define MyAppPublisher "SecreAI Dev Team"
 #define MyAppExeName "secreAI.exe"
 #define MyAppAssocName MyAppName + " File"
@@ -23,7 +23,7 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=C:\Users\amach\OneDrive\デスクトップ\アップ用作業
-OutputBaseFilename=SecreAI_v0.9.5_Setup
+OutputBaseFilename=SecreAI_v0.9.6_Setup
 SetupIconFile=d:\SecreAI_Build\SecreAI.ico
 Compression=lzma
 SolidCompression=yes
@@ -42,9 +42,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; The main executable
-Source: "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\SecreAI_ver0.9.5\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\SecreAI_ver0.9.6\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 ; All other files in the dist folder
-Source: "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\SecreAI_ver0.9.5\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\SecreAI_ver0.9.6\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Registry]
 Root: HKA; Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue
