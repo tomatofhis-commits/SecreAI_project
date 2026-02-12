@@ -122,7 +122,11 @@
     "btn_delete": "Delete Selected",
     "btn_summarize": "Summarize Selected",
     "btn_bulk_summarize": "Bulk Summarize (Long/No-Date)",
-    "msg_summary_success": "Summarization completed."
+    "msg_summary_success": "Summarization completed.",
+    "timeout_ai_response": "AI Response Timeout (seconds):",
+    "timeout_web_search": "Web Search Timeout (seconds):",
+    "timeout_memory_update": "Memory Update Timeout (seconds):",
+    "max_background_workers": "Parallel Workers:"
   },
   "log_messages": {
     "module_loaded": "System: Memory update module loaded.",
@@ -153,7 +157,9 @@
     "listening": "System: Listening...",
     "search_reserved": "System: Search task reserved.",
     "search_executing": "System: Executing Tavily search (Total: {count} this month)",
-    "memory_update_reserved": "System: Memory optimization task reserved."
+    "memory_update_reserved": "System: Memory optimization task reserved.",
+    "timeout_ai_response": "⏱️ AI response timeout ({timeout} seconds)",
+    "timeout_web_search": "⏱️ Web search timeout ({timeout} seconds)"
   },
   "ai_prompt": {
     "role": "You are a reliable partner supporting a live stream.",

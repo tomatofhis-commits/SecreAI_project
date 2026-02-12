@@ -97,7 +97,11 @@
         "db_model_group": " 기억 정리용 AI 모델 ",
         "db_maintenance_group": " 유지 관리 ",
         "label_use_intersecting": "두 개의 AI와 웹 검색을 동시에 실행",
-        "btn_refresh": "갱신"
+        "btn_refresh": "갱신",
+        "timeout_ai_response": "AI 응답 타임아웃 (초):",
+        "timeout_web_search": "웹 검색 타임아웃 (초):",
+        "timeout_memory_update": "메모리 업데이트 타임아웃 (초):",
+        "max_background_workers": "병렬 워커수:"
     },
     "log_messages": {
         "module_loaded": "시스템: 기억 업데이트 모듈이 로드되었습니다.",
@@ -128,7 +132,9 @@
         "voice_guide": "무엇을 도와드릴까요?",
         "search_reserved": "시스템: 검색 작업 예약됨.",
         "search_executing": "시스템: Tavily 검색 실행 (이번 달 {count} 번째)",
-        "memory_update_reserved": "시스템: 기억 정리 작업 예약됨."
+        "memory_update_reserved": "시스템: 기억 정리 작업 예약됨.",
+        "timeout_ai_response": "⏱️ AI 응답 타임아웃 ({timeout}초)",
+        "timeout_web_search": "⏱️ 웹 검색 타임아웃 ({timeout}초)"
     },
     "ai_prompt": {
         "role": "당신은 믿음직한 비서이자 유능한 파트너입니다.",

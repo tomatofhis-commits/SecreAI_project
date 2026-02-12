@@ -556,9 +556,17 @@ class MainApp(ctk.CTk):
     def show_overlay_on_main_thread(self, text, image_path, alpha_val, display_time, status='speaking'):
         self.current_ai_status = status
         
-        if str(alpha_val).upper() == "OFF": return
+        # 既存のオーバーレイウィンドウを確実に閉じる
+        if self.current_overlay_window and self.current_overlay_window.winfo_exists():
+            try:
+                self.current_overlay_window.destroy()
+            except:
+                pass
+            self.current_overlay_window = None
         
-        # Close existing if active
+        # alpha_val が "OFF" の場合はウィンドウを閉じるだけで終了（idle状態）
+        if str(alpha_val).upper() == "OFF": 
+            return
 
         try:
             top = tk.Toplevel(self)

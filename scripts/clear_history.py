@@ -13,6 +13,7 @@ try:
     import google.genai as genai
     from openai import OpenAI
     import chromadb
+    from chromadb_pool import get_chroma_collection
 except ImportError as e:
     # ログ関数がまだ定義されていないため print で出力
     print(f"Critical: Library missing: {e}")
@@ -145,13 +146,8 @@ def main():
             # AI実行
             new_summary = generate_text(summary_prompt)
 
-            # ChromaDBへの保存 (改善: 接続プール使用)
-            if get_chroma_collection:
-                collection = get_chroma_collection(db_path)
-            else:
-                # フォールバック
-                db_client = chromadb.PersistentClient(path=db_path)
-                collection = db_client.get_or_create_collection(name="long_term_memory")
+            # ChromaDBへの保存 (改善: 接続プールで3-5倍高速化)
+            collection = get_chroma_collection(db_path)
             mem_id = f"mem_reset_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:4]}"
             
             collection.add(

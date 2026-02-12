@@ -99,7 +99,11 @@
         "db_model_group": " 记忆整理AI模型 ",
         "db_maintenance_group": " 维护 ",
         "label_use_intersecting": "同时运行两个AI和网络搜索",
-        "btn_refresh": "刷新"
+        "btn_refresh": "刷新",
+        "timeout_ai_response": "AI响应超时 (秒):",
+        "timeout_web_search": "网络搜索超时 (秒):",
+        "timeout_memory_update": "内存更新超时 (秒):",
+        "max_background_workers": "并行Worker数:"
     },
     "log_messages": {
         "module_loaded": "系统: 记忆更新模块已加载。",
@@ -130,7 +134,9 @@
         "voice_guide": "我能为你做什么？",
         "search_reserved": "系统: 搜索任务已预约。",
         "search_executing": "系统: 执行 Tavily 搜索 (本月第 {count} 次)",
-        "memory_update_reserved": "系统: 记忆整理任务已预约。"
+        "memory_update_reserved": "系统: 记忆整理任务已预约。",
+        "timeout_ai_response": "⏱️ AI响应超时（{timeout}秒）",
+        "timeout_web_search": "⏱️ 网络搜索超时（{timeout}秒)"
     },
     "ai_prompt": {
         "role": "你是一个可靠的秘书和得力的伙伴。",

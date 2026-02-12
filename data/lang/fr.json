@@ -99,7 +99,11 @@
         "db_model_group": " Modèle IA pour Organisation ",
         "db_maintenance_group": " Maintenance ",
         "label_use_intersecting": "Exécuter deux IA et la recherche web simultanément",
-        "btn_refresh": "Actualiser"
+        "btn_refresh": "Actualiser",
+        "timeout_ai_response": "Timeout réponse IA (secondes):",
+        "timeout_web_search": "Timeout recherche web (secondes):",
+        "timeout_memory_update": "Timeout mise à jour mémoire (secondes):",
+        "max_background_workers": "Workers parallèles:"
     },
     "log_messages": {
         "module_loaded": "Système: Module de mise à jour de la mémoire chargé.",
@@ -130,7 +134,9 @@
         "voice_guide": "Comment puis-je vous aider ?",
         "search_reserved": "Système: Tâche de recherche réservée.",
         "search_executing": "Système: Exécution de la recherche Tavily ({count}e fois ce mois-ci)",
-        "memory_update_reserved": "Système: Tâche d'organisation de la mémoire réservée."
+        "memory_update_reserved": "Système: Tâche d'organisation de la mémoire réservée.",
+        "timeout_ai_response": "⏱️ Timeout réponse IA ({timeout} secondes)",
+        "timeout_web_search": "⏱️ Timeout recherche web ({timeout} secondes)"
     },
     "ai_prompt": {
         "role": "Vous êtes un secrétaire fiable et un partenaire capable.",
