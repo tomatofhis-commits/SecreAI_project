@@ -99,7 +99,11 @@
         "db_model_group": " Modello AI per Organizzazione ",
         "db_maintenance_group": " Manutenzione ",
         "label_use_intersecting": "Esegui due AI e ricerca web contemporaneamente",
-        "btn_refresh": "Aggiorna"
+        "btn_refresh": "Aggiorna",
+        "timeout_ai_response": "Timeout risposta IA (secondi):",
+        "timeout_web_search": "Timeout ricerca web (secondi):",
+        "timeout_memory_update": "Timeout aggiornamento memoria (secondi):",
+        "max_background_workers": "Workers paralleli:"
     },
     "log_messages": {
         "module_loaded": "Sistema: Modulo aggiornamento memoria caricato.",
@@ -130,7 +134,9 @@
         "voice_guide": "Come posso aiutarti?",
         "search_reserved": "Sistema: Attività di ricerca prenotata.",
         "search_executing": "Sistema: Esecuzione ricerca Tavily ({count}ª volta questo mese)",
-        "memory_update_reserved": "Sistema: Attività organizzazione memoria prenotata."
+        "memory_update_reserved": "Sistema: Attività organizzazione memoria prenotata.",
+        "timeout_ai_response": "⏱️ Timeout risposta IA ({timeout} secondi)",
+        "timeout_web_search": "⏱️ Timeout ricerca web ({timeout} secondi)"
     },
     "ai_prompt": {
         "role": "Sei un segretario affidabile e un partner capace.",

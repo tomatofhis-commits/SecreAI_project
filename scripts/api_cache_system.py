@@ -4,6 +4,7 @@
 import hashlib
 import json
 import time
+import os
 from pathlib import Path
 
 class APICache:
@@ -17,6 +18,10 @@ class APICache:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.ttl_seconds = ttl_hours * 3600
+        
+        # 統計情報
+        self.stats_file = self.cache_dir / "stats.json"
+        self.stats = self._load_stats()
     
     def _get_cache_key(self, query, image_hash=None, provider="gemini", model=""):
         """クエリからキャッシュキーを生成"""
@@ -37,12 +42,16 @@ class APICache:
     
     def get(self, query, image_path=None, provider="gemini", model=""):
         """キャッシュから取得"""
+        self.stats["total_requests"] = self.stats.get("total_requests", 0) + 1
+        
         try:
             image_hash = self._get_image_hash(image_path)
             cache_key = self._get_cache_key(query, image_hash, provider, model)
             cache_file = self.cache_dir / f"{cache_key}.json"
             
             if not cache_file.exists():
+                self.stats["misses"] = self.stats.get("misses", 0) + 1
+                self._save_stats()
                 return None
             
             with open(cache_file, 'r', encoding='utf-8') as f:
@@ -51,10 +60,16 @@ class APICache:
             # TTLチェック
             if time.time() - cache_data['timestamp'] > self.ttl_seconds:
                 cache_file.unlink()  # 期限切れ削除
+                self.stats["misses"] = self.stats.get("misses", 0) + 1
+                self._save_stats()
                 return None
             
+            self.stats["hits"] = self.stats.get("hits", 0) + 1
+            self._save_stats()
             return cache_data['response']
         except:
+            self.stats["misses"] = self.stats.get("misses", 0) + 1
+            self._save_stats()
             return None
     
     def set(self, query, response, image_path=None, provider="gemini", model=""):
@@ -82,6 +97,8 @@ class APICache:
         try:
             current_time = time.time()
             for cache_file in self.cache_dir.glob("*.json"):
+                if cache_file.name == "stats.json":
+                    continue
                 try:
                     with open(cache_file, 'r') as f:
                         data = json.load(f)
@@ -91,67 +108,52 @@ class APICache:
                     pass
         except:
             pass
-
-
-# ===== game_ai.py での使用例 =====
-
-# グローバルキャッシュインスタンス
-_api_cache = None
-
-def get_api_cache(root):
-    """APIキャッシュインスタンスを取得"""
-    global _api_cache
-    if _api_cache is None:
-        cache_dir = os.path.join(root, "data", "api_cache")
-        _api_cache = APICache(cache_dir, ttl_hours=24)
-    return _api_cache
-
-
-def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
-    """改善版: キャッシュ機能付きAI呼び出し"""
     
-    # キャッシュチェック
-    provider = config.get("AI_PROVIDER", "gemini").lower()
-    model_id = config.get("MODEL_ID", "gemini-2.5-flash")
+    def get_stats(self):
+        """統計情報を取得"""
+        total = self.stats.get("total_requests", 0)
+        hits = self.stats.get("hits", 0)
+        misses = self.stats.get("misses", 0)
+        
+        hit_rate = (hits / total * 100) if total > 0 else 0
+        
+        # キャッシュファイル数
+        cache_count = len([f for f in self.cache_dir.glob("*.json") if f.name != "stats.json"])
+        
+        return {
+            "total_requests": total,
+            "hits": hits,
+            "misses": misses,
+            "hit_rate": round(hit_rate, 2),
+            "cache_count": cache_count
+        }
     
-    image_path = None
-    if image:
-        # 画像を一時保存してパスを取得
-        temp_img_path = os.path.join(root, "data", "temp_query_image.png")
-        image.save(temp_img_path)
-        image_path = temp_img_path
+    def clear_all(self):
+        """全キャッシュをクリア"""
+        count = 0
+        try:
+            for cache_file in self.cache_dir.glob("*.json"):
+                if cache_file.name != "stats.json":
+                    cache_file.unlink()
+                    count += 1
+        except:
+            pass
+        return count
     
-    cache = get_api_cache(root)
-    cached_response = cache.get(prompt, image_path, provider, model_id)
+    def _load_stats(self):
+        """統計情報を読み込み"""
+        if self.stats_file.exists():
+            try:
+                with open(self.stats_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except:
+                pass
+        return {"total_requests": 0, "hits": 0, "misses": 0}
     
-    if cached_response:
-        send_log_to_hub("システム: キャッシュから応答を取得しました (APIコスト削減)")
-        # 履歴に追加
-        history = load_history_manual(root)
-        user_pref = lang_data["system"].get("you_prefix", "You: ")
-        history.append(f"{user_pref}{prompt}")
-        history.append(f"AI: {cached_response}")
-        save_history_manual(history, root)
-        return cached_response
-    
-    # キャッシュになければ通常のAPI呼び出し
-    # ... (既存のchat_with_ai のロジック) ...
-    
-    # 応答をキャッシュに保存
-    if answer_text:
-        cache.set(prompt, answer_text, image_path, provider, model_id)
-    
-    return answer_text
-
-
-# ===== メンテナンス用: 定期的なキャッシュクリーンアップ =====
-# db_maintenance.py に追加
-
-def cleanup_api_cache(root):
-    """期限切れAPIキャッシュを削除"""
-    try:
-        cache = get_api_cache(root)
-        cache.clear_old_caches()
-        return "API cache cleaned successfully."
-    except Exception as e:
-        return f"Cache cleanup error: {e}"
+    def _save_stats(self):
+        """統計情報を保存"""
+        try:
+            with open(self.stats_file, 'w', encoding='utf-8') as f:
+                json.dump(self.stats, f, ensure_ascii=False, indent=2)
+        except:
+            pass

@@ -99,7 +99,11 @@
         "db_model_group": " KI-Modell zur Organisation ",
         "db_maintenance_group": " Wartung ",
         "label_use_intersecting": "Zwei KIs und Websuche gleichzeitig ausführen",
-        "btn_refresh": "Aktualisieren"
+        "btn_refresh": "Aktualisieren",
+        "timeout_ai_response": "KI-Antwort Timeout (Sekunden):",
+        "timeout_web_search": "Websuche Timeout (Sekunden):",
+        "timeout_memory_update": "Speicheraktualisierung Timeout (Sekunden):",
+        "max_background_workers": "Parallele Workers:"
     },
     "log_messages": {
         "module_loaded": "System: Gedächtnisaktualisierungsmodul geladen.",
@@ -130,7 +134,9 @@
         "voice_guide": "Wie kann ich Ihnen helfen?",
         "search_reserved": "System: Suchaufgabe reserviert.",
         "search_executing": "System: Führe Tavily-Suche aus ({count}. Mal diesen Monat)",
-        "memory_update_reserved": "System: Gedächtnisorganisationsaufgabe reserviert."
+        "memory_update_reserved": "System: Gedächtnisorganisationsaufgabe reserviert.",
+        "timeout_ai_response": "⏱️ KI-Antwort Timeout ({timeout} Sekunden)",
+        "timeout_web_search": "⏱️ Websuche Timeout ({timeout} Sekunden)"
     },
     "ai_prompt": {
         "role": "Sie sind ein zuverlässiger Sekretär und fähiger Partner.",

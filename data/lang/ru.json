@@ -99,7 +99,11 @@
         "db_model_group": " Модель ИИ для организации ",
         "db_maintenance_group": " Обслуживание ",
         "label_use_intersecting": "Запускать два ИИ и веб-поиск одновременно",
-        "btn_refresh": "Обновить"
+        "btn_refresh": "Обновить",
+        "timeout_ai_response": "Таймаут ответа ИИ (секунды):",
+        "timeout_web_search": "Таймаут веб-поиска (секунды):",
+        "timeout_memory_update": "Таймаут обновления памяти (секунды):",
+        "max_background_workers": "Параллельные воркеры:"
     },
     "log_messages": {
         "module_loaded": "Система: Модуль обновления памяти загружен.",
@@ -130,7 +134,9 @@
         "voice_guide": "Чем я могу помочь?",
         "search_reserved": "Система: Задача поиска зарезервирована.",
         "search_executing": "Система: Выполнение поиска Tavily ({count}-й раз в этом месяце)",
-        "memory_update_reserved": "Система: Задача организации памяти зарезервирована."
+        "memory_update_reserved": "Система: Задача организации памяти зарезервирована.",
+        "timeout_ai_response": "⏱️ Таймаут ответа ИИ ({timeout} секунд)",
+        "timeout_web_search": "⏱️ Таймаут веб-поиска ({timeout} секунд)"
     },
     "ai_prompt": {
         "role": "Вы надежный секретарь и способный партнер.",

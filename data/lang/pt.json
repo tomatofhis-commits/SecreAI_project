@@ -99,7 +99,11 @@
         "db_model_group": " Modelo de IA para Organização ",
         "db_maintenance_group": " Manutenção ",
         "label_use_intersecting": "Executar duas IAs e pesquisa na web simultaneamente",
-        "btn_refresh": "Atualizar"
+        "btn_refresh": "Atualizar",
+        "timeout_ai_response": "Timeout resposta IA (segundos):",
+        "timeout_web_search": "Timeout pesquisa web (segundos):",
+        "timeout_memory_update": "Timeout atualização memória (segundos):",
+        "max_background_workers": "Workers paralelos:"
     },
     "log_messages": {
         "module_loaded": "Sistema: Módulo de atualização de memória carregado.",
@@ -130,7 +134,9 @@
         "voice_guide": "Como posso ajudar?",
         "search_reserved": "Sistema: Tarefa de pesquisa reservada.",
         "search_executing": "Sistema: Executando pesquisa Tavily ({count}ª vez este mês)",
-        "memory_update_reserved": "Sistema: Tarefa de organização de memória reservada."
+        "memory_update_reserved": "Sistema: Tarefa de organização de memória reservada.",
+        "timeout_ai_response": "⏱️ Timeout resposta IA ({timeout} segundos)",
+        "timeout_web_search": "⏱️ Timeout pesquisa web ({timeout} segundos)"
     },
     "ai_prompt": {
         "role": "Você é um secretário confiável e um parceiro capaz.",

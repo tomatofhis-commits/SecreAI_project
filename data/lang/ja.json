@@ -106,7 +106,11 @@
     "btn_delete": "選択した記憶を削除",
     "btn_summarize": "選択した記憶を要約する",
     "btn_bulk_summarize": "要約対象（長文・日付無）を一括要約",
-    "msg_summary_success": "要約が完了しました。"
+    "msg_summary_success": "要約が完了しました。",
+    "timeout_ai_response": "AI応答タイムアウト (秒):",
+    "timeout_web_search": "Web検索タイムアウト (秒):",
+    "timeout_memory_update": "メモリ更新タイムアウト (秒):",
+    "max_background_workers": "並列処理ワーカー数:"
   },
   "log_messages": {
     "module_loaded": "システム: 記憶更新モジュールをロードしました。",
@@ -137,7 +141,9 @@
     "voice_guide": "質問はなんでしょう",
     "search_reserved": "システム: 検索タスクを予約しました。",
     "search_executing": "システム: Tavily検索を実行します (今月 {count} 回目)",
-    "memory_update_reserved": "システム: 記憶整理タスクを予約しました。"
+    "memory_update_reserved": "システム: 記憶整理タスクを予約しました。",
+    "timeout_ai_response": "⏱️ AI応答がタイムアウトしました（{timeout}秒）",
+    "timeout_web_search": "⏱️ Web検索がタイムアウトしました（{timeout}秒）"
   },
   "ai_prompt": {
     "role": "あなたはサポートを得意とする頼もしい秘書兼相棒です。",

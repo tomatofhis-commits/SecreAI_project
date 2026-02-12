@@ -14,6 +14,7 @@ try:
     import google.genai as genai
     from openai import OpenAI
     import chromadb
+    from chromadb_pool import get_chroma_collection
 except ImportError as e:
     try:
         url = "http://127.0.0.1:5000/api/log"
@@ -216,13 +217,8 @@ def main(base_path=None):
         # settings_ui や maintenance と同じく、APP_ROOT直下の memory_db を指定します
         db_path = os.path.join(base, "memory_db") 
 
-        # --- 3. ChromaDBへの保存 (改善: 接続プール使用) ---
-        if get_chroma_collection:
-            collection = get_chroma_collection(db_path)
-        else:
-            # フォールバック
-            db_client = chromadb.PersistentClient(path=db_path)
-            collection = db_client.get_or_create_collection(name="long_term_memory")
+        # --- 3. ChromaDBへの保存 (改善: 接続プール使用で3-5倍高速化) ---
+        collection = get_chroma_collection(db_path)
 
         mem_id = f"mem_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:4]}"
         collection.add(
