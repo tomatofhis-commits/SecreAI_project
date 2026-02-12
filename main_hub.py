@@ -45,7 +45,7 @@ except ImportError:
     from scripts import db_maintenance
 
 # --- 4. バージョン管理 ---
-VERSION = "0.9.6"
+VERSION = "0.9.7"
 
 # --- グローバル変数とユーティリティ ---
 settings_window_open = False
