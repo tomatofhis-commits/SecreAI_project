@@ -13,17 +13,17 @@ try:
     import google.genai as genai
     from openai import OpenAI
     import chromadb
-    from chromadb_pool import get_chroma_collection
+    from .chromadb_pool import get_chroma_collection
 except ImportError as e:
     # ログ関数がまだ定義されていないため print で出力
     print(f"Critical: Library missing: {e}")
 
 # ChromaDB接続プールのインポート
 try:
-    from chromadb_pool import get_chroma_collection
+    from .chromadb_pool import get_chroma_collection
 except ImportError:
     try:
-        from scripts.chromadb_pool import get_chroma_collection
+        from chromadb_pool import get_chroma_collection
     except ImportError:
         get_chroma_collection = None
 

@@ -18,20 +18,20 @@ import hashlib
 
 # ChromaDB接続プールのインポート（検索速度3-5倍高速化）
 try:
-    from chromadb_pool import get_chroma_collection
+    from .chromadb_pool import get_chroma_collection
 except ImportError:
     try:
-        from scripts.chromadb_pool import get_chroma_collection
+        from chromadb_pool import get_chroma_collection
     except ImportError:
         get_chroma_collection = None
         print("警告: chromadb_pool.pyが見つかりません。ChromaDB接続プールが無効化されています。")
 
 # APIキャッシュシステムのインポート（APIコスト-40%、応答速度+50%）
 try:
-    from api_cache_system import APICache
+    from .api_cache_system import APICache
 except ImportError:
     try:
-        from scripts.api_cache_system import APICache
+        from api_cache_system import APICache
     except ImportError:
         APICache = None
         print("警告: api_cache_system.pyが見つかりません。APIキャッシュ機能が無効化されています。")

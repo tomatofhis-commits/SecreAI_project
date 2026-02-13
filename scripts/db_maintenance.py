@@ -1,17 +1,16 @@
 import os
 import json
 import chromadb
-from chromadb_pool import get_chroma_collection
 import requests
 from google import genai 
 from openai import OpenAI
 
-# ChromaDB接続プールのインポート
+# ChromaDB接続プールのインポート（相対インポートに修正）
 try:
-    from chromadb_pool import get_chroma_collection
+    from .chromadb_pool import get_chroma_collection
 except ImportError:
     try:
-        from scripts.chromadb_pool import get_chroma_collection
+        from chromadb_pool import get_chroma_collection
     except ImportError:
         get_chroma_collection = None
 
