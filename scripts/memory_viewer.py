@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import chromadb
-from chromadb_pool import get_chroma_collection
+from .chromadb_pool import get_chroma_collection
 import os
 import json
 import threading

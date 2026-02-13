@@ -14,7 +14,7 @@ try:
     import google.genai as genai
     from openai import OpenAI
     import chromadb
-    from chromadb_pool import get_chroma_collection
+    from .chromadb_pool import get_chroma_collection
 except ImportError as e:
     try:
         url = "http://127.0.0.1:5000/api/log"
@@ -24,10 +24,10 @@ except ImportError as e:
 
 # ChromaDB接続プールのインポート
 try:
-    from chromadb_pool import get_chroma_collection
+    from .chromadb_pool import get_chroma_collection
 except ImportError:
     try:
-        from scripts.chromadb_pool import get_chroma_collection
+        from chromadb_pool import get_chroma_collection
     except ImportError:
         get_chroma_collection = None
 
