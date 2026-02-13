@@ -44,8 +44,16 @@ class MemoryViewer:
         main_f = ttk.Frame(self.root, padding="10")
         main_f.pack(fill="both", expand=True)
         
+        # タブコントロール (Notebook) の導入
+        self.notebook = ttk.Notebook(main_f)
+        self.notebook.pack(fill="both", expand=True)
+        
+        # --- タブ1: 記憶一覧 ---
+        self.mem_tab = ttk.Frame(self.notebook, padding="10")
+        self.notebook.add(self.mem_tab, text="  記憶管理 (Memory)  ")
+        
         # 検索エリア
-        search_f = ttk.Frame(main_f)
+        search_f = ttk.Frame(self.mem_tab)
         search_f.pack(fill="x", pady=(0, 10))
         
         ttk.Label(search_f, text=self.l_set.get("search_label", "Search:")).pack(side="left")
@@ -54,7 +62,7 @@ class MemoryViewer:
         ttk.Entry(search_f, textvariable=self.search_var).pack(side="left", fill="x", expand=True, padx=5)
         
         # リスト表示 (TreeView)
-        tree_f = ttk.Frame(main_f)
+        tree_f = ttk.Frame(self.mem_tab)
         tree_f.pack(fill="both", expand=True)
         
         self.tree = ttk.Treeview(tree_f, columns=("ID", "Timestamp", "Length", "Content"), show="headings")
@@ -75,7 +83,7 @@ class MemoryViewer:
         scrollbar.pack(side="right", fill="y")
         
         # プレビューエリア (詳細表示)
-        preview_f = ttk.LabelFrame(main_f, text=" " + self.l_set.get("col_content", "Details") + " ")
+        preview_f = ttk.LabelFrame(self.mem_tab, text=" " + self.l_set.get("col_content", "Details") + " ")
         preview_f.pack(fill="x", pady=5)
         
         self.preview_text = tk.Text(preview_f, height=5, font=("MS Gothic", 10))
@@ -85,26 +93,142 @@ class MemoryViewer:
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
         
         # 操作エリア (下部)
-        btn_f = ttk.Frame(main_f)
+        btn_f = ttk.Frame(self.mem_tab)
         btn_f.pack(fill="x", pady=(10, 0))
         
-        # 削除ボタン
         self.btn_del = ttk.Button(btn_f, text=self.l_set.get("btn_delete", "Delete Selected"), command=self.delete_selected)
         self.btn_del.pack(side="left", padx=5)
         
-        # 要約ボタン
         self.btn_summarize = ttk.Button(btn_f, text=self.l_set.get("btn_summarize", "Summarize Selected"), command=self.summarize_selected)
         self.btn_summarize.pack(side="left", padx=5)
         
-        # DB整理ボタン (統合)
         self.btn_cleanup = ttk.Button(btn_f, text=self.l_set.get("btn_db_cleanup", "Cleanup DB"), command=self.run_cleanup)
         self.btn_cleanup.pack(side="left", padx=5)
         
-        # 一括要約ボタン
         self.btn_bulk = ttk.Button(btn_f, text=self.l_set.get("btn_bulk_summarize", "Bulk Summarize"), command=self.run_bulk_summarize)
         self.btn_bulk.pack(side="left", padx=5)
         
         ttk.Button(btn_f, text=self.l_set.get("btn_refresh", "Refresh"), command=self.load_data).pack(side="right", padx=5)
+
+        # --- タブ2: パフォーマンスダッシュボード ---
+        self.perf_tab = ttk.Frame(self.notebook, padding="15")
+        self.notebook.add(self.perf_tab, text="  パフォーマンス (Performance)  ")
+        self.create_performance_tab()
+
+    def create_performance_tab(self):
+        """パフォーマンス統計画面の構築"""
+        p = self.parent.lang.get("performance", {})
+        
+        # タイトル
+        ttk.Label(self.perf_tab, text=p.get("title", "Performance Dashboard"), font=("Arial", 16, "bold")).pack(pady=(0, 20))
+        
+        # グリッドレイアウト
+        stats_f = ttk.Frame(self.perf_tab)
+        stats_f.pack(fill="both", expand=True)
+        
+        # 1. APIキャッシュ統計
+        cache_f = ttk.LabelFrame(stats_f, text=f" {p.get('cache_stats', 'API Cache Stats')} ", padding=10)
+        cache_f.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        
+        self.lbl_cache_total = ttk.Label(cache_f, text=p.get("total_requests", "Total Requests: --").replace("{count}", "--"))
+        self.lbl_cache_total.pack(anchor="w")
+        self.lbl_cache_hits = ttk.Label(cache_f, text=p.get("hits", "Hits: --").replace("{count}", "--").replace("{miss}", "--"))
+        self.lbl_cache_hits.pack(anchor="w")
+        self.lbl_cache_rate = ttk.Label(cache_f, text=p.get("hit_rate", "Hit Rate: --%").replace("{rate}", "--"), font=("Arial", 12, "bold"), foreground="green")
+        self.lbl_cache_rate.pack(anchor="w", pady=5)
+        
+        # 2. Tavily検索利用状況
+        tavily_f = ttk.LabelFrame(stats_f, text=f" {p.get('tavily_usage', 'Tavily Search Usage')} ", padding=10)
+        tavily_f.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+        
+        self.lbl_tavily_count = ttk.Label(tavily_f, text=p.get("tavily_monthly", "Used: -- / 1000").replace("{count}", "--"))
+        self.lbl_tavily_count.pack(anchor="w")
+        self.lbl_tavily_cost = ttk.Label(tavily_f, text=p.get("savings", "Savings: $--").replace("{amount}", "--"))
+        self.lbl_tavily_cost.pack(anchor="w")
+        
+        # 3. リソース・データベース
+        db_f = ttk.LabelFrame(stats_f, text=f" {p.get('db_resources', 'Database & Resources')} ", padding=10)
+        db_f.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+        
+        self.lbl_db_size = ttk.Label(db_f, text=p.get("db_size", "DB Size: -- MB").replace("{size}", "--"))
+        self.lbl_db_size.pack(anchor="w")
+        self.lbl_mem_count = ttk.Label(db_f, text=p.get("total_entries", "Total Entries: --").replace("{count}", "--"))
+        self.lbl_mem_count.pack(anchor="w")
+        
+        # 4. モデル別統計リスト
+        model_f = ttk.LabelFrame(stats_f, text=f" {p.get('model_stats_title', 'Model Statistics')} ", padding=10)
+        model_f.grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
+        
+        # Treeviewの作成
+        cols = ("model", "req", "hits", "rate")
+        self.tree_models = ttk.Treeview(model_f, columns=cols, show="headings", height=4)
+        self.tree_models.heading("model", text=p.get("model_header", "Model"))
+        self.tree_models.heading("req", text=p.get("requests_header", "Req"))
+        self.tree_models.heading("hits", text=p.get("hits_header", "Hits"))
+        self.tree_models.heading("rate", text="Rate")
+        
+        self.tree_models.column("model", width=120)
+        self.tree_models.column("req", width=50, anchor="center")
+        self.tree_models.column("hits", width=50, anchor="center")
+        self.tree_models.column("rate", width=50, anchor="center")
+        self.tree_models.pack(fill="both", expand=True)
+        
+        # グリッドの重み設定
+        stats_f.columnconfigure(0, weight=1)
+        stats_f.columnconfigure(1, weight=1)
+        stats_f.rowconfigure(0, weight=0)
+        stats_f.rowconfigure(1, weight=1)
+        
+        # 更新ボタン
+        ttk.Button(self.perf_tab, text=p.get("btn_update", "Update"), command=self.update_dashboard).pack(pady=20)
+        
+    def update_dashboard(self):
+        """統計情報を更新表示"""
+        p = self.parent.lang.get("performance", {})
+        try:
+            from .api_cache_system import APICache
+            cache_dir = os.path.join(self.base_dir, "data", "api_cache")
+            ttl_hours = self.config.get("API_CACHE_TTL_HOURS", 24)
+            cache = APICache(cache_dir, ttl_hours=ttl_hours)
+            stats = cache.get_stats()
+            
+            self.lbl_cache_total.config(text=p.get("total_requests", "Total:").replace("{count}", str(stats['total_requests'])))
+            self.lbl_cache_hits.config(text=p.get("hits", "Hits:").replace("{count}", str(stats['hits'])).replace("{miss}", str(stats['misses'])))
+            self.lbl_cache_rate.config(text=p.get("hit_rate", "Rate:").replace("{rate}", str(stats['hit_rate'])))
+            
+            # モデル別Treeviewの更新
+            for item in self.tree_models.get_children():
+                self.tree_models.delete(item)
+            
+            for key, m_stats in stats.get('models', {}).items():
+                self.tree_models.insert("", "end", values=(
+                    key,
+                    m_stats['requests'],
+                    m_stats['hits'],
+                    f"{m_stats['hit_rate']}%"
+                ))
+            
+            # Tavily (configから)
+            count = self.config.get("TAVILY_COUNT", 0)
+            self.lbl_tavily_count.config(text=p.get("tavily_monthly", "Tavily:").replace("{count}", str(count)))
+            
+            # 1検索 $0.05 と仮定
+            savings = round(stats['hits'] * 0.05, 2)
+            self.lbl_tavily_cost.config(text=p.get("savings", "Savings:").replace("{amount}", str(savings)))
+            
+            # DBサイズ
+            total_size = 0
+            for dirpath, dirnames, filenames in os.walk(self.db_path):
+                for f in filenames:
+                    fp = os.path.join(dirpath, f)
+                    total_size += os.path.getsize(fp)
+            
+            size_mb = round(total_size / (1024*1024), 2)
+            self.lbl_db_size.config(text=p.get("db_size", "Size:").replace("{size}", str(size_mb)))
+            self.lbl_mem_count.config(text=p.get("total_entries", "Entries:").replace("{count}", str(len(self.all_data))))
+            
+        except Exception as e:
+            print(f"Dashboard Update Error: {e}")
 
     def load_data(self):
         # 既存データのクリア

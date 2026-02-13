@@ -16,7 +16,8 @@
     "menu": {
         "system_cascade": "시스템",
         "refresh_windows": "대상 창 목록 갱신",
-        "reset_memory": "단기 기억 초기화",
+        "reset_memory": "단기 기억 리셋",
+        "open_memory": "기억 관리 (Memory)",
         "restart": "재시작",
         "exit": "종료",
         "tray_show": "표시"
@@ -161,6 +162,80 @@
         "tag_reference": "\n【참고: 과거 주제 키워드】\n{tags}\n",
         "search_logic": "\n당신에게는 [SEARCH: 영어 쿼리] 를 출력하여 최신 정보를 보완하는 특별한 기능이 있습니다.\n검색이 필요할 때는, 먼저 아는 범위에서 대답한 뒤 '나중에 자세히 찾아보겠습니다'라고 덧붙여 주세요.\n【중요 지시】최신 정보나 불확실한 정보가 포함될 경우, 답변 끝에 반드시 [SEARCH: 영어 쿼리] 를 한 줄로 추가해 주세요. 대괄호 [ ] 와 콜론 : 은 반드시 반각을 사용하고, SEARCH와 콜론 사이에는 공백을 넣지 마세요. 내용은 반드시 『영어』 키워드로 해 주세요.",
         "summary_role": "당신은 뛰어난 리서처입니다. 다음 영어 검색 결과를 읽고, 요점을 반드시 【한국어】로 1000자 이내로 정리해 주세요.",
-        "search_appendix_prefix": "검색 결과의 보충 정보입니다."
+        "search_appendix_prefix": "검색 결과로부터의 추가 정보입니다."
+    },
+    "setup_wizard": {
+        "title": "SecreAI 설정 마법사",
+        "welcome_title": "SecreAI에 오신 것을 환영합니다!",
+        "welcome_desc": "이 마법사는 AI 실행에 필요한 기본 설정을 도와드립니다.",
+        "welcome_notice": "* 이 설정은 나중에 '설정' 메뉴에서 언제든지 변경할 수 있습니다.",
+        "step_lang_title": "언어 선택",
+        "other_languages": "기타 언어...",
+        "step_api_title": "API 키 설정",
+        "step_api_desc": "AI를 사용하려면 Gemini 또는 OpenAI API 키가 필요합니다.",
+        "gemini_key_label": "Gemini API 키:",
+        "openai_key_label": "OpenAI API 키 (GPT):",
+        "get_key_link": "API 키 받기",
+        "use_search_feature": "웹 검색 기능 활성화 (Tavily 필요)",
+        "tavily_key_label": "Tavily API 키:",
+        "step_ai_selection_title": "AI 모델 선택",
+        "step_ai_selection_desc": "메인 AI와 메모리 정리용 AI를 선택하세요. 입력한 API 키를 바탕으로 자동 선택됩니다.",
+        "ai_provider_label": "메인 AI 제공자:",
+        "db_provider_label": "메모리 AI 제공자:",
+        "step_ollama_title": "Ollama (로컬 AI) 안내",
+        "step_ollama_desc": "PC의 GPU 성능이 충분하다면 메모리 정리용으로 'Ollama (로컬)'를 선택하는 것을 권장합니다. API 비용을 절약하고 프라이버시를 보호할 수 있습니다.",
+        "step_voice_title": "음성 엔진 설정",
+        "step_voice_desc": "캐릭터 음성을 설정합니다.",
+        "use_voicevox": "VOICEVOX 사용 (고음질/설치 필요)",
+        "use_edgetts": "Edge-TTS 사용 (무료/설치 불필요)",
+        "step_finish_title": "완료!",
+        "step_finish_desc": "모든 준비가 끝났습니다.",
+        "btn_back": "뒤로",
+        "btn_next": "다음",
+        "btn_finish": "완료",
+        "confirm_skip_api": "API 키가 입력되지 않았습니다. 나중에 설정하시겠습니까?\n(AI와 대화하려면 키 중 하나가 필요합니다)"
+    },
+    "error_messages": {
+        "title_prefix": "오류",
+        "solution_header": "-- 해결 방법 --",
+        "view_docs": "공식 문서 보기",
+        "codes": {
+            "api_key_invalid": {
+                "title": "API 키 오류",
+                "message": "Gemini API 키가 유효하지 않거나 설정되지 않았습니다.",
+                "solution": "설정 또는 설치 마법사에서 유효한 API 키를 입력하십시오.",
+                "doc_link": "https://ai.google.dev/gemini-api/docs/api-key"
+            },
+            "voicevox_not_running": {
+                "title": "VOICEVOX 실행 중 아님",
+                "message": "VOICEVOX 엔진에 연결할 수 없습니다.",
+                "solution": "1. VOICEVOX를 시작해 주세요.\n2. 이미 실행 중인 경우 설정에서 실행 파일 경로를 확인하십시오.",
+                "doc_link": "https://voicevox.hiroshiba.jp/"
+            },
+            "internet_offline": {
+                "title": "네트워크 오류",
+                "message": "인터넷 연결을 확인하십시오.",
+                "solution": "Wi-Fi 또는 LAN 연결을 확인하십시오. SecreAI는 특정 프록시 뒤에서 작동하지 않을 수 있습니다.",
+                "doc_link": ""
+            }
+        }
+    },
+    "performance": {
+        "title": "성능 대시보드",
+        "cache_stats": "API 캐시 통계",
+        "tavily_usage": "Tavily 검색 사용량",
+        "db_resources": "데이터베이스 및 리소스",
+        "total_requests": "총 요청 수: {count}",
+        "hits": "히트 수: {count} (미스: {miss})",
+        "hit_rate": "히트율: {rate}%",
+        "tavily_monthly": "이번 달 사용량: {count} / 1000",
+        "savings": "예상 절감액: ${amount}",
+        "db_size": "DB 크기: {size} MB",
+        "total_entries": "총 기억 수: {count}",
+        "model_stats_title": "모델별 통계",
+        "model_header": "모델/제공자",
+        "requests_header": "요청",
+        "hits_header": "히트",
+        "btn_update": "대시보드 업데이트"
     }
 }

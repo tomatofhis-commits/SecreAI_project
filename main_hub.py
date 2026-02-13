@@ -40,12 +40,21 @@ import settings_ui
 try:
     import game_ai, fix_history, give_feedback, update_memory, clear_history
     import db_maintenance 
+    import setup_wizard
+    import error_handler
+    import memory_viewer
+    import config_manager
 except ImportError:
     from scripts import game_ai, fix_history, give_feedback, update_memory, clear_history
     from scripts import db_maintenance
+    from scripts import error_handler
+    from scripts import memory_viewer
+    from scripts import config_manager
+    import setup_wizard
 
 # --- 4. バージョン管理 ---
-VERSION = "0.9.7"
+VERSION = "1.0.0"
+CONFIG_VERSION = "2.0"
 
 # --- グローバル変数とユーティリティ ---
 settings_window_open = False
@@ -85,54 +94,33 @@ def get_resource_path(relative_path):
 
 # --- 設定読み込み ---
 def load_config_with_defaults():
-    defaults = {
-        "AI_PROVIDER": "gemini",  
-        "GEMINI_API_KEY": "",
-        "OPENAI_API_KEY": "",
-        "TAVILY_API_KEY": "",
-        "MODEL_ID": "gemini-2.5-flash",
-        "MODEL_ID_PRO": "gemini-3-flash-preview",
-        "MODEL_ID_GPT": "gpt-5",
-        "OLLAMA_URL": "http://localhost:11434/v1",
-        "MODEL_ID_LOCAL": "gemma3:12b",
-        "MODEL_ID_SUMMARY": "gemma3:4b",
-        "search_switch": True,
-        "TAVILY_COUNT": 3,
-        "TAVILY_MONTH": 1,
-        "MAX_CHARS": "700文字以内",
-        "SPEAKER_NAME": "ずんだもん",
-        "SPEAKER_ID": 3,
-        "VOICE_SPEED": 1.2,
-        "VV_PATH": "C:/path/to/voicevox/run.exe",
-        "DEVICE_NAME": "デフォルト",
-        "INPUT_DEVICE_NAME": "デフォルト",
-        "VOICE_VOLUME": 0.7,
-        "DISPLAY_TIME": 60,
-        "LOG_FONT_SIZE": 13,
-        "WINDOW_ALPHA": 0.6,
-        "TODAY_CONTEXT": "",
-        "TARGET_GAME_TITLE": "",
-        "LANGUAGE": "ja",
-        "FILES": {
-            "HISTORY": "data/chat_history.json",
-            "CURRENT_TAGS": "data/current_tags.json",
-            "FEEDBACK": "data/feedback_memory.json",
-            "TEMP_SS": "data/temp_ss.png"
-        },
-        "HOTKEYS": {
-            "voice_mode": "ctrl+alt+v",
-            "vision_mode": "ctrl+alt+s",
-            "stop_ai": "ctrl+alt+x"
-        }
-    }
-    if os.path.exists(CONFIG_PATH):
+    """config_manager を使用して設定を読み込みます"""
+    return config_manager.load_config(CONFIG_PATH)
+
+# --- アップデート確認 ---
+def check_for_updates():
+    """GitHub APIから最新リリースを確認し、更新があればログに表示します"""
+    def task():
+        time.sleep(3) # 起動直後の負荷を避けるため少し待機
         try:
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                user_config = json.load(f)
-                defaults.update(user_config)
+            repo = "tomatofhis/SecreAI_project"
+            api_url = f"https://api.github.com/repos/{repo}/releases/latest"
+            headers = {"Accept": "application/vnd.github.v3+json"}
+            
+            response = requests.get(api_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                latest_v = data.get("tag_name", "").strip("v")
+                html_url = data.get("html_url", "")
+                
+                if latest_v > VERSION:
+                    msg = f"【UPDATE】最新バージョン v{latest_v} が利用可能です！\n詳細はGitHubを確認してください: {html_url}"
+                    # 自身のAPIにポストしてログに表示
+                    requests.post("http://127.0.0.1:5000/api/log", json={"message": msg, "is_error": False}, timeout=2)
         except Exception as e:
-            print(f"Config load error: {e}")
-    return defaults
+            print(f"Update check error: {e}")
+
+    threading.Thread(target=task, daemon=True).start()
 
 # --- Flaskサーバー ---
 app = Flask(__name__)
@@ -141,7 +129,11 @@ app = Flask(__name__)
 def receive_log():
     data = request.json
     if main_gui:
-        main_gui.update_log_area(data.get("message", ""), data.get("is_error", False))
+        main_gui.update_log_area(
+            data.get("message", ""), 
+            data.get("is_error", False),
+            data.get("error_code")
+        )
     return jsonify({"status": "ok"})
 
 @app.route('/api/<action>', methods=['GET'])
@@ -281,6 +273,10 @@ class MainApp(ctk.CTk):
         # Start indicator animation
         self.after(100, self.update_indicator_animation)
 
+        # 初回起動またはAPIキー未設定の場合にウィザードを表示
+        if not self.config_data.get("GEMINI_API_KEY"):
+            self.after(500, self.open_setup_wizard)
+
         # レイアウト配置
         self.left_frame = ctk.CTkFrame(self)
         self.left_frame.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="nsew")
@@ -397,6 +393,7 @@ class MainApp(ctk.CTk):
         system_menu = tk.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label=m.get("system_cascade", "System"), menu=system_menu)
         system_menu.add_command(label=m.get("refresh_windows", "Refresh Windows"), command=self.refresh_target_windows)
+        system_menu.add_command(label=m.get("open_memory", "Memory Management"), command=self.open_memory_viewer)
         system_menu.add_command(label=m.get("reset_memory", "Reset Memory"), command=self.reset_short_term_memory_gui)
         system_menu.add_separator()
         system_menu.add_command(label=m.get("restart", "Restart Hub"), command=self.restart_hub)
@@ -421,10 +418,24 @@ class MainApp(ctk.CTk):
         except:
             self.lang = {"system": {}, "gui": {}, "menu": {}, "log_messages": {}}
 
-    def update_log_area(self, text, is_error=False):
-        prefix = "[ERROR] " if is_error else ""
-        self.log_box.insert("end", f"{prefix}{text}\n")
-        self.log_box.see("end")
+    def update_log_area(self, text, is_error=False, error_code=None):
+        def _update():
+            prefix = "[ERROR] " if is_error else ""
+            self.log_box.insert("end", f"{prefix}{text}\n")
+            self.log_box.see("end")
+            
+            if error_code:
+                self.after(500, lambda: error_handler.notify_error(
+                    self, 
+                    error_code, 
+                    self.lang
+                ))
+        
+        # after(0) でメインスレッドでの実行を確約
+        if threading.current_thread() is threading.main_thread():
+            _update()
+        else:
+            self.after(0, _update)
 
     def get_windows(self):
         titles = [w.title for w in gw.getAllWindows() if w.title.strip()]
@@ -496,6 +507,31 @@ class MainApp(ctk.CTk):
         new_list = self.get_windows()
         self.win_selector.configure(values=new_list)
         self.update_log_area(self.lang.get("log_messages", {}).get("refresh_success", "Windows refreshed."))
+
+    def open_setup_wizard(self):
+        """セットアップウィザードを表示"""
+        try:
+            # 既に言語ファイルが読み込まれているか確認
+            if not hasattr(self, "lang") or not self.lang:
+                self.load_language()
+            
+            # ウィザードの表示
+            setup_wizard.show_wizard(
+                self, 
+                CONFIG_PATH, 
+                self.lang, 
+                self.on_settings_saved # 保存後にUIを更新するコールバック
+            )
+        except Exception as e:
+            print(f"Wizard Error: {e}")
+
+    def open_memory_viewer(self):
+        """記憶管理・表示ウィンドウを開く"""
+        try:
+            # MainHubの設定データと言語データを引き渡す
+            memory_viewer.MemoryViewer(self, self.config_data)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open Memory Viewer: {e}")
 
     def reset_short_term_memory_gui(self):
         m = self.lang.get("log_messages", {})
@@ -624,4 +660,8 @@ if __name__ == "__main__":
     threading.Thread(target=run_server, daemon=True).start()
     setup_hotkeys()
     check_and_start_voicevox(main_gui.config_data.get("VV_PATH"))
+    
+    # アップデート確認 (非同期)
+    check_for_updates()
+    
     main_gui.mainloop()

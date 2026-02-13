@@ -8,11 +8,14 @@ from openai import OpenAI
 # ChromaDB接続プールのインポート（相対インポートに修正）
 try:
     from .chromadb_pool import get_chroma_collection
+    from . import config_manager
 except ImportError:
     try:
         from chromadb_pool import get_chroma_collection
+        import config_manager
     except ImportError:
         get_chroma_collection = None
+        config_manager = None
 
 def get_ai_response(prompt, config):
     provider = config.get("DB_PROVIDER", config.get("AI_PROVIDER", "gemini")).lower()
@@ -55,12 +58,14 @@ def get_ai_response(prompt, config):
 # --- db_maintenance.py の clean_up_database 内にプロンプトを追加 ---
 
 def clean_up_database(db_path, config_path):
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except Exception as e:
-        err_msg = str(e)
-        return f"Error: Failed to load config. {err_msg}"
+    if config_manager:
+        config = config_manager.load_config(config_path)
+    else:
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except Exception as e:
+            return f"Error: Failed to load config. {str(e)}"
 
     #  --- 1. ChromaDBへの接続とデータ取得 (改善: 接続プールで3-5倍高速化) ---
     try:

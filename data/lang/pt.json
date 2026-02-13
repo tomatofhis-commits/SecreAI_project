@@ -16,7 +16,8 @@
     "menu": {
         "system_cascade": "Sistema",
         "refresh_windows": "Atualizar lista de janelas",
-        "reset_memory": "Redefinir memória de curto prazo",
+        "reset_memory": "Redefinir Memória de Curto Prazo",
+        "open_memory": "Gestão de Memória (Memory)",
         "restart": "Reiniciar",
         "exit": "Sair",
         "tray_show": "Mostrar"
@@ -164,5 +165,79 @@
         "search_logic": "\nVocê tem uma função especial: gerar [SEARCH: Consulta em inglês] para complementar informações recentes.\nQuando uma pesquisa for necessária, responda primeiro com o que você sabe e adicione 'Vou procurar detalhes mais tarde'.\n【Instrução Importante】Se você incluir informações recentes ou incertas, adicione [SEARCH: Consulta em inglês] no final. Os colchetes [ ] e dois pontos : devem ser de meia largura, sem espaço entre SEARCH e os dois pontos. O conteúdo deve ser palavras-chave em 『Inglês』.",
         "summary_role": "Você é um excelente pesquisador. Leia os seguintes resultados de pesquisa em inglês e resuma os pontos principais em 【Português】 dentro de 3000 caracteres.",
         "search_appendix_prefix": "Aqui estão informações adicionais da pesquisa."
+    },
+    "setup_wizard": {
+        "title": "Assistente de Configuração SecreAI",
+        "welcome_title": "Bem-vindo ao SecreAI!",
+        "welcome_desc": "Este assistente irá ajudá-lo com as configurações básicas para executar a IA.",
+        "welcome_notice": "* Você pode alterar essas configurações mais tarde no menu 'Configurações'.",
+        "step_lang_title": "Seleção de Idioma",
+        "other_languages": "Outros idiomas...",
+        "step_api_title": "Configurações de Chave API",
+        "step_api_desc": "Uma chave API Gemini ou OpenAI é necessária para usar a IA.",
+        "gemini_key_label": "Chave API Gemini:",
+        "openai_key_label": "Chave API OpenAI (GPT):",
+        "get_key_link": "Obter Chave API",
+        "use_search_feature": "Ativar busca web (Requer Tavily)",
+        "tavily_key_label": "Chave API Tavily:",
+        "step_ai_selection_title": "Seleção de Modelo de IA",
+        "step_ai_selection_desc": "Selecione a IA principal e a IA de memória. Escolha automática baseada nas chaves inseridas.",
+        "ai_provider_label": "Provedor de IA Principal:",
+        "db_provider_label": "Provedor de IA de Memória:",
+        "step_ollama_title": "Sobre Ollama (IA Local)",
+        "step_ollama_desc": "Se o seu PC tem GPU suficiente, recomendamos 'Ollama (Local)' para a memória. Isso economiza custos de API e garante privacidade.",
+        "step_voice_title": "Configurações de Voz",
+        "step_voice_desc": "Configure a voz do personagem.",
+        "use_voicevox": "Usar VOICEVOX (Alta qualidade/Requer instalação)",
+        "use_edgetts": "Usar Edge-TTS (Grátis/Sem instalação)",
+        "step_finish_title": "Concluído!",
+        "step_finish_desc": "Tudo pronto.",
+        "btn_back": "Voltar",
+        "btn_next": "Próximo",
+        "btn_finish": "Concluir",
+        "confirm_skip_api": "Nenhuma chave API inserida. Deseja configurá-la mais tarde?\n(Uma das chaves é necessária para conversar com a IA)"
+    },
+    "error_messages": {
+        "title_prefix": "Erro",
+        "solution_header": "-- Solução --",
+        "view_docs": "Ver documentação oficial",
+        "codes": {
+            "api_key_invalid": {
+                "title": "Erro de chave API",
+                "message": "A chave API Gemini é inválida ou não está definida.",
+                "solution": "Por favor, insira uma chave API válida nas configurações ou no assistente de configuração.",
+                "doc_link": "https://ai.google.dev/gemini-api/docs/api-key"
+            },
+            "voicevox_not_running": {
+                "title": "VOICEVOX não está em execução",
+                "message": "Não foi possível conectar ao motor VOICEVOX.",
+                "solution": "1. Por favor, inicie o VOICEVOX.\n2. Se já estiver em execução, verifique o caminho do executável nas configurações.",
+                "doc_link": "https://voicevox.hiroshiba.jp/"
+            },
+            "internet_offline": {
+                "title": "Erro de rede",
+                "message": "Verifique sua conexão com a Internet.",
+                "solution": "Verifique sua conexão Wi-Fi ou LAN. O SecreAI pode não funcionar atrás de certos proxies.",
+                "doc_link": ""
+            }
+        }
+    },
+    "performance": {
+        "title": "Painel de Desempenho",
+        "cache_stats": "Estatísticas de Cache da API",
+        "tavily_usage": "Uso de Pesquisa Tavily",
+        "db_resources": "Banco de Dados e Recursos",
+        "total_requests": "Total de Solicitações: {count}",
+        "hits": "Acertos: {count} (Falhas: {miss})",
+        "hit_rate": "Taxa de Acertos: {rate}%",
+        "tavily_monthly": "Usado este mês: {count} / 1000",
+        "savings": "Economia Estimada: ${amount}",
+        "db_size": "Tamanho do BD: {size} MB",
+        "total_entries": "Total de Entradas: {count}",
+        "model_stats_title": "Estatísticas por modelo",
+        "model_header": "Modelo/Provedor",
+        "requests_header": "Solicitações",
+        "hits_header": "Acertos",
+        "btn_update": "Atualizar Painel"
     }
 }

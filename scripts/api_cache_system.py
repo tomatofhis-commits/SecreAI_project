@@ -51,6 +51,7 @@ class APICache:
             
             if not cache_file.exists():
                 self.stats["misses"] = self.stats.get("misses", 0) + 1
+                self._update_model_stats(provider, model, hit=False)
                 self._save_stats()
                 return None
             
@@ -61,14 +62,17 @@ class APICache:
             if time.time() - cache_data['timestamp'] > self.ttl_seconds:
                 cache_file.unlink()  # 期限切れ削除
                 self.stats["misses"] = self.stats.get("misses", 0) + 1
+                self._update_model_stats(provider, model, hit=False)
                 self._save_stats()
                 return None
             
             self.stats["hits"] = self.stats.get("hits", 0) + 1
+            self._update_model_stats(provider, model, hit=True)
             self._save_stats()
             return cache_data['response']
         except:
             self.stats["misses"] = self.stats.get("misses", 0) + 1
+            self._update_model_stats(provider, model, hit=False)
             self._save_stats()
             return None
     
@@ -120,13 +124,39 @@ class APICache:
         # キャッシュファイル数
         cache_count = len([f for f in self.cache_dir.glob("*.json") if f.name != "stats.json"])
         
+        # モデル別統計の加工（レート計算など）
+        models_summary = {}
+        for key, m_stats in self.stats.get("models", {}).items():
+            m_total = m_stats.get("requests", 0)
+            m_hits = m_stats.get("hits", 0)
+            m_rate = (m_hits / m_total * 100) if m_total > 0 else 0
+            models_summary[key] = {
+                "requests": m_total,
+                "hits": m_hits,
+                "hit_rate": round(m_rate, 2)
+            }
+
         return {
             "total_requests": total,
             "hits": hits,
             "misses": misses,
             "hit_rate": round(hit_rate, 2),
-            "cache_count": cache_count
+            "cache_count": cache_count,
+            "models": models_summary
         }
+    
+    def _update_model_stats(self, provider, model, hit=True):
+        """モデル別の統計を更新"""
+        if "models" not in self.stats:
+            self.stats["models"] = {}
+        
+        key = f"{provider}:{model}" if model else provider
+        if key not in self.stats["models"]:
+            self.stats["models"][key] = {"requests": 0, "hits": 0}
+        
+        self.stats["models"][key]["requests"] += 1
+        if hit:
+            self.stats["models"][key]["hits"] += 1
     
     def clear_all(self):
         """全キャッシュをクリア"""

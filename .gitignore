@@ -38,6 +38,7 @@ data/wav/
 data/temp_ss.png
 data/temp_query_image.png
 data/api_cache/
+data/search_cache/
 data/tags_counter.json
 data/current_tags.json
 data/feedback_memory.json
