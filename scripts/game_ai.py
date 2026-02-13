@@ -29,12 +29,15 @@ except ImportError:
 # APIキャッシュシステムのインポート（APIコスト-40%、応答速度+50%）
 try:
     from .api_cache_system import APICache
+    from . import config_manager
 except ImportError:
     try:
         from api_cache_system import APICache
+        import config_manager
     except ImportError:
         APICache = None
-        print("警告: api_cache_system.pyが見つかりません。APIキャッシュ機能が無効化されています。")
+        config_manager = None
+        print("警告: api_cache_system.py または config_manager.py が見つかりません。")
 
 # --- 1. ロックの準備 ---
 file_lock = threading.Lock()
@@ -85,18 +88,29 @@ def run_with_timeout(func, timeout, *args, **kwargs):
     Returns:
         関数の実行結果。タイムアウト時はNone
     """
+    # lang_dataをここで読み込むか、グローバルまたは引数で渡す必要があるが
+    # game_ai.pyの構造上、各所で読み込んでいるため、ここでは安全なフォールバック付きで出力する
+    try:
+        # main()で読み込まれたものが渡されるのが理想だが、ここは低レイヤーのヘルパー
+        # 簡易的に英語/日本語のフォールバックを持つ
+        pass
+    except: pass
+    
+    # 実際には呼び出し側でメッセージを組み立てて渡すように変更する
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     future = executor.submit(func, *args, **kwargs)
     try:
         return future.result(timeout=timeout)
     except concurrent.futures.TimeoutError:
         func_name = getattr(func, '__name__', str(func))
-        send_log_to_hub(f"⏱️ タイムアウト: {func_name} ({timeout}秒)", is_error=True)
+        # ここではメッセージ組み立て済みのログは出せないので、呼び出し側に任せるか
+        # 汎用的なメッセージを出す
+        send_log_to_hub(f"Timeout: {func_name} ({timeout}s)", is_error=True)
         future.cancel()
         return None
     except Exception as e:
         func_name = getattr(func, '__name__', str(func))
-        send_log_to_hub(f"❌ エラー: {func_name} - {e}", is_error=True)
+        send_log_to_hub(f"Error: {func_name} - {e}", is_error=True)
         return None
     finally:
         executor.shutdown(wait=False)
@@ -162,10 +176,13 @@ def is_voicevox_up():
 
 APP_ROOT = get_app_root()
 
-def send_log_to_hub(message, is_error=False):
+def send_log_to_hub(message, is_error=False, error_code=None):
     try:
         url = "http://127.0.0.1:5000/api/log"
-        requests.post(url, json={"message": message, "is_error": is_error}, timeout=1)
+        payload = {"message": message, "is_error": is_error}
+        if error_code:
+            payload["error_code"] = error_code
+        requests.post(url, json=payload, timeout=1)
     except:
         print(message)
 
@@ -204,9 +221,14 @@ except:
 # --- 2. 設定・履歴・コンテキスト管理 ---
 def load_config_manual(root):
     path = os.path.join(root, "config", "config.json")
-    if not os.path.exists(path): return {}, {}, root
-    with open(path, "r", encoding="utf-8") as f:
-        conf = json.load(f)
+    if config_manager:
+        conf = config_manager.load_config(path)
+    else:
+        # フォールバック
+        if not os.path.exists(path): return {}, {}, root
+        with open(path, "r", encoding="utf-8") as f:
+            conf = json.load(f)
+            
     paths = {k: os.path.join(root, v) for k, v in conf.get("FILES", {}).items()}
     return conf, paths, root
 
@@ -287,6 +309,7 @@ def search_long_term_memory(query, history=None, root=None, n_results=5):
                 context += f"・[{date_val}] {item['doc']}\n"
             return context
     except Exception as e:
+        # main()から離れた場所なので、多言語化が難しい場合は英語で最小限に
         send_log_to_hub(f"Memory Search Error: {e}", is_error=True)
     return ""
 
@@ -296,8 +319,11 @@ def increment_tavily_count(root):
     conf_path = os.path.join(root, "config", "config.json")
     with file_lock:
         try:
-            with open(conf_path, "r", encoding="utf-8") as f:
-                current_conf = json.load(f)
+            if config_manager:
+                current_conf = config_manager.load_config(conf_path)
+            else:
+                with open(conf_path, "r", encoding="utf-8") as f:
+                    current_conf = json.load(f)
             
             now = datetime.now() 
             now_month = now.strftime("%Y-%m")
@@ -311,26 +337,78 @@ def increment_tavily_count(root):
                 count += 1
             
             current_conf["TAVILY_COUNT"] = count
-            with open(conf_path, "w", encoding="utf-8") as f:
-                json.dump(current_conf, f, indent=4, ensure_ascii=False)
+            
+            if config_manager:
+                config_manager.save_config(conf_path, current_conf)
+            else:
+                with open(conf_path, "w", encoding="utf-8") as f:
+                    json.dump(current_conf, f, indent=4, ensure_ascii=False)
             return count
         except Exception as e:
             send_log_to_hub(f"Count Increment Error: {e}", is_error=True)
             return 0
 
+def should_execute_search(query, config, log_m):
+    """案1: 検索が本当に必要かAI（軽量モデル）で事前判定する"""
+    try:
+        import ollama
+        summary_model = config.get("MODEL_ID_SUMMARY", "gemma2:9b")
+        
+        prompt = (
+            "あなたは検索のゲートキーパーです。ユーザーの質問に答えるために、インターネットでのリアルタイム検索が【絶対に】必要かどうかを判定してください。\n"
+            "以下の場合は 'False' と判定してください：\n"
+            "- 既にAIが知っている一般的な事実（例：歴史、数学、プログラムの書き方）\n"
+            "- 日常会話や挨拶、単なるおしゃべり\n"
+            "- 直前の会話の流れから、検索しなくても推論できる場合\n\n"
+            "以下の場合は 'True' と判定してください：\n"
+            "- 最新のニュース、天気、株価、発売日などのリアルタイム情報\n"
+            "- AIの知識カットオフ以降の出来事\n"
+            "- 具体的な事実確認が必要な専門的な内容\n\n"
+            "回答はJSON形式で返してください：\n"
+            "{\"necessary\": boolean, \"optimized_query\": \"検索に適した短いキーワード\", \"reason\": \"理由\"}\n\n"
+            f"判定対象のクエリ: {query}"
+        )
+        
+        response = ollama.chat(
+            model=summary_model,
+            messages=[{'role': 'user', 'content': prompt}],
+            format='json'
+        )
+        
+        res_data = json.loads(response['message']['content'])
+        return res_data
+    except Exception as e:
+        # AI Init Errorなど
+        send_log_to_hub(f"Gatekeeper Error: {e}", is_error=True)
+        # エラー時は安全のため検索を許可（フォールバック）
+        return {"necessary": True, "optimized_query": query, "reason": "Gatekeeper failed"}
+
 def execute_background_search(search_query, config, root, session_data):
     summary = None
     try:
-        from tavily import TavilyClient
-        import ollama
-        
         lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
         log_m = lang_data.get("log_messages", {})
         ai_p = lang_data.get("ai_prompt", {})
 
+        # --- 案1: 判定ステップを追加 ---
+        gatekeeper_res = should_execute_search(search_query, config, log_m)
+        if not gatekeeper_res.get("necessary", True):
+            msg = log_m.get("gatekeeper_skip", "System: Search skipped by Gatekeeper (Reason: {reason})").format(reason=gatekeeper_res.get('reason', 'N/A'))
+            send_log_to_hub(msg)
+            return
+        
+        optimized_query = gatekeeper_res.get("optimized_query", search_query)
+        if optimized_query != search_query:
+            msg = log_m.get("query_optimized", "System: Optimized search query: {original} -> {optimized}").format(original=search_query, optimized=optimized_query)
+            send_log_to_hub(msg)
+            search_query = optimized_query
+        
+        from tavily import TavilyClient
+        import ollama
+        
         count = increment_tavily_count(root)
         
-        exec_msg = log_m.get("search_executing", "システム: Tavily検索を実行します (今月 {count} 回目)").format(count=count)
+        exec_msg = log_m.get("search_executing", "System: Executing Tavily search (Total: {count} this month)").format(count=count)
         send_log_to_hub(exec_msg)
 
         api_key = config.get("TAVILY_API_KEY")
@@ -352,7 +430,7 @@ def execute_background_search(search_query, config, root, session_data):
                     with open(cache_file, 'r', encoding='utf-8') as f:
                         cached_data = json.load(f)
                         summary = cached_data['summary']
-                        send_log_to_hub("💾 [検索キャッシュヒット] 過去の検索結果を再利用（Tavilyコスト削減）")
+                        send_log_to_hub(log_m.get("search_cache_hit", "[Search Cache Hit] Reusing previous results to save costs."))
                         
                         
                         # キャッシュから読み込んだサマリーで音声出力
@@ -368,7 +446,8 @@ def execute_background_search(search_query, config, root, session_data):
                         speak_and_show(final_text, None, config, root, session_data, show_window=True, skip_idle=False)
                         return
                 except Exception as cache_err:
-                    send_log_to_hub(f"キャッシュ読み込みエラー: {cache_err}", is_error=True)
+                    msg = log_m.get("cache_save_error", "Cache save error: {e}").format(e=cache_err)
+                    send_log_to_hub(msg, is_error=True)
 
         tavily = TavilyClient(api_key=api_key)
         
@@ -383,12 +462,13 @@ def execute_background_search(search_query, config, root, session_data):
                 max_results=3
             )
         
-        send_log_to_hub(f"🔍 Web検索を実行中... (タイムアウト: {timeout}秒)")
+        searching_msg = log_m.get("search_searching", "Web search in progress... (Timeout: {timeout}s)").format(timeout=timeout)
+        send_log_to_hub(searching_msg)
         search_res = run_with_timeout(_call_tavily_search, timeout)
         
         if search_res is None:
             # タイムアウト発生
-            error_msg = f"⏱️ Web検索がタイムアウトしました（{timeout}秒）"
+            error_msg = log_m.get("timeout_web_search", "Web search timeout ({timeout} seconds)").format(timeout=timeout)
             send_log_to_hub(error_msg, is_error=True)
             return
         
@@ -435,13 +515,19 @@ def execute_background_search(search_query, config, root, session_data):
             speak_and_show(final_text, None, config, root, session_data, show_window=True, skip_idle=False)
             
     except Exception as e:
-        send_log_to_hub(f"Background Search Error: {e}", is_error=True)
+        lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
+        log_m = lang_data.get("log_messages", {})
+        msg = log_m.get("background_search_error", "Background search error: {e}").format(e=e)
+        send_log_to_hub(msg, is_error=True)
 
 def save_search_to_db(full_summary, query, config, root):
     """検索結果をさらに短く要約して直接ChromaDBへ保存する（改善版: 接続プール使用）"""
     try:
         import ollama
         import chromadb
+        
+        lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
+        log_m = lang_data.get("log_messages", {})
 
         summary_model = config.get("MODEL_ID_SUMMARY", "gemma2:9b")
         
@@ -484,10 +570,13 @@ def save_search_to_db(full_summary, query, config, root):
             ids=[f"web_{int(unix_time)}"]
         )
         
-        send_log_to_hub(f"システム: 検索情報を「ネット情報」としてDBに記録しました。")
+        send_log_to_hub(log_m.get("search_recorded", "System: Search information recorded to DB as 'Internet Info'."))
 
     except Exception as e:
-        send_log_to_hub(f"Internal DB Save Error: {e}", is_error=True)
+        lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
+        log_m = lang_data.get("log_messages", {})
+        msg = log_m.get("internal_db_save_error", "Internal DB save error: {e}").format(e=e)
+        send_log_to_hub(msg, is_error=True)
 
 # --- 4. AIコア機能 ---
 gemini_client = None
@@ -495,18 +584,23 @@ openai_client = None
 
 def init_ai(config):
     global gemini_client, openai_client
+    lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
+    log_m = lang_data.get("log_messages", {})
+    
     if config.get("GEMINI_API_KEY"):
         try:
             import google.genai as genai
             gemini_client = genai.Client(api_key=config["GEMINI_API_KEY"])
         except Exception as e:
-            send_log_to_hub(f"Gemini Init Error: {e}", is_error=True)
+            msg = log_m.get("ai_init_error", "{provider} initialization error: {e}").format(provider="Gemini", e=e)
+            send_log_to_hub(msg, is_error=True, error_code="api_key_invalid")
     if config.get("OPENAI_API_KEY"):
         try:
             from openai import OpenAI
             openai_client = OpenAI(api_key=config["OPENAI_API_KEY"])
         except Exception as e:
-            send_log_to_hub(f"OpenAI Init Error: {e}", is_error=True)
+            msg = log_m.get("ai_init_error", "{provider} initialization error: {e}").format(provider="OpenAI", e=e)
+            send_log_to_hub(msg, is_error=True)
 
 # APIキャッシュのグローバル変数とインスタンス取得
 _api_cache_instance = None
@@ -574,11 +668,14 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
             os.makedirs(os.path.dirname(image_path_for_cache), exist_ok=True)
             image.save(image_path_for_cache)
     
+    lang_data = lang_data if lang_data else load_lang_file(config.get("LANGUAGE", "ja"))
+    log_m = lang_data.get("log_messages", {})
+    
     # キャッシュからの取得を試行
     if api_cache:
         cached_response = api_cache.get(prompt, image_path_for_cache, provider, model_id)
         if cached_response:
-            send_log_to_hub("💾 [キャッシュヒット] 過去の応答を再利用（APIコスト削減）")
+            send_log_to_hub(log_m.get("api_cache_hit", "[Cache Hit] Reusing previous response to save costs."))
             # 履歴に追加
             user_pref = lang_data["system"].get("you_prefix", "You: ")
             history.append(f"{user_pref}{prompt}")
@@ -648,18 +745,23 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
             def _call_gemini_api():
                 return chat.send_message(parts)
             
-            send_log_to_hub(f"🤖 AI応答を取得中... (タイムアウト: {timeout}秒)")
+            thinking_msg = log_m.get("ai_thinking", "Getting AI response... (Timeout: {timeout}s)").format(timeout=timeout)
+            send_log_to_hub(thinking_msg)
             res = run_with_timeout(_call_gemini_api, timeout)
             
             if res is None:
                 # タイムアウト発生
-                error_msg = f"⏱️ AI応答がタイムアウトしました（{timeout}秒）"
+                error_msg = log_m.get("timeout_ai_response", "AI response timeout ({timeout} seconds)").format(timeout=timeout)
                 send_log_to_hub(error_msg, is_error=True)
                 return "申し訳ありません。AI応答の取得に時間がかかりすぎたため、処理を中断しました。もう一度お試しください。"
             
             answer_text = res.text
 
         if answer_text:
+            # 履歴に追加
+            ai_pref = lang_data.get("system", {}).get("ai_prefix", "AI: ")
+            history.append(f"{ai_pref}{answer_text}")
+            
             # キャッシュに保存（次回の高速化・コスト削減）
             if api_cache:
                 try:
@@ -675,7 +777,8 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
             return answer_text
 
     except Exception as e:
-        send_log_to_hub(f"Chat Error ({provider}): {e}", is_error=True)
+        msg = log_m.get("chat_error", "Chat error ({provider}): {e}").format(provider=provider, e=e)
+        send_log_to_hub(msg, is_error=True)
         return f"AI Error: The conversation stops."
 
 # --- 5. オーバーレイ表示・音声合成 ---
@@ -736,8 +839,14 @@ def managed_mixer(config):
 
 def speak_and_show(text, image_path=None, config=None, root=None, session_data=None, show_window=True, skip_idle=False):
     if root is None: root = APP_ROOT
-    # session_data: (session_id, session_getter, overlay_queue)
-    session_id, session_getter, overlay_queue = session_data if session_data else (None, None, None)
+    # session_data: (session_id, session_getter, overlay_queue, lang_data)
+    s_data = session_data if session_data else (None, None, None, None)
+    session_id, session_getter, overlay_queue = s_data[0], s_data[1], s_data[2]
+    lang_data = s_data[3] if len(s_data) > 3 else None
+    
+    if lang_data is None:
+        lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
+    log_m = lang_data.get("log_messages", {})
 
     # CHECK SESSION
     if session_id and session_getter:
@@ -773,8 +882,14 @@ def speak_and_show(text, image_path=None, config=None, root=None, session_data=N
 
 def run_voicevox_speak(text, config, root, session_data):
     """改善版: リソース管理を強化したVOICEVOX音声再生"""
-    session_id, session_getter, _ = session_data if session_data else (None, None, None)
+    s_data = session_data if session_data else (None, None, None, None)
+    session_id, session_getter = s_data[0], s_data[1]
+    lang_data = s_data[3] if len(s_data) > 3 else None
     
+    if lang_data is None:
+        lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
+    log_m = lang_data.get("log_messages", {})
+
     # 音声データを貯めるキュー（最大2つ分先行生成しておく）
     audio_queue = queue.Queue(maxsize=2)
     sentences = [s.strip() for s in re.split(r'[。\n！？]', text) if s.strip()]
@@ -805,7 +920,8 @@ def run_voicevox_speak(text, config, root, session_data):
                 if r2.status_code == 200:
                     audio_queue.put(r2.content)
             except Exception as e:
-                send_log_to_hub(f"音声生成エラー: {e}", is_error=True)
+                msg = log_m.get("audio_gen_error", "Audio generation error: {e}").format(e=e)
+                send_log_to_hub(msg, is_error=True)
         audio_queue.put(None) # 終了の合図
 
     # 生成スレッドを開始
@@ -947,8 +1063,9 @@ def ensure_voicevox_is_running(config, lang_data):
             subprocess.Popen([vv_path], creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
             time.sleep(3); return True
         except Exception as e:
-            send_log_to_hub(lang_data["log_messages"]["engine_fail"].format(e=e), is_error=True)
-    else: send_log_to_hub(lang_data["log_messages"]["engine_path_error"], is_error=True)
+            send_log_to_hub(lang_data["log_messages"]["engine_fail"].format(e=e), is_error=True, error_code="voicevox_not_running")
+    else: 
+        send_log_to_hub(lang_data["log_messages"]["engine_path_error"], is_error=True, error_code="voicevox_not_running")
     return False
 
 def get_voice_input(guide, config, root, lang_data, session_data, image_path=None):
@@ -996,12 +1113,14 @@ def get_voice_input(guide, config, root, lang_data, session_data, image_path=Non
     except: return None
 
 def main(mode="voice", chat_text=None, session_id=None, session_getter=None, overlay_queue=None):
-    session_data = (session_id, session_getter, overlay_queue)
     root = get_app_root()
     config, _, _ = load_config_manual(root)
     lang_code = config.get("LANGUAGE", "ja")
     lang_data = load_lang_file(lang_code)
     log_m = lang_data.get("log_messages", {})
+    
+    # 拡張されたsession_data (lang_dataを含む)
+    session_data = (session_id, session_getter, overlay_queue, lang_data)
 
     if lang_code == "ja": ensure_voicevox_is_running(config, lang_data)
     init_ai(config)
@@ -1022,24 +1141,20 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
         else:
             query = get_voice_input(log_m.get("voice_guide", "How can I help you?"), config, root, lang_data, session_data)
 
-        if query:
-            # Send status:thinking to overlay
-            if session_data and session_data[2]:
-                session_data[2].put(("", None, "OFF", 0, 'thinking'))
-                
             # --- モード分岐：複合AIモードか通常モードか ---
             res = None
             if config.get("USE_INTERSECTING_AI", False):
                 try:
                     from scripts.intersecting_ai import run_intersecting_ai
-                    send_log_to_hub("システム: 複合AIモードで実行します。")
+                    send_log_to_hub(log_m.get("intersecting_ai_start", "System: Running in Intersecting AI mode."))
                     
                     # 修正前: res = run_intersecting_ai(query, abs_path, root)
                     # 修正後: 定義に合わせて 5つの引数 すべてを渡します
                     res = run_intersecting_ai(query, abs_path, config, root, lang_data)
                     
                 except Exception as e:
-                    send_log_to_hub(f"複合AIエラー: {e}。通常モードへフォールバックします。", is_error=True)
+                    msg = log_m.get("intersecting_ai_error", "Intersecting AI error: {e}. Falling back to normal mode.").format(e=e)
+                    send_log_to_hub(msg, is_error=True)
             
             # 複合AIがオフ、またはエラーで res が空の場合に通常モードを実行
             if not res:
@@ -1052,7 +1167,7 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
                 if search_match and config.get("search_switch") is True and config.get("AI_PROVIDER", "gemini").lower() == "gemini":
                     s_query = search_match.group(1)
                     # 辞書から予約ログを取得
-                    res_msg = log_m.get("search_reserved", "システム: 検索タスクを予約しました。")
+                    res_msg = log_m.get("search_reserved", "System: Search task reserved.")
                     send_log_to_hub(res_msg)
                     # Use session_data instead of stop_flag in background tasks if possible, 
                     # but for now we pass session_data as the last arg to execute_background_search 
@@ -1064,17 +1179,14 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
 
         if update_memory and len(load_history_manual(root)) >= 16:
             # 辞書から予約ログを取得
-            mem_msg = log_m.get("memory_update_reserved", "システム: 記憶整理タスクを予約しました。")
+            mem_msg = log_m.get("memory_update_reserved", "System: Memory optimization task reserved.")
             send_log_to_hub(mem_msg)
             # メモリ更新タスクは120秒のタイムアウトで実行
             submit_background_task(update_memory.main, root, timeout=120)
             
-        # global current_overlay_root  # Removed
-        # if current_overlay_root:
-        #     try: current_overlay_root.after(0, current_overlay_root.destroy)
-        #     except: pass
     except Exception as e:
-        send_log_to_hub(f"Execution Error: {e}", is_error=True)
+        msg = log_m.get("execution_error", "Execution error: {e}").format(e=e)
+        send_log_to_hub(msg, is_error=True)
 
 if __name__ == "__main__":
     m = sys.argv[1] if len(sys.argv) > 1 else "voice"

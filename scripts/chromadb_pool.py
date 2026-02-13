@@ -98,7 +98,33 @@ def search_long_term_memory(query, history=None, root=None, n_results=5):
                 context += f"・[{date_val}] {item['doc']}\n"
             return context
     except Exception as e:
-        send_log_to_hub(f"Memory Search Error: {e}", is_error=True)
+        # 言語データの取得（game_ai.py 等と同様のロジック）
+        try:
+            from .game_ai import load_lang_file, get_app_root, load_config_manual
+        except ImportError:
+            # 直接実行時などのフォールバック
+            import os, sys, json
+            def get_app_root():
+                if getattr(sys, 'frozen', False): return os.path.dirname(sys.executable)
+                p = os.path.abspath(__file__)
+                d = os.path.dirname(p)
+                return os.path.dirname(d) if os.path.basename(d) == "scripts" else d
+                
+            def load_lang_file(lc):
+                path = os.path.join(get_app_root(), "data", "lang", f"{lc}.json")
+                with open(path, "r", encoding="utf-8") as f: return json.load(f)
+
+            def load_config_manual(r):
+                path = os.path.join(r, "config", "config.json")
+                with open(path, "r", encoding="utf-8") as f: return json.load(f), None, None
+
+        root = root if root else get_app_root()
+        conf, _, _ = load_config_manual(root)
+        lang_data = load_lang_file(conf.get("LANGUAGE", "ja"))
+        log_m = lang_data.get("log_messages", {})
+        
+        msg = log_m.get("chromadb_error", "ChromaDB memory search error: {e}").format(e=e)
+        send_log_to_hub(msg, is_error=True)
     return ""
 
 

@@ -17,6 +17,7 @@
         "system_cascade": "系统",
         "refresh_windows": "刷新窗口列表",
         "reset_memory": "重置短期记忆",
+        "open_memory": "记忆管理 (Memory)",
         "restart": "重启",
         "exit": "退出",
         "tray_show": "显示"
@@ -164,5 +165,79 @@
         "search_logic": "\n你有一个特殊功能: 生成 [SEARCH: 英语查询] 以补充最近的信息。\n当需要搜索时，先回答你所知道的，然后加上‘稍后我会查找详细信息’。\n【重要指示】如果包含最近或不确定的信息，请在末尾添加 [SEARCH: 英语查询]。方括号 [ ] 和冒号 : 必须是半角，SEARCH和冒号之间没有空格。内容必须是『英语』关键词。",
         "summary_role": "你是一个优秀的搜索者。阅读以下英语搜索结果，并在1000字以内用【中文】总结要点。",
         "search_appendix_prefix": "这是来自搜索的补充信息。"
+    },
+    "setup_wizard": {
+        "title": "SecreAI 设置向導",
+        "welcome_title": "欢迎使用 SecreAI!",
+        "welcome_desc": "此向導将帮助您进行运行 AI 所需的基本设置。",
+        "welcome_notice": "* 您稍后可以随时从“设置”菜单更改这些内容。",
+        "step_lang_title": "语言选择",
+        "other_languages": "其他语言...",
+        "step_api_title": "API 密钥设置",
+        "step_api_desc": "运行 AI 需要 Gemini 或 OpenAI API 密钥。",
+        "gemini_key_label": "Gemini API 密钥:",
+        "openai_key_label": "OpenAI API 密钥 (GPT):",
+        "get_key_link": "获取 API 密钥",
+        "use_search_feature": "启用网络搜索功能（需要 Tavily）",
+        "tavily_key_label": "Tavily API 密钥:",
+        "step_ai_selection_title": "AI 模型选择",
+        "step_ai_selection_desc": "选择主 AI 和记忆整理 AI。它们是根据您输入的 API 密钥自动选择的。",
+        "ai_provider_label": "主 AI 提供者:",
+        "db_provider_label": "记忆整理 AI 提供者:",
+        "step_ollama_title": "关于 Ollama (本地 AI)",
+        "step_ollama_desc": "如果您的 PC 有足够的 GPU 余量，我们建议选择“Ollama (本地)”进行记忆整理。这可以大大节省 API 成本并保护隐私。",
+        "step_voice_title": "语音引擎设置",
+        "step_voice_desc": "设置角色语音。",
+        "use_voicevox": "使用 VOICEVOX (高品质/请确保已安装)",
+        "use_edgetts": "使用 Edge-TTS (免费/无需安装)",
+        "step_finish_title": "完成!",
+        "step_finish_desc": "一切准备就绪。",
+        "btn_back": "返回",
+        "btn_next": "下一步",
+        "btn_finish": "完成",
+        "confirm_skip_api": "未输入 API 密钥。您想稍后设置吗？\n(与 AI 对话需要其中一个密钥)"
+    },
+    "error_messages": {
+        "title_prefix": "错误",
+        "solution_header": "-- 解决方案 --",
+        "view_docs": "查看官方文档",
+        "codes": {
+            "api_key_invalid": {
+                "title": "API 密钥错误",
+                "message": "Gemini API 密钥无效或未设置。",
+                "solution": "请在设置或安装向导中输入有效的 API 密钥。",
+                "doc_link": "https://ai.google.dev/gemini-api/docs/api-key"
+            },
+            "voicevox_not_running": {
+                "title": "VOICEVOX 未运行",
+                "message": "无法连接到 VOICEVOX 引擎。",
+                "solution": "1. 请启动 VOICEVOX。\n2. 如果已经运行，请检查设置中的可执行文件路径。",
+                "doc_link": "https://voicevox.hiroshiba.jp/"
+            },
+            "internet_offline": {
+                "title": "网络错误",
+                "message": "请检查您的互联网连接。",
+                "solution": "检查您的 Wi-Fi 或 LAN 连接。SecreAI 可能无法在某些代理之后运行。",
+                "doc_link": ""
+            }
+        }
+    },
+    "performance": {
+        "title": "性能仪表板",
+        "cache_stats": "API 缓存统计",
+        "tavily_usage": "Tavily 搜索使用情况",
+        "db_resources": "数据库与资源",
+        "total_requests": "总请求数: {count}",
+        "hits": "命中次数: {count} (未命中: {miss})",
+        "hit_rate": "命中率: {rate}%",
+        "tavily_monthly": "本月已用: {count} / 1000",
+        "savings": "预计节省金额: ${amount}",
+        "db_size": "数据库大小: {size} MB",
+        "total_entries": "总记忆条目: {count}",
+        "model_stats_title": "各模型统计",
+        "model_header": "模型/供应商",
+        "requests_header": "请求",
+        "hits_header": "命中",
+        "btn_update": "更新信息"
     }
 }

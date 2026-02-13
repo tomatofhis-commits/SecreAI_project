@@ -15,10 +15,13 @@ try:
     from openai import OpenAI
     import chromadb
     from .chromadb_pool import get_chroma_collection
+    from .api_cache_system import APICache
+    from . import config_manager
 except ImportError as e:
     try:
+        # lang_dataがまだないのでここでは直接的に（絵文字なし）
         url = "http://127.0.0.1:5000/api/log"
-        requests.post(url, json={"message": f"Critical: Dependency missing in update_memory: {e}", "is_error": True}, timeout=1)
+        requests.post(url, json={"message": f"Critical: Dependency missing: {e}", "is_error": True}, timeout=1)
     except:
         pass
 
@@ -93,16 +96,12 @@ def play_sound(notes="up"):
 def main(base_path=None):
     base = base_path if base_path else get_app_root()
     config_path = os.path.join(base, "config", "config.json")
-
-    if not os.path.exists(config_path):
-        return
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    config = config_manager.load_config(config_path)
     
     provider = config.get("AI_PROVIDER", "gemini").lower()
     lang_code = config.get("LANGUAGE", "ja")
     lang_data = load_lang_file(lang_code)
+    log_m = lang_data.get("log_messages", {})
     
     history_file = os.path.join(base, config.get("FILES", {}).get("HISTORY", "data/chat_history.json"))
     tags_file = os.path.join(base, "data", "current_tags.json")
@@ -116,6 +115,14 @@ def main(base_path=None):
         model_id = config.get("MODEL_ID_LOCAL", "llama3.2-vision:11b")
     else:  # gemini
         model_id = config.get("MODEL_ID", "gemini-2.5-flash")
+
+    # APIキャッシュの初期化
+    cache_enabled = config.get("API_CACHE_ENABLED", True)
+    api_cache = None
+    if cache_enabled:
+        cache_dir = os.path.join(base, "data", "api_cache")
+        ttl_hours = config.get("API_CACHE_TTL_HOURS", 24)
+        api_cache = APICache(cache_dir, ttl_hours=ttl_hours)
 
     if not os.path.exists(history_file): return
     try:
@@ -136,8 +143,16 @@ def main(base_path=None):
         processing_target = history[:10]
         remaining_history = history[10:]
 
-        # --- 2. 要約用テキストの準備 ---
-        history_text = "\n".join(processing_target)
+        # --- 案2: 検索コマンド [SEARCH: ...] を履歴から除去 ---
+        import re
+        filtered_target = []
+        for line in processing_target:
+            # 検索コマンドを完全に削除
+            clean_line = re.sub(r'\[SEARCH:.*?\]', '', line).strip()
+            if clean_line:
+                filtered_target.append(clean_line)
+        
+        history_text = "\n".join(filtered_target)
         now = datetime.now()
         time_str = now.strftime('%Y-%m-%d %H:%M')
         summary_prompt = lang_data["ai_prompt"]["summarize_start"].format(time=time_str, history_text=history_text)
@@ -174,9 +189,18 @@ def main(base_path=None):
                     return "Error: Local LLM summary failed."
     
             else: # gemini
+                # キャッシュチェック
+                if api_cache:
+                    cached = api_cache.get(prompt, provider=db_provider, model=db_model_id)
+                    if cached: return cached
+
                 client_ge = genai.Client(api_key=config.get("GEMINI_API_KEY"))
                 res = client_ge.models.generate_content(model=db_model_id, contents=prompt)
-                return res.text.strip()
+                ans = res.text.strip()
+                
+                if api_cache:
+                    api_cache.set(prompt, ans, provider=db_provider, model=db_model_id)
+                return ans
 
         # --- generate_text: キーワードタグ生成用（メインAIモデルを使用） ---
         def generate_text(prompt):
@@ -206,9 +230,18 @@ def main(base_path=None):
                     return "Error: Local LLM failed."
     
             else: # gemini
+                # キャッシュチェック
+                if api_cache:
+                    cached = api_cache.get(prompt, provider=provider, model=model_id)
+                    if cached: return cached
+
                 client_ge = genai.Client(api_key=config.get("GEMINI_API_KEY"))
                 res = client_ge.models.generate_content(model=model_id, contents=prompt)
-                return res.text.strip()
+                ans = res.text.strip()
+
+                if api_cache:
+                    api_cache.set(prompt, ans, provider=provider, model=model_id)
+                return ans
 
         # 要約の実行（軽量モデルを使用）
         new_summary = generate_summary_text(summary_prompt)
@@ -265,7 +298,7 @@ def main(base_path=None):
             
             tag_count = 0 
         else:
-            send_log_to_hub(f"システム: 記憶サイクル進行中 ({tag_count}/5)")
+            send_log_to_hub(log_m.get("memory_cycle_progress", "System: Memory cycle in progress ({count}/5)").format(count=tag_count))
 
         with open(counter_file, "w") as f:
             json.dump({"count": tag_count}, f)

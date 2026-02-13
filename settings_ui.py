@@ -32,15 +32,15 @@ try:
     # Nuitka ビルド時は scripts パッケージ配下としてインポート
     try:
         from scripts.db_maintenance import get_db_stats, clean_up_database
-        from scripts import game_ai
-        print("DEBUG: db_maintenance and game_ai loaded via scripts")
+        from scripts import game_ai, config_manager
+        print("DEBUG: db_maintenance, game_ai and config_manager loaded via scripts")
     except ImportError:
         # 開発時のフォールバック
-        import db_maintenance
         import game_ai
+        from scripts import config_manager
         get_db_stats = db_maintenance.get_db_stats
         clean_up_database = db_maintenance.clean_up_database
-        print("DEBUG: db_maintenance and game_ai loaded via direct import")
+        print("DEBUG: db_maintenance, game_ai and config_manager loaded via direct import")
 except Exception as e:
     print(f"DEBUG: Import failed. Error: {e}")
 
@@ -632,8 +632,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         }
         
         try:
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=4, ensure_ascii=False)
+            config_manager.save_config(config_path, config)
             save_callback(config)
             
             # 言語が変更された場合に、この設定ウィンドウ内の翻訳データも更新する
