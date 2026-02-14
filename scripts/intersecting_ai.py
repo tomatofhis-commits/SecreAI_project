@@ -34,7 +34,8 @@ def call_gemini_sync(query, image_obj, system_instr, config):
         model_id = config.get("MODEL_ID", "gemini-2.5-flash")
         client = genai.Client(api_key=config.get("GEMINI_API_KEY"))
         
-        contents = [query]
+        safe_query = str(query) if not isinstance(query, str) else query
+        contents = [safe_query]
         if image_obj:
             contents.append(image_obj)
 

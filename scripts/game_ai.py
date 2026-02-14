@@ -377,11 +377,17 @@ def should_execute_search(query, config, log_m):
         
         res_data = json.loads(response['message']['content'])
         return res_data
+    except ImportError:
+        return {"necessary": True, "optimized_query": query, "reason": "Ollama library not installed"}
     except Exception as e:
-        # AI Init Errorなど
+        # 接続エラーの詳細判定
+        err_str = str(e).lower()
+        if "connection" in err_str or "refused" in err_str:
+             send_log_to_hub(f"Gatekeeper Warning: Ollama connection failed. Falling back to search. (Ensure Ollama is running)", is_error=True)
+             return {"necessary": True, "optimized_query": query, "reason": "Ollama not running"}
+        
         send_log_to_hub(f"Gatekeeper Error: {e}", is_error=True)
-        # エラー時は安全のため検索を許可（フォールバック）
-        return {"necessary": True, "optimized_query": query, "reason": "Gatekeeper failed"}
+        return {"necessary": True, "optimized_query": query, "reason": f"Gatekeeper failed: {e}"}
 
 def execute_background_search(search_query, config, root, session_data):
     summary = None
@@ -391,6 +397,7 @@ def execute_background_search(search_query, config, root, session_data):
         ai_p = lang_data.get("ai_prompt", {})
 
         # --- 案1: 判定ステップを追加 ---
+        send_log_to_hub(log_m.get("gatekeeper_analyzing", "システム: ゲートキーパーが検索の必要性を判定中..."))
         gatekeeper_res = should_execute_search(search_query, config, log_m)
         if not gatekeeper_res.get("necessary", True):
             msg = log_m.get("gatekeeper_skip", "System: Search skipped by Gatekeeper (Reason: {reason})").format(reason=gatekeeper_res.get('reason', 'N/A'))
@@ -402,6 +409,9 @@ def execute_background_search(search_query, config, root, session_data):
             msg = log_m.get("query_optimized", "System: Optimized search query: {original} -> {optimized}").format(original=search_query, optimized=optimized_query)
             send_log_to_hub(msg)
             search_query = optimized_query
+        else:
+            msg = log_m.get("gatekeeper_approve", "システム: ゲートキーパーが検索を承認しました。")
+            send_log_to_hub(msg)
         
         from tavily import TavilyClient
         import ollama
@@ -434,7 +444,11 @@ def execute_background_search(search_query, config, root, session_data):
                         
                         
                         # キャッシュから読み込んだサマリーで音声出力
-                        session_id, session_getter, overlay_queue = session_data if session_data else (None, None, None)
+                        session_id, session_getter, overlay_queue = session_data[0], session_data[1], session_data[2]
+                        
+                        # セッション中断チェック
+                        if session_id and session_getter and session_getter() != session_id: return
+
                         # 古いウィンドウを閉じてから新しい検索結果を表示
                         if overlay_queue:
                             overlay_queue.put((None, None, "OFF", 0, 'idle'))
@@ -472,6 +486,10 @@ def execute_background_search(search_query, config, root, session_data):
             send_log_to_hub(error_msg, is_error=True)
             return
         
+        # セッション中断チェック (API待ち後のキャンセル対応)
+        session_id, session_getter = session_data[0], session_data[1]
+        if session_id and session_getter and session_getter() != session_id: return
+
         contents = [f"Source: {r['url']}\nContent: {r['content']}" for r in search_res['results']]
         context = "\n---\n".join(contents)
         
@@ -500,11 +518,13 @@ def execute_background_search(search_query, config, root, session_data):
             # --- 修正箇所：保存タスクを並列実行キューに追加 ---
             submit_background_task(save_search_to_db, summary, search_query, config, root)
             
+            # メインの読み上げが終わるのを待機（セッション中断を監視しつつ）
             while pygame.mixer.get_init() and pygame.mixer.music.get_busy():
+                if session_id and session_getter and session_getter() != session_id: return
                 time.sleep(0.5)
 
             # 古いウィンドウを閉じてから新しい検索結果を表示
-            session_id, session_getter, overlay_queue = session_data if session_data else (None, None, None)
+            session_id, session_getter, overlay_queue = session_data[0], session_data[1], session_data[2]
             if overlay_queue:
                 overlay_queue.put((None, None, "OFF", 0, 'idle'))
                 time.sleep(0.1)  # ウィンドウが確実に閉じるまで待機
@@ -734,7 +754,10 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
                 content = h.replace("AI:", "").replace("You: ", "").replace("あなた: ", "").strip()
                 gemini_history.append({"role": role, "parts": [{"text": content}]})
             chat = gemini_client.chats.create(model=model_id, config={"system_instruction": system_instr}, history=gemini_history)
-            parts = [prompt]
+            
+            # --- Type Guard: Ensure prompt is string ---
+            safe_prompt = str(prompt) if not isinstance(prompt, str) else prompt
+            parts = [safe_prompt]
             if image_bytes:
                 parts.append(Image.open(BytesIO(image_bytes)))
             
@@ -758,21 +781,19 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
             answer_text = res.text
 
         if answer_text:
-            # 履歴に追加
-            ai_pref = lang_data.get("system", {}).get("ai_prefix", "AI: ")
-            history.append(f"{ai_pref}{answer_text}")
-            
             # キャッシュに保存（次回の高速化・コスト削減）
             if api_cache:
                 try:
                     api_cache.set(prompt, answer_text, image_path_for_cache, provider, model_id)
                 except Exception as cache_err:
-                    # キャッシュ保存失敗は無視（機能継続優先）
                     pass
             
-            user_pref = lang_data["system"].get("you_prefix", "You: ")
+            # 履歴の保存を一元化（重複を防ぐ）
+            user_pref = lang_data.get("system", {}).get("you_prefix", "You: ")
+            ai_pref = lang_data.get("system", {}).get("ai_prefix", "AI: ")
+            
             history.append(f"{user_pref}{prompt}")
-            history.append(f"AI: {answer_text}")
+            history.append(f"{ai_pref}{answer_text}")
             save_history_manual(history, root)
             return answer_text
 
@@ -986,7 +1007,7 @@ EDGE_TTS_VOICES = {
 
 def run_edge_tts_speak(text, lang_code, config, root, session_data):
     """改善版: リソース管理を強化したEdge-TTS音声再生"""
-    session_id, session_getter, _ = session_data if session_data else (None, None, None)
+    session_id, session_getter, _ = session_data[:3] if session_data else (None, None, None)
     
     voice = EDGE_TTS_VOICES.get(lang_code, "en-US-AriaNeural")
     
@@ -1070,7 +1091,7 @@ def ensure_voicevox_is_running(config, lang_data):
 
 def get_voice_input(guide, config, root, lang_data, session_data, image_path=None):
     stt_lang = 'ja-JP' if config.get("LANGUAGE", "ja") == "ja" else 'en-US'
-    session_id, session_getter, _ = session_data if session_data else (None, None, None)
+    session_id, session_getter, _ = session_data[:3] if session_data else (None, None, None)
 
     # ガイダンス音声を別スレッドで再生（同時に入力を開始できるようにする）
     threading.Thread(
@@ -1141,41 +1162,41 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
         else:
             query = get_voice_input(log_m.get("voice_guide", "How can I help you?"), config, root, lang_data, session_data)
 
-            # --- モード分岐：複合AIモードか通常モードか ---
-            res = None
-            if config.get("USE_INTERSECTING_AI", False):
-                try:
-                    from scripts.intersecting_ai import run_intersecting_ai
-                    send_log_to_hub(log_m.get("intersecting_ai_start", "System: Running in Intersecting AI mode."))
-                    
-                    # 修正前: res = run_intersecting_ai(query, abs_path, root)
-                    # 修正後: 定義に合わせて 5つの引数 すべてを渡します
-                    res = run_intersecting_ai(query, abs_path, config, root, lang_data)
-                    
-                except Exception as e:
-                    msg = log_m.get("intersecting_ai_error", "Intersecting AI error: {e}. Falling back to normal mode.").format(e=e)
-                    send_log_to_hub(msg, is_error=True)
-            
-            # 複合AIがオフ、またはエラーで res が空の場合に通常モードを実行
-            if not res:
-                res = chat_with_ai(query, Image.open(abs_path) if abs_path else None, config, root, lang_data)
+        # --- モード分岐：複合AIモードか通常モードか ---
+        res = None
+        if config.get("USE_INTERSECTING_AI", False):
+            try:
+                from scripts.intersecting_ai import run_intersecting_ai
+                send_log_to_hub(log_m.get("intersecting_ai_start", "System: Running in Intersecting AI mode."))
+                
+                # 修正前: res = run_intersecting_ai(query, abs_path, root)
+                # 修正後: 定義に合わせて 5つの引数 すべてを渡します
+                res = run_intersecting_ai(query, abs_path, config, root, lang_data)
+                
+            except Exception as e:
+                msg = log_m.get("intersecting_ai_error", "Intersecting AI error: {e}. Falling back to normal mode.").format(e=e)
+                send_log_to_hub(msg, is_error=True)
+        
+        # 複合AIがオフ、またはエラーで res が空の場合に通常モードを実行
+        if not res:
+            res = chat_with_ai(query, Image.open(abs_path) if abs_path else None, config, root, lang_data)
 
-            if res:
-                search_match = re.search(r'\[SEARCH:\s*(.*?)\]', res)
-                clean_res = re.sub(r'\[SEARCH:.*\]', '', res).strip()
+        if res:
+            search_match = re.search(r'\[SEARCH:\s*(.*?)\]', res)
+            clean_res = re.sub(r'\[SEARCH:.*\]', '', res).strip()
 
-                if search_match and config.get("search_switch") is True and config.get("AI_PROVIDER", "gemini").lower() == "gemini":
-                    s_query = search_match.group(1)
-                    # 辞書から予約ログを取得
-                    res_msg = log_m.get("search_reserved", "System: Search task reserved.")
-                    send_log_to_hub(res_msg)
-                    # Use session_data instead of stop_flag in background tasks if possible, 
-                    # but for now we pass session_data as the last arg to execute_background_search 
-                    # replacing stop_flag. Logic inside execute_background_search needs update for this.
-                    # 検索タスクは音声読み上げを含むため、タイムアウトなしで実行
-                    submit_background_task(execute_background_search, s_query, config, root, session_data, timeout=None)
+            if search_match and config.get("search_switch") is True and config.get("AI_PROVIDER", "gemini").lower() == "gemini":
+                s_query = search_match.group(1)
+                # 辞書から予約ログを取得
+                res_msg = log_m.get("search_reserved", "System: Search task reserved.")
+                send_log_to_hub(res_msg)
+                # Use session_data instead of stop_flag in background tasks if possible, 
+                # but for now we pass session_data as the last arg to execute_background_search 
+                # replacing stop_flag. Logic inside execute_background_search needs update for this.
+                # 検索タスクは音声読み上げを含むため、タイムアウトなしで実行
+                submit_background_task(execute_background_search, s_query, config, root, session_data, timeout=None)
 
-                speak_and_show(clean_res, abs_path, config, root, session_data)
+            speak_and_show(clean_res, abs_path, config, root, session_data)
 
         if update_memory and len(load_history_manual(root)) >= 16:
             # 辞書から予約ログを取得
