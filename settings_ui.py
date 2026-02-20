@@ -175,13 +175,13 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     lbl_model_normal = add_label(gemini_frame, l_set.get("model_normal", "Normal Model:"), pady=(5,0))
     # すべての候補を維持
-    gemini_models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3-pro-preview"]
+    gemini_models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-pro-preview"]
     model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-2.5-flash"))
     tk.OptionMenu(gemini_frame, model_var, *gemini_models).pack(pady=2)
 
     lbl_model_pro = add_label(gemini_frame, l_set.get("model_pro", "Pro Model:"), pady=(5,0))
-    pro_models = ["gemini-3-flash-preview", "gemini-3-pro-preview"]
-    model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3-pro-preview"))
+    pro_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview"]
+    model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.1-pro-preview"))
     tk.OptionMenu(gemini_frame, model_pro_var, *pro_models).pack(pady=2)
 
     # OpenAI Frame
