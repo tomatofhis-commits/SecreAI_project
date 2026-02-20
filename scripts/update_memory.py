@@ -1,4 +1,5 @@
 import json
+import re
 import requests
 import os
 import time
@@ -304,8 +305,15 @@ def main(base_path=None):
             json.dump({"count": tag_count}, f)
 
         # --- 6. 履歴ファイルの更新（古い10件を消し、新しい履歴を受け継ぐ） ---
+        # [SEARCH:] タグをクリーンアップして保存
+        cleaned_history = []
+        for entry in remaining_history:
+            if isinstance(entry, str):
+                entry = re.sub(r'\n\n\[SEARCH:.*?\]', '', entry, flags=re.DOTALL).strip()
+            cleaned_history.append(entry)
+
         with open(history_file, "w", encoding="utf-8") as f:
-            json.dump(remaining_history, f, ensure_ascii=False, indent=2)
+            json.dump(cleaned_history, f, ensure_ascii=False, indent=2)
         
         send_log_to_hub(lang_data["log_messages"]["memory_update_done"])
         threading.Thread(target=play_sound, args=("down",), daemon=True).start()
