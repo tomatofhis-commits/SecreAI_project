@@ -9,6 +9,9 @@ import threading  # <--- これを追加しました
 from datetime import datetime, timedelta
 
 # --- ライブラリのインポート ---
+config_manager = None
+APICache = None
+
 try:
     import pygame
     import numpy as np
@@ -18,13 +21,22 @@ try:
     from .chromadb_pool import get_chroma_collection
     from .api_cache_system import APICache
     from . import config_manager
-except ImportError as e:
+except ImportError:
     try:
-        # lang_dataがまだないのでここでは直接的に（絵文字なし）
-        url = "http://127.0.0.1:5000/api/log"
-        requests.post(url, json={"message": f"Critical: Dependency missing: {e}", "is_error": True}, timeout=1)
-    except:
-        pass
+        import pygame
+        import numpy as np
+        import google.genai as genai
+        from openai import OpenAI
+        import chromadb
+        from chromadb_pool import get_chroma_collection
+        from api_cache_system import APICache
+        import config_manager
+    except ImportError as e:
+        try:
+            url = "http://127.0.0.1:5000/api/log"
+            requests.post(url, json={"message": f"Critical: Dependency missing in update_memory: {e}", "is_error": True}, timeout=1)
+        except:
+            pass
 
 # ChromaDB接続プールのインポート
 try:
@@ -97,8 +109,18 @@ def play_sound(notes="up"):
 def main(base_path=None):
     base = base_path if base_path else get_app_root()
     config_path = os.path.join(base, "config", "config.json")
-    config = config_manager.load_config(config_path)
-    
+
+    # config_manager が正常にインポートできていれば使用、できてなければ直接読み込み
+    if config_manager:
+        config = config_manager.load_config(config_path)
+    else:
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except Exception as e:
+            send_log_to_hub(f"update_memory: config読み込み失敗: {e}", is_error=True)
+            return
+
     provider = config.get("AI_PROVIDER", "gemini").lower()
     lang_code = config.get("LANGUAGE", "ja")
     lang_data = load_lang_file(lang_code)
