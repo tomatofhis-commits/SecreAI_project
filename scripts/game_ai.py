@@ -1164,6 +1164,11 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
 
         # --- モード分岐：複合AIモードか通常モードか ---
         res = None
+
+        # 返答待ちインジケーター（返答待ちカラー）を開始
+        if overlay_queue and query:
+            overlay_queue.put(("", None, "OFF", 0, 'thinking'))
+
         if config.get("USE_INTERSECTING_AI", False):
             try:
                 from scripts.intersecting_ai import run_intersecting_ai
