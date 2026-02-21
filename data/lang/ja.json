@@ -79,6 +79,8 @@
     "hotkey_voice": "ボイスモード開始:",
     "hotkey_vision": "ビジョンモード開始:",
     "hotkey_stop": "AIおしゃべり停止:",
+    "tab_extensions": "拡張機能",
+    "enable_subtitle": "ローカルAI字幕システム連携を有効にする\n(ws://localhost:8765 にテキストを送信します)",
     "tab_database": "データベース",
     "msg_cleanup_confirm": "データベースのクリーンアップを実行しますか？（重複やエラー行が削除されます）",
     "msg_cleanup_success": "クリーンアップが完了しました。",

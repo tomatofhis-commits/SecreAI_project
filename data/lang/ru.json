@@ -104,7 +104,9 @@
         "timeout_ai_response": "Таймаут ответа ИИ (секунды):",
         "timeout_web_search": "Таймаут веб-поиска (секунды):",
         "timeout_memory_update": "Таймаут обновления памяти (секунды):",
-        "max_background_workers": "Параллельные воркеры:"
+        "max_background_workers": "Параллельные воркеры:",
+        "tab_extensions": "Расширения (Extensions)",
+        "enable_subtitle": "Включить интеграцию с локальной системой субтитров ИИ\n(Отправляет текст на ws://localhost:8765)"
     },
     "log_messages": {
         "module_loaded": "Система: Модуль обновления памяти загружен.",

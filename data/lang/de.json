@@ -104,7 +104,9 @@
         "timeout_ai_response": "KI-Antwort Timeout (Sekunden):",
         "timeout_web_search": "Websuche Timeout (Sekunden):",
         "timeout_memory_update": "Speicheraktualisierung Timeout (Sekunden):",
-        "max_background_workers": "Parallele Workers:"
+        "max_background_workers": "Parallele Workers:",
+        "tab_extensions": "Erweiterungen (Extensions)",
+        "enable_subtitle": "Lokale KI-Untertitel-Systemintegration aktivieren\n(Sendet Text an ws://localhost:8765)"
     },
     "log_messages": {
         "module_loaded": "System: Gedächtnisaktualisierungsmodul geladen.",

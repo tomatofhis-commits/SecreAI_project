@@ -104,7 +104,9 @@
         "timeout_ai_response": "Timeout réponse IA (secondes):",
         "timeout_web_search": "Timeout recherche web (secondes):",
         "timeout_memory_update": "Timeout mise à jour mémoire (secondes):",
-        "max_background_workers": "Workers parallèles:"
+        "max_background_workers": "Workers parallèles:",
+        "tab_extensions": "Extensions (Extensions)",
+        "enable_subtitle": "Activer l'intégration du système de sous-titres IA local\n(Envoie le texte à ws://localhost:8765)"
     },
     "log_messages": {
         "module_loaded": "Système: Module de mise à jour de la mémoire chargé.",

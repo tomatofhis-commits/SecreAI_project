@@ -5,6 +5,7 @@ import speech_recognition as sr
 # import tkinter as tk  # REMOVED: No direct GUI access in this script
 import edge_tts
 import asyncio
+import websockets
 import base64
 from io import BytesIO
 from datetime import datetime
@@ -802,6 +803,59 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
         send_log_to_hub(msg, is_error=True)
         return f"AI Error: The conversation stops."
 
+# --- 字幕システムへの送信処理 (ローカル連携用) ---
+def _run_subtitle_task(text: str, config: dict, session_data: tuple = None):
+    try:
+        speed = float(config.get("VOICE_SPEED", 1.2))
+    except:
+        speed = 1.2
+        
+    session_id, session_getter, _ = session_data[:3] if session_data else (None, None, None)
+    asyncio.run(send_to_subtitle_display(text, speed=speed, session_id=session_id, session_getter=session_getter))
+
+async def send_to_subtitle_display(text: str, speed: float, ws_url: str = "ws://localhost:8765", session_id=None, session_getter=None):
+    if not text or not text.strip():
+        return
+    try:
+        # Pingによる一方的な切断を防ぐために ping_interval を None に設定
+        async with websockets.connect(ws_url, ping_interval=None) as ws:
+            # 「。」「！」「？」や改行の後で分割し、それぞれを一文とする
+            # ただし、分割後の要素が空でなければリストに加える
+            sentences = [s.strip() for s in re.split(r'(?<=[。\n！？])', text) if s.strip()]
+            
+            for s in sentences:
+                # 送信前にもセッションチェック
+                if session_id and session_getter and session_getter() != session_id:
+                    return # おしゃべり停止時、残りの処理は中断し即座に終了する
+                    
+                payload = {"type": "translate_request", "text": s}
+                await ws.send(json.dumps(payload))
+                
+                # 音声読み上げ待ち時間の計算（文字数と設定速度ベース）
+                # 1文字あたり約0.15秒をベースとし、速度倍率で割る
+                base_time_per_char = 0.15
+                wait_time = (len(s) * base_time_per_char) / speed
+                
+                # 適度なウェイト幅を設定（最小0.5秒、最大8秒）
+                wait_time = max(0.5, min(wait_time, 8.0))
+                
+                # 長いウェイト中でも即座に「おしゃべり停止」を検知できるよう細切れに待機を行う
+                check_interval = 0.1
+                slept = 0.0
+                while slept < wait_time:
+                    if session_id and session_getter and session_getter() != session_id:
+                        return # 待機中におしゃべり停止が押されたら即切断
+                    await asyncio.sleep(check_interval)
+                    slept += check_interval
+                
+    except ConnectionRefusedError:
+        pass # 起動していない場合は無視する
+    except websockets.exceptions.ConnectionClosed:
+        pass # 相手側からの無通信による切断、または終了時のクローズフレーム欠如エラーは無視する
+    except Exception as e:
+        # ここで発生するエラーを補語しておく
+        send_log_to_hub(f"Subtitle System Error: {e}", is_error=True)
+
 # --- 5. オーバーレイ表示・音声合成 ---
 current_overlay_root = None
 speaker_lock = threading.Lock()
@@ -882,6 +936,13 @@ def speak_and_show(text, image_path=None, config=None, root=None, session_data=N
         dt = config.get("DISPLAY_TIME", 60)
         # Put request to main thread queue with status 'speaking'
         overlay_queue.put((text, image_path, float(alpha), dt, 'speaking'))
+
+    # 新規追加：字幕システムがONならバックグラウンドでWebSocketへテキスト送信する
+    if config.get("ENABLE_SUBTITLE", False):
+        try:
+            threading.Thread(target=_run_subtitle_task, args=(text, config, session_data), daemon=True).start()
+        except Exception as e:
+            send_log_to_hub(f"Subtitle Async/Thread Error: {e}", is_error=True)
 
     try:
         if lang_code == "ja":
