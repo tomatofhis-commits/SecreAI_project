@@ -102,7 +102,9 @@
         "timeout_ai_response": "AI 응답 타임아웃 (초):",
         "timeout_web_search": "웹 검색 타임아웃 (초):",
         "timeout_memory_update": "메모리 업데이트 타임아웃 (초):",
-        "max_background_workers": "병렬 워커수:"
+        "max_background_workers": "병렬 워커수:",
+        "tab_extensions": "확장 기능 (Extensions)",
+        "enable_subtitle": "로컬 AI 자막 시스템 연동 활성화\n(ws://localhost:8765 로 텍스트 전송)"
     },
     "log_messages": {
         "module_loaded": "시스템: 기억 업데이트 모듈이 로드되었습니다.",

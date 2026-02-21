@@ -52,9 +52,12 @@ except ImportError:
     from scripts import config_manager
     import setup_wizard
 
-# --- 4. バージョン管理 ---
-VERSION = "1.0.0"
+# ------------------------
+# 🔹 GLOBAL CONFIGURATION 🔹
+# ------------------------
+VERSION = "1.0.2"
 CONFIG_VERSION = "2.0"
+APP_NAME = f"SecreAI - NextGen {VERSION}"
 
 # --- グローバル変数とユーティリティ ---
 settings_window_open = False

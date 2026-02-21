@@ -104,7 +104,9 @@
         "timeout_ai_response": "Timeout resposta IA (segundos):",
         "timeout_web_search": "Timeout pesquisa web (segundos):",
         "timeout_memory_update": "Timeout atualização memória (segundos):",
-        "max_background_workers": "Workers paralelos:"
+        "max_background_workers": "Workers paralelos:",
+        "tab_extensions": "Extensões (Extensions)",
+        "enable_subtitle": "Ativar integração do sistema de legendas de IA local\n(Envia texto para ws://localhost:8765)"
     },
     "log_messages": {
         "module_loaded": "Sistema: Módulo de atualização de memória carregado.",

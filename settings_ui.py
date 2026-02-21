@@ -44,6 +44,27 @@ try:
 except Exception as e:
     print(f"DEBUG: Import failed. Error: {e}")
 
+# --- Helper: Fetch Ollama Models ---
+def get_ollama_models(ollama_url):
+    """Ollama API から利用可能なモデルの一覧を取得する"""
+    default_models = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:1b", "gemma3:4b", "gemma3:12b"]
+    try:
+        # e.g. "http://localhost:11434/v1" -> "http://localhost:11434/api/tags"
+        base_url = ollama_url.split("/v1")[0].rstrip("/")
+        api_tags_url = f"{base_url}/api/tags"
+        resp = requests.get(api_tags_url, timeout=2.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            models = [m["name"] for m in data.get("models", [])]
+            if models:
+                # デフォルトの必須モデルが含まれていなければ追加（任意）するか、
+                # 取得できたものだけを返す。ここでは実在するモデルのみを返す。
+                return models
+    except Exception as e:
+        print(f"DEBUG: Failed to fetch Ollama models: {e}")
+    # APIエラーや接続不可の場合はフォールバックを返す
+    return default_models
+
 def open_settings_window(parent, config_path, current_config, save_callback):
     config = current_config.copy()
     
@@ -74,12 +95,14 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     tab_hotkeys = tk.Frame(notebook)
     tab_search = tk.Frame(notebook)
     tab_database = tk.Frame(notebook)
+    tab_extensions = tk.Frame(notebook)
 
     notebook.add(tab_general, text=l_set.get("tab_general", "General"))
     notebook.add(tab_audio_view, text=l_set.get("tab_audio_view", "View / Audio"))
     notebook.add(tab_hotkeys, text=l_set.get("tab_hotkey", "Hotkeys"))
     notebook.add(tab_search, text=l_set.get("tab_search", "Search"))
     notebook.add(tab_database, text=l_set.get("tab_database", "Database"))
+    notebook.add(tab_extensions, text=l_set.get("tab_extensions", "Extensions"))
 
     def add_label(parent_widget, text, pady=(10,0)):
         lbl = tk.Label(parent_widget, text=text)
@@ -97,6 +120,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         notebook.tab(2, text=l_set.get("tab_hotkey", "Hotkeys"))
         notebook.tab(3, text=l_set.get("tab_search", "Search"))
         notebook.tab(4, text=l_set.get("tab_database", "Database"))
+        notebook.tab(5, text=l_set.get("tab_extensions", "Extensions"))
 
         # 全般設定
         lbl_ai_provider.config(text=l_set.get("label_ai_provider", "AI Provider:"))
@@ -144,6 +168,9 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         lbl_db_m.config(text=l_set.get("label_db_model", "記憶要約モデル:"))
         maintenance_group.config(text=" " + l_set.get('db_maintenance_group', 'メンテナンス') + " ")
         viewer_btn.config(text=l_set.get("btn_open_memory_viewer", "記憶の一覧・管理を表示"))
+
+        # Extensions
+        lbl_subtitle_ext.config(text=l_set.get("enable_subtitle", "Enable Local AI Subtitle System Integration\n(Sends text to ws://localhost:8765)"))
 
         # Footer
         btn_save.config(text=l_set.get("btn_save", "Save"))
@@ -198,13 +225,24 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     llama_frame = tk.LabelFrame(tab_general, text=" Llama (Local Ollama) Settings ", padx=10, pady=5)
     llama_frame.pack(pady=5, fill="x", padx=20)
     add_label(llama_frame, "Local Model ID:", pady=0)
-    # すべての候補を維持
-    llama_models = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:1b", "gemma3:4b", "gemma3:12b"]
-    llama_model_var = tk.StringVar(llama_frame, config.get("MODEL_ID_LOCAL", "llama4:scout"))
-    tk.OptionMenu(llama_frame, llama_model_var, *llama_models).pack(pady=2)
+    
+    # 動的にOllamaモデルのリストを取得
+    ollama_url_current = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+    ollama_dynamic_models = get_ollama_models(ollama_url_current)
+    
+    current_llama_val = config.get("MODEL_ID_LOCAL", ollama_dynamic_models[0] if ollama_dynamic_models else "")
+    if current_llama_val not in ollama_dynamic_models and ollama_dynamic_models:
+        ollama_dynamic_models.insert(0, current_llama_val)
+        
+    llama_model_var = tk.StringVar(llama_frame, current_llama_val)
+    # tk.OptionMenu の再描画対応用コンテナ
+    llama_model_menu_container = tk.Frame(llama_frame)
+    llama_model_menu_container.pack(pady=2)
+    tk.OptionMenu(llama_model_menu_container, llama_model_var, *ollama_dynamic_models).pack()
+    
     add_label(llama_frame, "Ollama Endpoint:", pady=0)
     ollama_url_entry = tk.Entry(llama_frame, width=50)
-    ollama_url_entry.insert(0, config.get("OLLAMA_URL", "http://localhost:11434/v1"))
+    ollama_url_entry.insert(0, ollama_url_current)
     ollama_url_entry.pack(pady=2)
 
     # 言語設定（ここを1回だけにまとめます）
@@ -480,10 +518,13 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     tavily_key_entry.pack(pady=5)
 
     lbl_sm = add_label(search_frame, l_set.get("model_summary", "Summary Model (Local Ollama):"), pady=(10,0))
-    # すべての候補を維持
-    summary_models = ["gemma2:9b", "gemma3:1b", "gemma3:4b", "gemma3:12b", "llama3.2:3b"]
-    summary_model_var = tk.StringVar(search_frame, config.get("MODEL_ID_SUMMARY", "gemma2:9b"))
-    tk.OptionMenu(search_frame, summary_model_var, *summary_models).pack(pady=5)
+    # 動的に取得したOllamaモデルリストを流用
+    current_summary_val = config.get("MODEL_ID_SUMMARY", ollama_dynamic_models[0] if ollama_dynamic_models else "gemma2:9b")
+    if current_summary_val not in ollama_dynamic_models and ollama_dynamic_models:
+        ollama_dynamic_models.insert(0, current_summary_val)
+        
+    summary_model_var = tk.StringVar(search_frame, current_summary_val)
+    tk.OptionMenu(search_frame, summary_model_var, *ollama_dynamic_models).pack(pady=5)
 
     # 検索使用回数表示
     usage_label = tk.Label(tab_search, text="", font=("MS Gothic", 11, "bold"), fg="#2196F3")
@@ -531,7 +572,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     db_p_frame = tk.Frame(db_model_group)
     db_p_frame.pack(pady=5)
 
-    lbl_db_m = add_label(db_model_group, l_set.get("db_model_label", "記憶要約モデル:"), pady=(5,0))
+    lbl_db_m = add_label(db_model_group, l_set.get("label_db_model", "記憶要約モデル:"), pady=(5,0))
     db_model_var = tk.StringVar(db_model_group, config.get("DB_MODEL_ID", "gemma3:4b"))
     
     # オプションメニューを保持するためのコンテナ
@@ -551,11 +592,15 @@ def open_settings_window(parent, config_path, current_config, save_callback):
             # 2/13に終了する旧モデルを排除し、あなたが最適化した最新モデルのみを配置
             models = ["gpt-5", "gpt-5.2", "gpt-5-mini"]
         else: # local
-            # あなたの環境で勉強し、最適化された gemma3 シリーズ
-            models = ["gemma3:4b", "gemma3:1b", "gemma3:12b", "gemma2:9b", "llama3.2:3b"]
+            # APIから取得した最新のOllamaリストを使用
+            models = ollama_dynamic_models.copy() if ollama_dynamic_models else ["gemma3:4b", "gemma3:1b", "gemma3:12b", "gemma2:9b", "llama3.2:3b"]
         
         # 既存の設定値がリストにない場合は先頭を選択
-        if db_model_var.get() not in models:
+        if db_model_var.get() not in models and models:
+            # 既に設定されている値があれば追加しつつ選択
+            models.insert(0, db_model_var.get())
+        elif not models:
+            models = ["gemma3:4b"] # 究極のフォールバック
             db_model_var.set(models[0])
             
         tk.OptionMenu(db_model_menu_container, db_model_var, *models).pack()
@@ -588,6 +633,21 @@ def open_settings_window(parent, config_path, current_config, save_callback):
                           pady=10)
     viewer_btn.pack(pady=10, fill="x")
 
+    # --- 6. 拡張機能 (Extensions) タブ ---
+    lbl_extensions_t = tk.Label(tab_extensions, text="Extensions (Experimental)", font=("MS Gothic", 12, "bold"))
+    lbl_extensions_t.pack(pady=10)
+
+    extensions_group = tk.LabelFrame(tab_extensions, text=" API / WebSockets ", padx=10, pady=10)
+    extensions_group.pack(pady=10, fill="x", padx=20)
+    
+    subtitle_en_var = tk.BooleanVar(value=config.get("ENABLE_SUBTITLE", False))
+    lbl_subtitle_ext = tk.Checkbutton(
+        extensions_group, 
+        text=l_set.get("enable_subtitle", "Enable Local AI Subtitle System Integration\n(Sends text to ws://localhost:8765)"), 
+        variable=subtitle_en_var
+    )
+    lbl_subtitle_ext.pack(pady=10, anchor="w")
+
 # --- 保存処理 ---
 # （以下、save_all関数の内容およびSave & Closeボタンのコードは一切変更ありません。元のコードを維持してください）
 
@@ -595,6 +655,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     def save_all(close_after=True, btn_ref=None):
         config["USE_INTERSECTING_AI"] = intersecting_ai_var.get() # これを追加
         config["search_switch"] = search_switch_var.get()
+        config["ENABLE_SUBTITLE"] = subtitle_en_var.get()
         config["TAVILY_API_KEY"] = tavily_key_entry.get().strip()
         config["MODEL_ID_SUMMARY"] = summary_model_var.get()
         

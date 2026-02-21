@@ -104,7 +104,9 @@
         "timeout_ai_response": "Timeout risposta IA (secondi):",
         "timeout_web_search": "Timeout ricerca web (secondi):",
         "timeout_memory_update": "Timeout aggiornamento memoria (secondi):",
-        "max_background_workers": "Workers paralleli:"
+        "max_background_workers": "Workers paralleli:",
+        "tab_extensions": "Estensioni (Extensions)",
+        "enable_subtitle": "Abilita l'integrazione del sistema di sottotitoli IA locale\n(Invia testo a ws://localhost:8765)"
     },
     "log_messages": {
         "module_loaded": "Sistema: Modulo aggiornamento memoria caricato.",

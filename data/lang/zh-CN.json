@@ -104,7 +104,9 @@
         "timeout_ai_response": "AI响应超时 (秒):",
         "timeout_web_search": "网络搜索超时 (秒):",
         "timeout_memory_update": "内存更新超时 (秒):",
-        "max_background_workers": "并行Worker数:"
+        "max_background_workers": "并行Worker数:",
+        "tab_extensions": "扩展功能 (Extensions)",
+        "enable_subtitle": "启用本地AI字幕系统联动\n(将文本发送到 ws://localhost:8765)"
     },
     "log_messages": {
         "module_loaded": "系统: 记忆更新模块已加载。",
