@@ -27,6 +27,10 @@ https://github.com/tomatofhis-commits/SecreAI_project
 　日本語の高品質な読み上げを行う場合に必要です。別途インストールが必要です。
 ・Ollama (任意)
 　ローカルAIによる高度な記憶整理を行う場合に必要です。
+・SubtitLocar (任意)
+　ローカルAI字幕システム連携を利用する場合に必要です。
+　https://github.com/tomatofhis-commits/SubtitLocar
+
 
 各APIの取得先:
 ・Gemini API: https://ai.google.dev/aistudio?hl=ja
