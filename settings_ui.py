@@ -226,9 +226,11 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     llama_frame.pack(pady=5, fill="x", padx=20)
     add_label(llama_frame, "Local Model ID:", pady=0)
     
-    # 動的にOllamaモデルのリストを取得
+    # 前回取得したキャッシュモデルを使用（なければデフォルト）
     ollama_url_current = config.get("OLLAMA_URL", "http://localhost:11434/v1")
-    ollama_dynamic_models = get_ollama_models(ollama_url_current)
+    ollama_dynamic_models = config.get("CACHED_OLLAMA_MODELS", [])
+    if not ollama_dynamic_models:
+        ollama_dynamic_models = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:1b", "gemma3:4b", "gemma3:12b"]
     
     current_llama_val = config.get("MODEL_ID_LOCAL", ollama_dynamic_models[0] if ollama_dynamic_models else "")
     if current_llama_val not in ollama_dynamic_models and ollama_dynamic_models:
@@ -524,7 +526,9 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         ollama_dynamic_models.insert(0, current_summary_val)
         
     summary_model_var = tk.StringVar(search_frame, current_summary_val)
-    tk.OptionMenu(search_frame, summary_model_var, *ollama_dynamic_models).pack(pady=5)
+    summary_model_menu_container = tk.Frame(search_frame)
+    summary_model_menu_container.pack(pady=5)
+    tk.OptionMenu(summary_model_menu_container, summary_model_var, *ollama_dynamic_models).pack()
 
     # 検索使用回数表示
     usage_label = tk.Label(tab_search, text="", font=("MS Gothic", 11, "bold"), fg="#2196F3")
@@ -640,6 +644,58 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     extensions_group = tk.LabelFrame(tab_extensions, text=" API / WebSockets ", padx=10, pady=10)
     extensions_group.pack(pady=10, fill="x", padx=20)
     
+    # --- New Button for Ollama Model Fetch ---
+    def fetch_ollama_models_async():
+        original_text = btn_fetch_ollama.cget("text")
+        btn_fetch_ollama.config(text=l_set.get("btn_fetching", "取得中..."), state="disabled")
+        
+        def _task():
+            current_url = ollama_url_entry.get()
+            fetched = get_ollama_models(current_url)
+            
+            def _update_ui():
+                nonlocal fetched
+                if not fetched:
+                    fetched = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:1b", "gemma3:4b", "gemma3:12b"]
+                
+                # キャッシュも更新
+                config["CACHED_OLLAMA_MODELS"] = fetched
+                ollama_dynamic_models.clear()
+                ollama_dynamic_models.extend(fetched)
+                
+                # Local Model 更新
+                for widget in llama_model_menu_container.winfo_children():
+                    widget.destroy()
+                if llama_model_var.get() not in fetched:
+                    llama_model_var.set(fetched[0] if fetched else "")
+                tk.OptionMenu(llama_model_menu_container, llama_model_var, *fetched).pack()
+
+                # Summary Model 更新
+                for widget in summary_model_menu_container.winfo_children():
+                    widget.destroy()
+                if summary_model_var.get() not in fetched:
+                    summary_model_var.set(fetched[0] if fetched else "")
+                tk.OptionMenu(summary_model_menu_container, summary_model_var, *fetched).pack()
+                
+                # DB Model (Local) 更新
+                update_db_model_list()
+
+                btn_fetch_ollama.config(text=l_set.get("btn_fetch_success", "取得完了！"), state="disabled")
+                root.after(2000, lambda: btn_fetch_ollama.config(text=original_text, state="normal"))
+            
+            root.after(0, _update_ui)
+        
+        threading.Thread(target=_task, daemon=True).start()
+
+    btn_fetch_ollama = tk.Button(
+        extensions_group,
+        text=l_set.get("btn_fetch_ollama", "Ollamaのモデルリストを取得・更新"),
+        command=fetch_ollama_models_async,
+        bg="#4CAF50",
+        fg="white"
+    )
+    btn_fetch_ollama.pack(pady=5, fill="x")
+
     subtitle_en_var = tk.BooleanVar(value=config.get("ENABLE_SUBTITLE", False))
     lbl_subtitle_ext = tk.Checkbutton(
         extensions_group, 
@@ -656,6 +712,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["USE_INTERSECTING_AI"] = intersecting_ai_var.get() # これを追加
         config["search_switch"] = search_switch_var.get()
         config["ENABLE_SUBTITLE"] = subtitle_en_var.get()
+        config["CACHED_OLLAMA_MODELS"] = ollama_dynamic_models
         config["TAVILY_API_KEY"] = tavily_key_entry.get().strip()
         config["MODEL_ID_SUMMARY"] = summary_model_var.get()
         
