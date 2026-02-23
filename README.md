@@ -75,6 +75,7 @@ AIが最新の情報をインターネットから検索するために使用し
 ### 2. サポートツール
 - **VOICEVOX**: 日本語音声読み上げに必要。 [公式サイト](https://voicevox.hiroshiba.jp/) からvv-engineを起動してください。
 - **Ollama**: ローカルでの高度な要約・思考に使用（任意）。 [ollama.com](https://ollama.com/)
+- **SubtitLocar**: ローカルAI字幕システムとの連携に使用（任意）。 [GitHub](https://github.com/tomatofhis-commits/SubtitLocar)
 
 ---
 
