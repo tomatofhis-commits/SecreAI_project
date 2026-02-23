@@ -14,7 +14,7 @@ DEFAULT_CONFIG = {
     "TAVILY_API_KEY": "",
     "MODEL_ID": "gemini-2.0-flash",
     "MODEL_ID_PRO": "gemini-2.0-flash-thinking-exp",
-    "MODEL_ID_GPT": "gpt-4o",
+    "MODEL_ID_GPT": "gpt-5",
     "OLLAMA_URL": "http://localhost:11434/v1",
     "MODEL_ID_LOCAL": "gemma3:12b",
     "MODEL_ID_SUMMARY": "gemma3:4b",
