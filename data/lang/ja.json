@@ -113,7 +113,10 @@
     "timeout_ai_response": "AI応答タイムアウト (秒):",
     "timeout_web_search": "Web検索タイムアウト (秒):",
     "timeout_memory_update": "メモリ更新タイムアウト (秒):",
-    "max_background_workers": "並列処理ワーカー数:"
+    "max_background_workers": "並列処理ワーカー数:",
+    "search_provider_label": "検索エンジン:",
+    "search_limit_notice": "※Tavilyの無料枠の上限は月間1000回です。Google Search選択時は「gemini-2.5-flash-lite」で固定されます。",
+    "search_usage_grounding": "{date} は {count} 回、Google Searchを実行しました"
   },
   "log_messages": {
     "module_loaded": "システム: 記憶更新モジュールをロードしました。",
@@ -160,7 +163,9 @@
     "cache_save_error": "キャッシュ保存エラー: {e}",
     "background_search_error": "バックグラウンド検索エラー: {e}",
     "search_recorded": "システム: 検索情報を「ネット情報」としてDBに記録しました。",
+    "grounding_executing": "システム: Google Search (Gemini Grounding) を実行します (モデル: {model}, 本日 {count} 回目)",
     "internal_db_save_error": "内部DB保存エラー: {e}",
+    "google_quota_exceeded": "システム: Google Search (Gemini Grounding) の無料枠制限に達しました。しばらく待ってから再度お試しください。",
     "ai_init_error": "{provider} 初期化エラー: {e}",
     "api_cache_hit": "[キャッシュヒット] 過去の応答を再利用してコスト削減します。",
     "ai_thinking": "AI応答を取得中... (タイムアウト: {timeout}秒)",
@@ -274,6 +279,8 @@
     "savings": "推定節約量: ${amount}",
     "db_size": "DBサイズ: {size} MB",
     "total_entries": "総記憶数: {count}",
+    "grounding_usage": "Google Search利用状況",
+    "search_usage_grounding": "本日の利用量: {count} ({date})",
     "model_stats_title": "モデル別統計",
     "model_header": "モデル/プロバイダー",
     "requests_header": "リクエスト",

@@ -349,6 +349,40 @@ def increment_tavily_count(root):
             send_log_to_hub(f"Count Increment Error: {e}", is_error=True)
             return 0
 
+def increment_grounding_count(root):
+    """Groundingの検索回数をインクリメントする。日が変わっていたらリセットする。"""
+    conf_path = os.path.join(root, "config", "config.json")
+    with file_lock:
+        try:
+            if config_manager:
+                current_conf = config_manager.load_config(conf_path)
+            else:
+                with open(conf_path, "r", encoding="utf-8") as f:
+                    current_conf = json.load(f)
+            
+            now = datetime.now() 
+            now_date = now.strftime("%Y-%m-%d")
+            saved_date = current_conf.get("GROUNDING_DATE", "")
+            count = current_conf.get("GROUNDING_COUNT", 0)
+
+            if saved_date != now_date:
+                count = 1
+                current_conf["GROUNDING_DATE"] = now_date
+            else:
+                count += 1
+            
+            current_conf["GROUNDING_COUNT"] = count
+            
+            if config_manager:
+                config_manager.save_config(conf_path, current_conf)
+            else:
+                with open(conf_path, "w", encoding="utf-8") as f:
+                    json.dump(current_conf, f, indent=4, ensure_ascii=False)
+            return count
+        except Exception as e:
+            send_log_to_hub(f"Grounding Count Increment Error: {e}", is_error=True)
+            return 0
+
 def should_execute_search(query, config, log_m):
     """案1: 検索が本当に必要かAI（軽量モデル）で事前判定する"""
     try:
@@ -391,6 +425,7 @@ def should_execute_search(query, config, log_m):
         return {"necessary": True, "optimized_query": query, "reason": f"Gatekeeper failed: {e}"}
 
 def execute_background_search(search_query, config, root, session_data):
+    global gemini_client
     summary = None
     try:
         lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
@@ -414,12 +449,21 @@ def execute_background_search(search_query, config, root, session_data):
             msg = log_m.get("gatekeeper_approve", "システム: ゲートキーパーが検索を承認しました。")
             send_log_to_hub(msg)
         
-        from tavily import TavilyClient
+        # 検索プロバイダーの判定
+        search_provider = config.get("SEARCH_PROVIDER", "tavily").lower()
+        
+        from google.genai import types
         import ollama
+
+        if search_provider == "grounding":
+            count = increment_grounding_count(root)
+            g_model_name = "gemini-2.5-flash-lite" # 後続の実行関数と合わせる
+            exec_msg = log_m.get("grounding_executing", "システム: Google Search (Gemini Grounding) を実行します (モデル: {model}, 本日 {count} 回目)").format(model=g_model_name, count=count)
+        else:
+            from tavily import TavilyClient
+            count = increment_tavily_count(root)
+            exec_msg = log_m.get("search_executing", "System: Executing Tavily search (Total: {count} this month)").format(count=count)
         
-        count = increment_tavily_count(root)
-        
-        exec_msg = log_m.get("search_executing", "System: Executing Tavily search (Total: {count} this month)").format(count=count)
         send_log_to_hub(exec_msg)
 
         api_key = config.get("TAVILY_API_KEY")
@@ -464,44 +508,82 @@ def execute_background_search(search_query, config, root, session_data):
                     msg = log_m.get("cache_save_error", "Cache save error: {e}").format(e=cache_err)
                     send_log_to_hub(msg, is_error=True)
 
-        tavily = TavilyClient(api_key=api_key)
-        
         # タイムアウト設定を取得
         timeout = config.get("TIMEOUT_WEB_SEARCH", 30)
         
-        # タイムアウト付きで検索実行
-        def _call_tavily_search():
-            return tavily.search(
-                query=f"{search_query} info as of {now.strftime('%Y-%m-%d')}", 
-                search_depth="advanced", 
-                max_results=3
-            )
-        
         searching_msg = log_m.get("search_searching", "Web search in progress... (Timeout: {timeout}s)").format(timeout=timeout)
         send_log_to_hub(searching_msg)
-        search_res = run_with_timeout(_call_tavily_search, timeout)
         
-        if search_res is None:
-            # タイムアウト発生
-            error_msg = log_m.get("timeout_web_search", "Web search timeout ({timeout} seconds)").format(timeout=timeout)
-            send_log_to_hub(error_msg, is_error=True)
-            return
+
+
+        if search_provider == "grounding":
+            # Gemini Grounding 実行
+            def _call_gemini_grounding():
+                # Grounding用モデル ID
+                g_model = "gemini-2.5-flash-lite" 
+                # Grounding設定
+                config_grounding = {
+                    'tools': [{'google_search': {}}]
+                }
+                try:
+                    # Groundingを実行
+                    prompt = f"以下のクエリについてGoogle検索を使用し、最新情報に基づいて日本語で簡潔に要約してください。\nクエリ: {search_query}"
+                    response = gemini_client.models.generate_content(
+                        model=g_model,
+                        contents=prompt,
+                        config=config_grounding
+                    )
+                    return response.text
+                except Exception as e:
+                    err_str = str(e).upper()
+                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "QUOTA" in err_str:
+                        quota_msg = log_m.get("google_quota_exceeded", "システム: Google Search (Gemini Grounding) の無料枠制限に達しました。")
+                        send_log_to_hub(f"{quota_msg} ({g_model})", is_error=True)
+                        return "__QUOTA_EXCEEDED__"
+                    raise e
+
+            summary = run_with_timeout(_call_gemini_grounding, timeout)
+            if summary == "__QUOTA_EXCEEDED__":
+                return
+            if summary is None:
+                error_msg = log_m.get("timeout_web_search", "Web search timeout ({timeout} seconds)").format(timeout=timeout)
+                send_log_to_hub(error_msg, is_error=True)
+                return
+        else:
+            # Tavily検索実行
+            def _call_tavily_search():
+                tavily = TavilyClient(api_key=api_key)
+                return tavily.search(
+                    query=f"{search_query} info as of {now.strftime('%Y-%m-%d')}", 
+                    search_depth="advanced", 
+                    max_results=3
+                )
+            
+            search_res = run_with_timeout(_call_tavily_search, timeout)
+            
+            if search_res is None:
+                # タイムアウト発生
+                error_msg = log_m.get("timeout_web_search", "Web search timeout ({timeout} seconds)").format(timeout=timeout)
+                send_log_to_hub(error_msg, is_error=True)
+                return
         
         # セッション中断チェック (API待ち後のキャンセル対応)
         session_id, session_getter = session_data[0], session_data[1]
         if session_id and session_getter and session_getter() != session_id: return
 
-        contents = [f"Source: {r['url']}\nContent: {r['content']}" for r in search_res['results']]
-        context = "\n---\n".join(contents)
-        
-        summary_role = ai_p.get("summary_role", "あなたは優秀なリサーチャーです。以下の英語の検索結果を読み、必ず【日本語で】要点をまとめてください。")
-        summary_prompt = f"{summary_role}\n\n{context}"
-        
-        response = ollama.chat(
-            model=summary_model, 
-            messages=[{'role': 'user', 'content': summary_prompt}]
-        )
-        summary = response['message']['content']
+        if search_provider != "grounding":
+            # Tavilyの場合のみ Ollama で要約 (Groundingは既に要約済み)
+            contents = [f"Source: {r['url']}\nContent: {r['content']}" for r in search_res['results']]
+            context = "\n---\n".join(contents)
+            
+            summary_role = ai_p.get("summary_role", "あなたは優秀なリサーチャーです。以下の英語の検索結果を読み、必ず【日本語で】要点をまとめてください。")
+            summary_prompt = f"{summary_role}\n\n{context}"
+            
+            response = ollama.chat(
+                model=summary_model, 
+                messages=[{'role': 'user', 'content': summary_prompt}]
+            )
+            summary = response['message']['content']
         
         if summary:
             # === 検索結果をキャッシュに保存 ===
