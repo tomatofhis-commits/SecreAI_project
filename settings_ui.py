@@ -171,6 +171,12 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
         # Extensions
         lbl_subtitle_ext.config(text=l_set.get("enable_subtitle", "Enable Local AI Subtitle System Integration\n(Sends text to ws://localhost:8765)"))
+        
+        # Search Provider (Dynamic update)
+        if 'lbl_search_provider' in locals() or 'lbl_search_provider' in globals():
+            lbl_search_provider.config(text=l_set.get("search_provider_label", "Search Engine:"))
+        if 'lbl_grounding_notice' in locals() or 'lbl_grounding_notice' in globals():
+            lbl_grounding_notice.config(text=l_set.get("search_provider_notice", "※Google Search選択時は「gemini-2.5-flash-lite」で固定されます。"))
 
         # Footer
         btn_save.config(text=l_set.get("btn_save", "Save"))
@@ -179,8 +185,13 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     def refresh_search_usage_text():
         now = datetime.now()
-        usage_tpl = l_set.get("search_usage", "{month}月は {count} 回、検索をしました")
-        usage_text = usage_tpl.format(month=now.month, count=config.get("TAVILY_COUNT", 0), year=now.year)
+        provider = search_provider_var.get()
+        if provider == "grounding":
+            usage_tpl = l_set.get("search_usage_grounding", "{date} は {count} 回、Google Searchを実行しました")
+            usage_text = usage_tpl.format(date=now.strftime("%Y-%m-%d"), count=config.get("GROUNDING_COUNT", 0))
+        else:
+            usage_tpl = l_set.get("search_usage", "{month}月は {count} 回、検索をしました")
+            usage_text = usage_tpl.format(month=now.month, count=config.get("TAVILY_COUNT", 0), year=now.year)
         usage_label.config(text=usage_text)
 
     # --- 1. 全般設定タブ ---
@@ -514,7 +525,17 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     search_frame = tk.LabelFrame(tab_search, text=" Search & Summary Configuration ", padx=10, pady=10)
     search_frame.pack(pady=10, fill="x", padx=20)
     
-    add_label(search_frame, "TAVILY_API_KEY:", pady=0)
+    # 検索プロバイダー選択
+    lbl_search_provider = add_label(search_frame, l_set.get("search_provider_label", "Search Engine:"), pady=(5,0))
+    search_provider_var = tk.StringVar(search_frame, config.get("SEARCH_PROVIDER", "tavily"))
+    search_provider_menu = tk.OptionMenu(search_frame, search_provider_var, "tavily", "grounding", command=lambda _: refresh_search_usage_text())
+    search_provider_menu.pack(pady=5)
+    
+    lbl_grounding_notice = tk.Label(search_frame, text=l_set.get("search_provider_notice", ""), font=("MS Gothic", 9), fg="gray")
+    lbl_grounding_notice.pack(pady=0)
+    
+    # 既存のTavily Key
+    add_label(search_frame, "TAVILY_API_KEY:", pady=(10,0))
     tavily_key_entry = tk.Entry(search_frame, width=50, show="*")
     tavily_key_entry.insert(0, config.get("TAVILY_API_KEY", ""))
     tavily_key_entry.pack(pady=5)
@@ -739,6 +760,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["DISPLAY_TIME"] = int(display_time_var.get())
         config["DB_PROVIDER"] = db_provider_var.get()
         config["DB_MODEL_ID"] = db_model_var.get()
+        config["search_switch"] = search_switch_var.get()
+        config["SEARCH_PROVIDER"] = search_provider_var.get()
+        config["TAVILY_API_KEY"] = tavily_key_entry.get()
+        config["MODEL_ID_SUMMARY"] = summary_model_var.get()
         
         val = alpha_var.get()
         config["WINDOW_ALPHA"] = val if val == "OFF" else float(val)

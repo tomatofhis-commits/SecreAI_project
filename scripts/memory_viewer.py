@@ -145,6 +145,13 @@ class MemoryViewer:
         self.lbl_tavily_count.pack(anchor="w")
         self.lbl_tavily_cost = ttk.Label(tavily_f, text=p.get("savings", "Savings: $--").replace("{amount}", "--"))
         self.lbl_tavily_cost.pack(anchor="w")
+
+        # 3. Grounding検索利用状況
+        grounding_f = ttk.LabelFrame(stats_f, text=f" {p.get('grounding_usage', 'Google Search Usage')} ", padding=10)
+        grounding_f.grid(row=0, column=2, sticky="nsew", padx=10, pady=10)
+        
+        self.lbl_grounding_count = ttk.Label(grounding_f, text=p.get("search_usage_grounding", "Used: -- / 1000").replace("{count}", "--").replace("{month}", "--"))
+        self.lbl_grounding_count.pack(anchor="w")
         
         # 3. リソース・データベース
         db_f = ttk.LabelFrame(stats_f, text=f" {p.get('db_resources', 'Database & Resources')} ", padding=10)
@@ -215,6 +222,12 @@ class MemoryViewer:
             # 1検索 $0.05 と仮定
             savings = round(stats['hits'] * 0.05, 2)
             self.lbl_tavily_cost.config(text=p.get("savings", "Savings:").replace("{amount}", str(savings)))
+
+            # Grounding (configから)
+            now = datetime.now()
+            g_count = self.config.get("GROUNDING_COUNT", 0)
+            g_text = p.get("search_usage_grounding", "Google Search: {count}").replace("{count}", str(g_count)).replace("{date}", now.strftime("%Y-%m-%d"))
+            self.lbl_grounding_count.config(text=g_text)
             
             # DBサイズ
             total_size = 0

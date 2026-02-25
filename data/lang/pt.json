@@ -136,7 +136,9 @@
         "vision_guide": "O que você quer fazer com esta imagem?",
         "voice_guide": "Como posso ajudar?",
         "search_reserved": "Sistema: Tarefa de pesquisa reservada.",
-        "search_executing": "Sistema: Executando pesquisa Tavily ({count}ª vez este mês)",
+        "search_executing": "Sistema: Executando busca Tavily (Total: {count} este mês)",
+        "grounding_executing": "Sistema: Executando Google Search (Gemini Grounding) (Modelo: {model}, {count} vezes hoje)",
+        "google_quota_exceeded": "Sistema: Limite do nível gratuito da Google Search (Gemini Grounding) atingido. Tente novamente mais tarde.",
         "memory_update_reserved": "Sistema: Tarefa de organização de memória reservada.",
         "timeout_ai_response": "⏱️ Timeout resposta IA ({timeout} segundos)",
         "timeout_web_search": "⏱️ Timeout pesquisa web ({timeout} segundos)"
@@ -173,6 +175,10 @@
         "welcome_title": "Bem-vindo ao SecreAI!",
         "welcome_desc": "Este assistente irá ajudá-lo com as configurações básicas para executar a IA.",
         "welcome_notice": "* Você pode alterar essas configurações mais tarde no menu 'Configurações'.",
+        "search_limit_notice": "*Limite do nível gratuito do Tavily: 1.000 buscas/mês.",
+        "search_provider_label": "Motor de busca:",
+        "search_provider_notice": "*Quando a Google Search é selecionada, o gemini-2.5-flash-lite é utilizado.",
+        "search_usage_grounding": "Google Search usado {count} vezes em {date}",
         "step_lang_title": "Seleção de Idioma",
         "other_languages": "Outros idiomas...",
         "step_api_title": "Configurações de Chave API",
@@ -236,10 +242,11 @@
         "savings": "Economia Estimada: ${amount}",
         "db_size": "Tamanho do BD: {size} MB",
         "total_entries": "Total de Entradas: {count}",
+        "grounding_usage": "Uso da Google Search",
+        "search_usage_grounding": "Uso de hoje: {count} ({date})",
         "model_stats_title": "Estatísticas por modelo",
         "model_header": "Modelo/Provedor",
         "requests_header": "Solicitações",
-        "hits_header": "Acertos",
-        "btn_update": "Atualizar Painel"
+        "hits_header": "Acertos"
     }
 }
