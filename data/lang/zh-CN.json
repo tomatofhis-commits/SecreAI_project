@@ -140,6 +140,8 @@
         "search_provider_label": "搜索引擎:",
         "search_provider_notice": "*选择 Google Search 时将固定使用 gemini-2.5-flash-lite。",
         "search_usage_grounding": "于 {date} 使用了 {count} 次 Google Search",
+        "search_usage_grounding_short": "Google (今日): {count}次",
+        "search_usage_tavily_short": "Tavily (本月): {count}次",
         "search_executing": "系统: 执行 Tavily 搜索 (本月第 {count} 次)",
         "memory_update_reserved": "系统: 记忆整理任务已预约。",
         "timeout_ai_response": "⏱️ AI响应超时（{timeout}秒）",
@@ -169,7 +171,10 @@
         "feedback_neg_style": "【应避免的风格】: {neg}\n",
         "tag_reference": "\n【参考: 过去主题关键词】\n{tags}\n",
         "search_logic": "\n你有一个特殊功能: 生成 [SEARCH: 英语查询] 以补充最近的信息。\n当需要搜索时，先回答你所知道的，然后加上‘稍后我会查找详细信息’。\n【重要指示】如果包含最近或不确定的信息，请在末尾添加 [SEARCH: 英语查询]。方括号 [ ] 和冒号 : 必须是半角，SEARCH和冒号之间没有空格。内容必须是『英语』关键词。",
-        "summary_role": "你是一个优秀的搜索者。阅读以下英语搜索结果，并在1000字以内用【中文】总结要点。",
+        "search_grounding_summary": "你是一位事实核查专家。基于 Google 搜索结果，重点关注客观事实、日期和具体数值，以【中文】准确且全面地总结要点，字数在【{max_chars}字以内】。",
+        "search_tavily_summary": "你是一位具有敏锐视角的研究員。从 Tavily 搜索结果中提取多维视角、最新趋势和详细背景信息，并在适当情况下引用来源（URL），以【中文】总结要点，字数在【{max_chars}字以内】。",
+        "search_integrated_summary": "你是一位顶级情报分析师。基于 Gemini Grounding 的“高可靠性事实”，结合 Tavily Search 获得的“补充细节或不同观点”，提供最具附加价值的信息，以【中文】总结要点，字数在【{max_chars}字以内】。",
+        "search_save_db_role": "将以下搜索结果作为未来参考的知识，以【中文】在【200字以内】进行极简总结。",
         "search_appendix_prefix": "这是来自搜索的补充信息。"
     },
     "setup_wizard": {

@@ -167,7 +167,10 @@
         "feedback_neg_style": "【Estilo a evitar】: {neg}\n",
         "tag_reference": "\n【Referência: Palavras-chave de tópicos passados】\n{tags}\n",
         "search_logic": "\nVocê tem uma função especial: gerar [SEARCH: Consulta em inglês] para complementar informações recentes.\nQuando uma pesquisa for necessária, responda primeiro com o que você sabe e adicione 'Vou procurar detalhes mais tarde'.\n【Instrução Importante】Se você incluir informações recentes ou incertas, adicione [SEARCH: Consulta em inglês] no final. Os colchetes [ ] e dois pontos : devem ser de meia largura, sem espaço entre SEARCH e os dois pontos. O conteúdo deve ser palavras-chave em 『Inglês』.",
-        "summary_role": "Você é um excelente pesquisador. Leia os seguintes resultados de pesquisa em inglês e resuma os pontos principais em 【Português】 dentro de 3000 caracteres.",
+        "search_grounding_summary": "Você é um especialista em verificação de fatos. Com base nos resultados de pesquisa do Google, resuma os pontos principais 【obrigatoriamente em Português】 e em até 【{max_chars} caracteres】, concentrando-se em fatos objetivos, datas e números específicos.",
+        "search_tavily_summary": "Você é um pesquisador com uma perspectiva aguçada. Extraia diversos pontos de vista, as últimas tendências e informações detalhadas de fundo dos resultados de pesquisa da Tavily, citando as fontes (URLs) quando apropriado, tudo resumido 【obrigatoriamente em Português】 em até 【{max_chars} caracteres】.",
+        "search_integrated_summary": "Você é um analista de inteligência de alto nível. Forneça as informações de maior valor agregado combinando os 'fatos altamente confiáveis' do Gemini Grounding com os 'detalhes suplementares ou perspectivas diferentes' do Tavily Search, resumidos 【obrigatoriamente em Português】 em até 【{max_chars} caracteres】.",
+        "search_save_db_role": "Resuma os seguintes resultados de pesquisa como conhecimento para referência futura 【obrigatoriamente em Português】 e em até 【200 caracteres】 de forma extremamente concisa.",
         "search_appendix_prefix": "Aqui estão informações adicionais da pesquisa."
     },
     "setup_wizard": {
@@ -179,6 +182,8 @@
         "search_provider_label": "Motor de busca:",
         "search_provider_notice": "*Quando a Google Search é selecionada, o gemini-2.5-flash-lite é utilizado.",
         "search_usage_grounding": "Google Search usado {count} vezes em {date}",
+        "search_usage_grounding_short": "Google (Hoje): {count}",
+        "search_usage_tavily_short": "Tavily (Mês): {count}",
         "step_lang_title": "Seleção de Idioma",
         "other_languages": "Outros idiomas...",
         "step_api_title": "Configurações de Chave API",

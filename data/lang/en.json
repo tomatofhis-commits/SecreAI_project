@@ -102,6 +102,8 @@
     "search_provider_label": "Search Engine:",
     "search_provider_notice": "*When Google Search is selected, gemini-2.5-flash-lite is used.",
     "search_usage_grounding": "Used Google Search {count} times on {date}",
+    "search_usage_grounding_short": "Google (Today): {count}",
+    "search_usage_tavily_short": "Tavily (Month): {count}",
     "db_title": "Long-term Memory Settings",
     "db_stats_group": " Statistics ",
     "db_stats_format": "Total Memories: {count} items\nDB Size: {size} MB",
@@ -220,7 +222,10 @@
     "feedback_mark_bad": " (*This response was marked as incorrect by the user)",
     "feedback_notice_bad": "[*Notice: The previous interaction contained errors]",
     "search_logic": "\n### SPECIAL FUNCTION:You have a special function to perform real-time web searches. \nIf you lack current information or need to verify facts, you must invoke this function by generating an optimized English search query.\nWhen you need to search, don't answer 'I can't do it,' but answer to the best of your knowledge and add 'I'll complete it later.'\n[Important Instruction]If you need the latest information to provide an accurate answer, you must generate an appropriate search query and append it to the end of your response in the following format: [SEARCH: your generated search query].",
-    "summary_role": "You are a translator and researcher. Analyze the following search results and summarize the main points in 【English】 within 3000 characters.",
+    "search_grounding_summary": "You are a fact-checking expert. Based on Google search results, summarize the main points 【in English】 and within 【{max_chars} characters】, focusing on objective facts, dates, and specific numbers.",
+    "search_tavily_summary": "You are a researcher with a sharp perspective. Extract diverse viewpoints, latest trends, and detailed background information from Tavily search results, citing sources (URLs) where appropriate, summarized 【in English】 within 【{max_chars} characters】.",
+    "search_integrated_summary": "You are a top-tier intelligence analyst. Based on 'highly reliable facts' from Gemini Grounding and 'supplementary details or different perspectives' from Tavily Search, provide the most value-added information summarized 【in English】 within 【{max_chars} characters】.",
+    "search_save_db_role": "Summarize the following search results as knowledge for future reference 【in English】 within 【200 characters】 extremely concisely.",
     "search_appendix_prefix": "Here is the supplementary information."
   },
   "setup_wizard": {

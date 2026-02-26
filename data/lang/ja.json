@@ -116,7 +116,9 @@
     "max_background_workers": "並列処理ワーカー数:",
     "search_provider_label": "検索エンジン:",
     "search_limit_notice": "※Tavilyの無料枠の上限は月間1000回です。Google Search選択時は「gemini-2.5-flash-lite」で固定されます。",
-    "search_usage_grounding": "{date} は {count} 回、Google Searchを実行しました"
+    "search_usage_grounding": "{date} は {count} 回、Google Searchを実行しました",
+    "search_usage_grounding_short": "Google (今日): {count}回",
+    "search_usage_tavily_short": "Tavily (今月): {count}回"
   },
   "log_messages": {
     "module_loaded": "システム: 記憶更新モジュールをロードしました。",
@@ -206,7 +208,10 @@
     "feedback_neg_style": "【絶対に避けるべき低評価スタイル】: {neg}\n",
     "tag_reference": "\n【参考：過去の話題キーワード】\n{tags}\n",
     "search_logic": "\nあなたには [SEARCH: 英語クエリ] を出力することで、後から最新情報を補完する特別な機能があります。\n検索が必要なときは、まず知りうる範囲で答えた上で「詳細は後ほど検索します」と付け加えてください。\n【重要指示】最新情報や不確かな情報が含まれる場合は、回答の最後に必ず [SEARCH: 英語クエリ] を一行で書き添えてください。ブラケット [ ] やコロン : は必ず半角を使用し、SEARCHとコロンの間にはスペースを入れないでください。中身は必ず『英語』のキーワードにしてください。",
-    "summary_role": "あなたは優秀なリサーチャーです。以下の英語の検索結果を読み、必ず【日本語で】要点を1000文字以内にまとめてください。",
+    "search_grounding_summary": "あなたは事実確認の専門家です。Google検索の結果に基づき、客観的な事実、日付、具体的数値を重視して、網羅的かつ正確な要点を【必ず日本語で】【{max_chars}文字以内】でまとめてください。",
+    "search_tavily_summary": "あなたは鋭い視点を持つリサーチャーです。Tavilyの検索結果から、多角的な視点、最新のトレンド、詳細な背景情報を抽出し、出典（URL）も適宜参照しながら【必ず日本語で】【{max_chars}文字以内】でまとめてください。",
+    "search_integrated_summary": "あなたは最高峰のインテリジェンス・アナリストです。Gemini Groundingによる「信頼性の高い事実」をベースにしつつ、Tavily Searchから得られた「補足的な詳細や異なる観点」を統合し、最も付加価値の高い情報を【必ず日本語で】【{max_chars}文字以内】で提供してください。",
+    "search_save_db_role": "以下の検索結果を、将来参照する知識として【必ず日本語で】【200文字以内】で極限まで簡潔にまとめてください。",
     "search_appendix_prefix": "補足の検索結果をお伝えします。"
   },
   "setup_wizard": {

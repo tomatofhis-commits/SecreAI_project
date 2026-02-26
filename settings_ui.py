@@ -185,14 +185,17 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     def refresh_search_usage_text():
         now = datetime.now()
-        provider = search_provider_var.get()
-        if provider == "grounding":
-            usage_tpl = l_set.get("search_usage_grounding", "{date} は {count} 回、Google Searchを実行しました")
-            usage_text = usage_tpl.format(date=now.strftime("%Y-%m-%d"), count=config.get("GROUNDING_COUNT", 0))
-        else:
-            usage_tpl = l_set.get("search_usage", "{month}月は {count} 回、検索をしました")
-            usage_text = usage_tpl.format(month=now.month, count=config.get("TAVILY_COUNT", 0), year=now.year)
-        usage_label.config(text=usage_text)
+        g_count = config.get("GROUNDING_COUNT", 0)
+        t_count = config.get("TAVILY_COUNT", 0)
+        
+        # 個別ラベルを取得しつつ、連結して表示
+        g_tpl = l_set.get("search_usage_grounding_short", "Google (今日): {count}回")
+        t_tpl = l_set.get("search_usage_tavily_short", "Tavily (今月): {count}回")
+        
+        g_text = g_tpl.format(count=g_count, date=now.strftime("%Y-%m-%d"))
+        t_text = t_tpl.format(count=t_count, month=now.month)
+        
+        usage_label.config(text=f"{g_text}  /  {t_text}")
 
     # --- 1. 全般設定タブ ---
     lbl_ai_provider = add_label(tab_general, l_set.get("label_ai_provider", "AI Provider:"), pady=(5,0))
@@ -528,7 +531,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     # 検索プロバイダー選択
     lbl_search_provider = add_label(search_frame, l_set.get("search_provider_label", "Search Engine:"), pady=(5,0))
     search_provider_var = tk.StringVar(search_frame, config.get("SEARCH_PROVIDER", "tavily"))
-    search_provider_menu = tk.OptionMenu(search_frame, search_provider_var, "tavily", "grounding", command=lambda _: refresh_search_usage_text())
+    search_provider_menu = tk.OptionMenu(search_frame, search_provider_var, "tavily", "grounding", "integrated", command=lambda _: refresh_search_usage_text())
     search_provider_menu.pack(pady=5)
     
     lbl_grounding_notice = tk.Label(search_frame, text=l_set.get("search_provider_notice", ""), font=("MS Gothic", 9), fg="gray")

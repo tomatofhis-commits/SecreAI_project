@@ -167,7 +167,10 @@
         "feedback_neg_style": "【Zu vermeidender Stil】: {neg}\n",
         "tag_reference": "\n【Referenz: Vergangene Themen-Schlüsselwörter】\n{tags}\n",
         "search_logic": "\nSie haben eine spezielle Funktion: [SEARCH: Englische Abfrage] generieren, um aktuelle Informationen zu ergänzen.\nWenn eine Suche erforderlich ist, antworten Sie zuerst mit dem, was Sie wissen, und fügen Sie 'Ich werde später Details suchen' hinzu.\n【Wichtige Anweisung】Wenn Sie aktuelle oder unsichere Informationen angeben, fügen Sie [SEARCH: Englische Abfrage] am Ende hinzu. Die Klammern [ ] und Doppelpunkte : müssen halbreit sein, kein Leerzeichen zwischen SEARCH und dem Doppelpunkt. Der Inhalt müssen 『Englische』 Schlüsselwörter sein.",
-        "summary_role": "Sie sind ein ausgezeichneter Forscher. Lesen Sie die folgenden englischen Suchergebnisse und fassen Sie die Hauptpunkte auf 【Deutsch】 innerhalb von 3000 Zeichen zusammen.",
+        "search_grounding_summary": "Sie sind ein Experte für Faktenprüfung. Fassen Sie basierend auf Google-Suchergebnissen die Hauptpunkte 【unbedingt auf Deutsch】 und innerhalb von 【{max_chars} Zeichen】 zusammen, wobei Sie sich auf objektive Fakten, Daten und spezifische Zahlen konzentrieren.",
+        "search_tavily_summary": "Sie sind ein Forscher mit einer scharfen Perspektive. Extrahieren Sie vielfältige Standpunkte, neueste Trends und detaillierte Hintergrundinformationen aus den Tavily-Suchergebnissen, zitieren Sie gegebenenfalls Quellen (URLs) und fassen Sie alles 【unbedingt auf Deutsch】 innerhalb von 【{max_chars} Zeichen】 zusammen.",
+        "search_integrated_summary": "Sie sind ein erstklassiger Geheimdienstanalyst. Bieten Sie die am meisten wertschöpfenden Informationen an, indem Sie 'hochzuverlässige Fakten' von Gemini Grounding mit 'ergänzenden Details oder unterschiedlichen Perspektiven' von Tavily Search kombinieren, zusammengefasst 【unbedingt auf Deutsch】 innerhalb von 【{max_chars} Zeichen】.",
+        "search_save_db_role": "Fassen Sie die folgenden Suchergebnisse als Wissen für die zukünftige Referenz 【unbedingt auf Deutsch】 und innerhalb von 【200 Zeichen】 extrem prägnant zusammen.",
         "search_appendix_prefix": "Dies sind ergänzende Informationen aus der Suche."
     },
     "setup_wizard": {
@@ -178,6 +181,8 @@
         "search_provider_label": "Suchmaschine:",
         "search_provider_notice": "*Bei Auswahl von Google Search wird gemini-2.5-flash-lite verwendet.",
         "search_usage_grounding": "Google Search am {date} {count} Mal verwendet",
+        "search_usage_grounding_short": "Google (Heute): {count}",
+        "search_usage_tavily_short": "Tavily (Monat): {count}",
         "welcome_notice": "* Diese Einstellungen können später jederzeit im Menü 'Einstellungen' geändert werden.",
         "step_lang_title": "Sprachauswahl",
         "other_languages": "Andere Sprachen...",

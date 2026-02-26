@@ -140,6 +140,8 @@
         "search_provider_label": "Moteur de recherche :",
         "search_provider_notice": "*Lorsque Google Search est sélectionné, gemini-2.5-flash-lite est utilisé.",
         "search_usage_grounding": "Google Search utilisé {count} fois le {date}",
+        "search_usage_grounding_short": "Google (Aujourd'hui): {count}",
+        "search_usage_tavily_short": "Tavily (Mois): {count}",
         "search_executing": "Système: Exécution de la recherche Tavily ({count}e fois ce mois-ci)",
         "memory_update_reserved": "Système: Tâche d'organisation de la mémoire réservée.",
         "timeout_ai_response": "⏱️ Timeout réponse IA ({timeout} secondes)",
@@ -169,7 +171,10 @@
         "feedback_neg_style": "【Style à éviter】 : {neg}\n",
         "tag_reference": "\n【Référence : Mots-clés des sujets passés】\n{tags}\n",
         "search_logic": "\nVous avez une fonction spéciale : générer [SEARCH: Requête en anglais] pour compléter les informations récentes.\nLorsqu'une recherche est nécessaire, répondez d'abord avec ce que vous savez, puis ajoutez 'Je chercherai des détails plus tard'.\n【Instruction Importante】Si vous incluez des informations récentes ou incertaines, ajoutez [SEARCH: Requête en anglais] à la fin. Les crochets [ ] et les deux-points : doivent être en demi-largeur, sans espace entre SEARCH et les deux-points. Le contenu doit être des mots-clés en 『Anglais』.",
-        "summary_role": "Vous êtes un excellent chercheur. Lisez les résultats de recherche en anglais suivants et résumez les points principaux en 【Français】 en moins de 3000 caractères.",
+        "search_grounding_summary": "Vous êtes un expert en vérification des faits. Sur la base des résultats de recherche Google, résumez les points principaux 【obligatoirement en Français】 et en moins de 【{max_chars} caractères】, en vous concentrant sur les faits objectifs, les dates et les chiffres précis.",
+        "search_tavily_summary": "Vous êtes un chercheur avec une perspective aiguisée. Extrayez des points de vue divers, les dernières tendances et des informations de fond détaillées des résultats de recherche Tavily, en citant les sources (URLs) le cas échéant, le tout résumé 【obligatoirement en Français】 en moins de 【{max_chars} caractères】.",
+        "search_integrated_summary": "Vous êtes un analyste de renseignement de premier plan. Fournissez les informations à plus forte valeur ajoutée en combinant les 'faits hautement fiables' de Gemini Grounding avec les 'détails supplémentaires ou perspectives différentes' de Tavily Search, résumé 【obligatoirement en Français】 en moins de 【{max_chars} caractères】.",
+        "search_save_db_role": "Résumez les résultats de recherche suivants en tant que connaissances pour référence future 【obligatoirement en Français】 et en moins de 【200 caractères】 de manière extrêmement concise.",
         "search_appendix_prefix": "Ceci est une information complémentaire de la recherche."
     },
     "setup_wizard": {
