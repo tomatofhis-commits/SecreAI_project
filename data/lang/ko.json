@@ -138,6 +138,8 @@
         "search_provider_label": "검색 엔진:",
         "search_provider_notice": "*Google Search 선택 시 gemini-2.5-flash-lite가 사용됩니다.",
         "search_usage_grounding": "{date}에 Google Search를 {count}회 사용했습니다",
+        "search_usage_grounding_short": "Google (오늘): {count}회",
+        "search_usage_tavily_short": "Tavily (이번 달): {count}회",
         "search_executing": "시스템: Tavily 검색 실행 (이번 달 {count} 번째)",
         "memory_update_reserved": "시스템: 기억 정리 작업 예약됨.",
         "timeout_ai_response": "⏱️ AI 응답 타임아웃 ({timeout}초)",
@@ -167,7 +169,10 @@
         "feedback_neg_style": "【피해야 할 스타일】: {neg}\n",
         "tag_reference": "\n【참고: 과거 주제 키워드】\n{tags}\n",
         "search_logic": "\n당신에게는 [SEARCH: 영어 쿼리] 를 출력하여 최신 정보를 보완하는 특별한 기능이 있습니다.\n검색이 필요할 때는, 먼저 아는 범위에서 대답한 뒤 '나중에 자세히 찾아보겠습니다'라고 덧붙여 주세요.\n【중요 지시】최신 정보나 불확실한 정보가 포함될 경우, 답변 끝에 반드시 [SEARCH: 영어 쿼리] 를 한 줄로 추가해 주세요. 대괄호 [ ] 와 콜론 : 은 반드시 반각을 사용하고, SEARCH와 콜론 사이에는 공백을 넣지 마세요. 내용은 반드시 『영어』 키워드로 해 주세요.",
-        "summary_role": "당신은 뛰어난 리서처입니다. 다음 영어 검색 결과를 읽고, 요점을 반드시 【한국어】로 1000자 이내로 정리해 주세요.",
+        "search_grounding_summary": "당신은 사실 확인 전문가입니다. Google 검색 결과를 바탕으로 객관적인 사실, 날짜, 구체적인 수치를 중시하여, 포괄적이고 정확하게 요점을 【반드시 한국어】로 【{max_chars}자 이내】로 정리해 주세요.",
+        "search_tavily_summary": "당신은 예리한 시각을 가진 리서처입니다. Tavily 검색 결과에서 다각적인 시점, 최신 트렌드, 상세한 배경 정보를 추출하고, 출처(URL)도 적절히 참조하면서 【반드시 한국어】로 【{max_chars}자 이내】로 정리해 주세요.",
+        "search_integrated_summary": "당신은 최고 수준의 인텔리전스 분석가입니다. Gemini Grounding의 '신뢰성 높은 사실'을 기반으로, Tavily Search에서 얻은 '보충적인 상세 정보나 다른 관점'을 통합하여 가장 가치 있는 정보를 【반드시 한국어】로 【{max_chars}자 이내】로 제공해 주세요.",
+        "search_save_db_role": "다음 검색 결과를 향후 참조할 지식으로서 【반드시 한국어】로 【200자 이내】로 극도로 간결하게 정리해 주세요.",
         "search_appendix_prefix": "검색 결과로부터의 추가 정보입니다."
     },
     "setup_wizard": {

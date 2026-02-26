@@ -150,6 +150,8 @@
         "search_provider_label": "Motore di ricerca:",
         "search_provider_notice": "*Quando si seleziona Google Search, viene utilizzato gemini-2.5-flash-lite.",
         "search_usage_grounding": "Google Search usato {count} volte il {date}",
+        "search_usage_grounding_short": "Google (Oggi): {count}",
+        "search_usage_tavily_short": "Tavily (Mese): {count}",
         "stt_notice": "L'input dell'utente proviene dal riconoscimento vocale. Correggi eventuali errori.",
         "memory_priority": "Se ci sono informazioni pertinenti in 【Informazioni correlate dalla memoria passata】, ottimizzale come fatti sul flusso di conversazione attuale.",
         "summarize_start": "Sei un maestro nell'organizzazione della memoria. Riassumi la cronologia della conversazione qui sotto in fatti importanti per riferimento futuro, entro 1000 caratteri. La data è {time}.\n【Cronologia】\n{history_text}",
@@ -171,7 +173,10 @@
         "feedback_neg_style": "【Stile da evitare】: {neg}\n",
         "tag_reference": "\n【Riferimento: Parole chiave argomenti passati】\n{tags}\n",
         "search_logic": "\nHai una funzione speciale: generare [SEARCH: Query inglese] per integrare informazioni recenti.\nQuando è necessaria una ricerca, rispondi prima con ciò che sai, quindi aggiungi 'Cercherò i dettagli più tardi'.\n【Istruzione Importante】Se includi informazioni recenti o incerte, aggiungi [SEARCH: Query inglese] alla fine. Le parentesi [ ] e i due punti : devono essere a metà larghezza, senza spazio tra SEARCH e i due punti. Il contenuto deve essere parole chiave in 『Inglese』.",
-        "summary_role": "Sei un eccellente ricercatore. Leggi i seguenti risultati di ricerca in inglese e riassumi i punti principali in 【Italiano】 entro 3000 caratteri.",
+        "search_grounding_summary": "Sei un esperto di verifica dei fatti. Sulla base dei risultati di ricerca di Google, riassumi i punti principali 【obbligatoriamente in Italiano】 ed entro 【{max_chars} caratteri】, concentrandoti su fatti obiettivi, date e numeri specifici.",
+        "search_tavily_summary": "Sei un ricercatore con una prospettiva acuta. Estrai diversi punti di vista, le ultime tendenze e informazioni di base dettagliate dai risultati di ricerca di Tavily, citando le fonti (URL) dove appropriato, il tutto riassunto 【obbligatoriamente in Italiano】 entro 【{max_chars} caratteri】.",
+        "search_integrated_summary": "Sei un analista di intelligence di alto livello. Fornisci le informazioni a più alto valore aggiunto combinando i 'fatti altamente affidabili' di Gemini Grounding con i 'dettagli supplementari o prospettive diverse' di Tavily Search, riassunti 【obbligatoriamente in Italiano】 entro 【{max_chars} caratteri】.",
+        "search_save_db_role": "Riassumi i seguenti risultati di ricerca come conoscenza per riferimento futuro 【obbligatoriamente in Italiano】 ed entro 【200 caratteri】 in modo estremamente conciso.",
         "search_appendix_prefix": "Queste sono informazioni supplementari dalla ricerca."
     },
     "setup_wizard": {

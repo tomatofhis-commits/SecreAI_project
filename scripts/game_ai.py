@@ -431,8 +431,9 @@ def execute_background_search(search_query, config, root, session_data):
         lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
         log_m = lang_data.get("log_messages", {})
         ai_p = lang_data.get("ai_prompt", {})
+        max_chars = config.get("MAX_CHARS", 700)
 
-        # --- 案1: 判定ステップを追加 ---
+        # --- ゲートキーパー判定 ---
         send_log_to_hub(log_m.get("gatekeeper_analyzing", "システム: ゲートキーパーが検索の必要性を判定中..."))
         gatekeeper_res = should_execute_search(search_query, config, log_m)
         if not gatekeeper_res.get("necessary", True):
@@ -452,32 +453,19 @@ def execute_background_search(search_query, config, root, session_data):
         # 検索プロバイダーの判定
         search_provider = config.get("SEARCH_PROVIDER", "tavily").lower()
         
-        from google.genai import types
         import ollama
-
-        if search_provider == "grounding":
-            count = increment_grounding_count(root)
-            g_model_name = "gemini-2.5-flash-lite" # 後続の実行関数と合わせる
-            exec_msg = log_m.get("grounding_executing", "システム: Google Search (Gemini Grounding) を実行します (モデル: {model}, 本日 {count} 回目)").format(model=g_model_name, count=count)
-        else:
-            from tavily import TavilyClient
-            count = increment_tavily_count(root)
-            exec_msg = log_m.get("search_executing", "System: Executing Tavily search (Total: {count} this month)").format(count=count)
-        
-        send_log_to_hub(exec_msg)
-
-        api_key = config.get("TAVILY_API_KEY")
+        api_key_tavily = config.get("TAVILY_API_KEY")
         summary_model = config.get("MODEL_ID_SUMMARY", "gemma2:9b")
+        timeout = config.get("TIMEOUT_WEB_SEARCH", 30)
         now = datetime.now()
 
-        # === Tavily検索結果のキャッシュをチェック ===
+        # === キャッシュチェック === (統合モードもクエリベースでキャッシュ可能とする)
         cache_dir = os.path.join(root, "data", "search_cache")
         os.makedirs(cache_dir, exist_ok=True)
-        cache_key = hashlib.md5(search_query.encode()).hexdigest()
+        cache_key = hashlib.md5(f"{search_provider}:{search_query}".encode()).hexdigest()
         cache_file = os.path.join(cache_dir, f"{cache_key}.json")
         cache_ttl_hours = config.get("TAVILY_CACHE_TTL_HOURS", 6)
         
-        # キャッシュが存在し、有効期限内であれば使用
         if os.path.exists(cache_file):
             cache_age = time.time() - os.path.getmtime(cache_file)
             if cache_age < cache_ttl_hours * 3600:
@@ -485,137 +473,108 @@ def execute_background_search(search_query, config, root, session_data):
                     with open(cache_file, 'r', encoding='utf-8') as f:
                         cached_data = json.load(f)
                         summary = cached_data['summary']
-                        send_log_to_hub(log_m.get("search_cache_hit", "[Search Cache Hit] Reusing previous results to save costs."))
+                        send_log_to_hub(log_m.get("search_cache_hit", "[Search Cache Hit] Reusing previous results."))
                         
-                        
-                        # キャッシュから読み込んだサマリーで音声出力
                         session_id, session_getter, overlay_queue = session_data[0], session_data[1], session_data[2]
-                        
-                        # セッション中断チェック
                         if session_id and session_getter and session_getter() != session_id: return
 
-                        # 古いウィンドウを閉じてから新しい検索結果を表示
                         if overlay_queue:
                             overlay_queue.put((None, None, "OFF", 0, 'idle'))
-                            time.sleep(0.1)  # ウィンドウが確実に閉じるまで待機
+                            time.sleep(0.1)
                         
                         prefix = ai_p.get("search_appendix_prefix", "Here is some additional information.")
-                        final_text = f"{prefix} {summary}"
-                        # skip_idle=False でウィンドウを自動的に閉じる
-                        speak_and_show(final_text, None, config, root, session_data, show_window=True, skip_idle=False)
+                        speak_and_show(f"{prefix} {summary}", None, config, root, session_data, show_window=True, skip_idle=False)
                         return
                 except Exception as cache_err:
-                    msg = log_m.get("cache_save_error", "Cache save error: {e}").format(e=cache_err)
-                    send_log_to_hub(msg, is_error=True)
+                    send_log_to_hub(f"Cache Load Error: {cache_err}", is_error=True)
 
-        # タイムアウト設定を取得
-        timeout = config.get("TIMEOUT_WEB_SEARCH", 30)
+        # 検索実行用ヘルパー
+        def _call_grounding():
+            increment_grounding_count(root)
+            g_model = "gemini-2.5-flash-lite"
+            config_g = {'tools': [{'google_search': {}}]}
+            prompt = f"「{search_query}」について最新情報を調査してください。網羅的で正確な事実関係を報告してください。"
+            response = gemini_client.models.generate_content(model=g_model, contents=prompt, config=config_g)
+            return response.text
+
+        def _call_tavily():
+            from tavily import TavilyClient
+            increment_tavily_count(root)
+            tavily = TavilyClient(api_key=api_key_tavily)
+            res = tavily.search(query=f"{search_query} info as of {now.strftime('%Y-%m-%d')}", search_depth="advanced", max_results=3)
+            return "\n---\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in res['results']])
+
+        # --- 検索実行 ---
+        send_log_to_hub(log_m.get("search_searching", "Web search in progress...").format(timeout=timeout))
         
-        searching_msg = log_m.get("search_searching", "Web search in progress... (Timeout: {timeout}s)").format(timeout=timeout)
-        send_log_to_hub(searching_msg)
-        
+        res_grounding = None
+        res_tavily = None
 
+        if search_provider == "integrated":
+            send_log_to_hub("システム: 統合検索モード (Google Grounding + Tavily) を実行中...")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                # pass search_query or use closure
+                future_g = executor.submit(run_with_timeout, _call_grounding, timeout)
+                future_t = executor.submit(run_with_timeout, _call_tavily, timeout)
+                res_grounding = future_g.result()
+                res_tavily = future_t.result()
+        elif search_provider == "grounding":
+            res_grounding = run_with_timeout(_call_grounding, timeout)
+        else: # tavily
+            res_tavily = run_with_timeout(_call_tavily, timeout)
 
-        if search_provider == "grounding":
-            # Gemini Grounding 実行
-            def _call_gemini_grounding():
-                # Grounding用モデル ID
-                g_model = "gemini-2.5-flash-lite" 
-                # Grounding設定
-                config_grounding = {
-                    'tools': [{'google_search': {}}]
-                }
-                try:
-                    # Groundingを実行
-                    prompt = f"以下のクエリについてGoogle検索を使用し、最新情報に基づいて日本語で簡潔に要約してください。\nクエリ: {search_query}"
-                    response = gemini_client.models.generate_content(
-                        model=g_model,
-                        contents=prompt,
-                        config=config_grounding
-                    )
-                    return response.text
-                except Exception as e:
-                    err_str = str(e).upper()
-                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "QUOTA" in err_str:
-                        quota_msg = log_m.get("google_quota_exceeded", "システム: Google Search (Gemini Grounding) の無料枠制限に達しました。")
-                        send_log_to_hub(f"{quota_msg} ({g_model})", is_error=True)
-                        return "__QUOTA_EXCEEDED__"
-                    raise e
-
-            summary = run_with_timeout(_call_gemini_grounding, timeout)
-            if summary == "__QUOTA_EXCEEDED__":
-                return
-            if summary is None:
-                error_msg = log_m.get("timeout_web_search", "Web search timeout ({timeout} seconds)").format(timeout=timeout)
-                send_log_to_hub(error_msg, is_error=True)
-                return
-        else:
-            # Tavily検索実行
-            def _call_tavily_search():
-                tavily = TavilyClient(api_key=api_key)
-                return tavily.search(
-                    query=f"{search_query} info as of {now.strftime('%Y-%m-%d')}", 
-                    search_depth="advanced", 
-                    max_results=3
-                )
-            
-            search_res = run_with_timeout(_call_tavily_search, timeout)
-            
-            if search_res is None:
-                # タイムアウト発生
-                error_msg = log_m.get("timeout_web_search", "Web search timeout ({timeout} seconds)").format(timeout=timeout)
-                send_log_to_hub(error_msg, is_error=True)
-                return
-        
-        # セッション中断チェック (API待ち後のキャンセル対応)
+        # セッション中断チェック
         session_id, session_getter = session_data[0], session_data[1]
         if session_id and session_getter and session_getter() != session_id: return
 
-        if search_provider != "grounding":
-            # Tavilyの場合のみ Ollama で要約 (Groundingは既に要約済み)
-            contents = [f"Source: {r['url']}\nContent: {r['content']}" for r in search_res['results']]
-            context = "\n---\n".join(contents)
+        # --- 要約・統合 ---
+        if search_provider == "integrated":
+            if not res_grounding and not res_tavily:
+                send_log_to_hub("エラー: 統合検索のすべてがタイムアウトまたは失敗しました。", is_error=True)
+                return
             
-            summary_role = ai_p.get("summary_role", "あなたは優秀なリサーチャーです。以下の英語の検索結果を読み、必ず【日本語で】要点をまとめてください。")
-            summary_prompt = f"{summary_role}\n\n{context}"
-            
-            response = ollama.chat(
-                model=summary_model, 
-                messages=[{'role': 'user', 'content': summary_prompt}]
-            )
-            summary = response['message']['content']
-        
+            ctx = f"【Gemini Grounding (Main Fact Source)】:\n{res_grounding or 'N/A'}\n\n【Tavily Search (Supplementary Source)】:\n{res_tavily or 'N/A'}"
+            role = ai_p.get("search_integrated_summary", "統合要約プロンプト").format(max_chars=max_chars)
+        elif search_provider == "grounding":
+            if not res_grounding:
+                send_log_to_hub("エラー: Gemini Grounding がタイムアウトしました。", is_error=True)
+                return
+            ctx = res_grounding
+            role = ai_p.get("search_grounding_summary", "Grounding要約プロンプト").format(max_chars=max_chars)
+        else: # tavily
+            if not res_tavily:
+                send_log_to_hub("エラー: Tavily検索がタイムアウトしました。", is_error=True)
+                return
+            ctx = res_tavily
+            role = ai_p.get("search_tavily_summary", "Tavily要約プロンプト").format(max_chars=max_chars)
+
+        response = ollama.chat(
+            model=summary_model,
+            messages=[{'role': 'user', 'content': f"{role}\n\n検索結果クエリ: {search_query}\n情報ソース:\n{ctx}"}]
+        )
+        summary = response['message']['content']
+
         if summary:
-            # === 検索結果をキャッシュに保存 ===
+            # キャッシュ保存
             try:
-                cache_data = {
-                    'query': search_query,
-                    'summary': summary,
-                    'timestamp': time.time()
-                }
                 with open(cache_file, 'w', encoding='utf-8') as f:
-                    json.dump(cache_data, f, ensure_ascii=False, indent=2)
-            except Exception as cache_err:
-                send_log_to_hub(f"キャッシュ保存エラー: {cache_err}", is_error=True)
+                    json.dump({'query': search_query, 'summary': summary, 'timestamp': time.time()}, f, ensure_ascii=False, indent=2)
+            except: pass
             
-            # --- 修正箇所：保存タスクを並列実行キューに追加 ---
             submit_background_task(save_search_to_db, summary, search_query, config, root)
             
-            # メインの読み上げが終わるのを待機（セッション中断を監視しつつ）
             while pygame.mixer.get_init() and pygame.mixer.music.get_busy():
                 if session_id and session_getter and session_getter() != session_id: return
                 time.sleep(0.5)
 
-            # 古いウィンドウを閉じてから新しい検索結果を表示
-            session_id, session_getter, overlay_queue = session_data[0], session_data[1], session_data[2]
+            overlay_queue = session_data[2]
             if overlay_queue:
                 overlay_queue.put((None, None, "OFF", 0, 'idle'))
-                time.sleep(0.1)  # ウィンドウが確実に閉じるまで待機
+                time.sleep(0.1)
             
             prefix = ai_p.get("search_appendix_prefix", "Here is some additional information.")
-            final_text = f"{prefix} {summary}"
-            # skip_idle=False でウィンドウを自動的に閉じる
-            speak_and_show(final_text, None, config, root, session_data, show_window=True, skip_idle=False)
+            speak_and_show(f"{prefix} {summary}", None, config, root, session_data, show_window=True, skip_idle=False)
+
             
     except Exception as e:
         lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
@@ -631,14 +590,11 @@ def save_search_to_db(full_summary, query, config, root):
         
         lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
         log_m = lang_data.get("log_messages", {})
-
+        ai_p = lang_data.get("ai_prompt", {})
         summary_model = config.get("MODEL_ID_SUMMARY", "gemma2:9b")
         
-        # 200文字以内にするための再要約プロンプト
-        save_prompt = (
-            f"以下の検索結果を、将来参照する知識として【200文字以内の日本語】で極限まで簡潔にまとめてください。\n"
-            f"内容: {full_summary}"
-        )
+        role = ai_p.get("search_save_db_role", "以下の検索結果を、将来参照する知識として【200文字以内】で極限まで簡潔にまとめてください。").format(max_chars=200)
+        save_prompt = f"{role}\n内容: {full_summary}"
         
         response = ollama.chat(
             model=summary_model,
@@ -673,12 +629,16 @@ def save_search_to_db(full_summary, query, config, root):
             ids=[f"web_{int(unix_time)}"]
         )
         
-        send_log_to_hub(log_m.get("search_recorded", "System: Search information recorded to DB as 'Internet Info'."))
+        send_log_to_hub(log_m.get("search_recorded", "システム: 検索情報を「ネット情報」としてDBに記録しました。"))
 
     except Exception as e:
-        lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
-        log_m = lang_data.get("log_messages", {})
-        msg = log_m.get("internal_db_save_error", "Internal DB save error: {e}").format(e=e)
+        if 'log_m' not in locals():
+            try:
+                lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
+                log_m = lang_data.get("log_messages", {})
+            except:
+                log_m = {}
+        msg = log_m.get("internal_db_save_error", "内部DB保存エラー: {e}").format(e=e)
         send_log_to_hub(msg, is_error=True)
 
 # --- 4. AIコア機能 ---
