@@ -22,6 +22,17 @@ DEFAULT_CONFIG = {
     "DB_MODEL_ID": "gemini-2.0-flash",
     "search_switch": False,
     "SEARCH_PROVIDER": "tavily",
+    # SEARCH_PROVIDER の選択肢:
+    #   "grounding"     - gemini-2.5-flash-lite の Grounding
+    #   "tavily"        - Tavilyで検索しollamaで要約
+    #   "integrated"    - grounding + tavily をollamaで統合要約
+    #   "grounding_3_1" - gemini-3.1-flash-lite-preview の Grounding（思考レベル最小）
+    "THINKING_BUDGET": "medium",
+    # THINKING_BUDGET: gemini-3.1-flash-lite-preview 選択時のみ有効
+    # minimal = 最小 (ほぼ無効・高速)
+    # low     = 低
+    # medium  = 中
+    # high    = 高
     "API_CACHE_ENABLED": True,
     "API_CACHE_TTL_HOURS": 24,
     "TAVILY_COUNT": 0,

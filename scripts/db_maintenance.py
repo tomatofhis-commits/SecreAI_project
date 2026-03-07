@@ -46,10 +46,22 @@ def get_ai_response(prompt, config):
             api_key = config.get("GEMINI_API_KEY")
             if not api_key: return "Error: Gemini API Key is missing."
             client = genai.Client(api_key=api_key)
+            
+            gen_config = {'response_mime_type': 'application/json'}
+            
+            db_thinking_budget = None
+            if model_id == "gemini-3.1-flash-lite-preview（中）":
+                model_id = "gemini-3.1-flash-lite-preview"
+                db_thinking_budget = "medium"
+
+            thinking_budget = db_thinking_budget if db_thinking_budget is not None else config.get("THINKING_BUDGET", "medium")
+            if model_id == "gemini-3.1-flash-lite-preview":
+                gen_config["thinking_config"] = {"thinking_level": thinking_budget}
+
             res = client.models.generate_content(
                 model=model_id, 
                 contents=prompt,
-                config={'response_mime_type': 'application/json'}
+                config=gen_config
             )
             return res.text
     except Exception as e:

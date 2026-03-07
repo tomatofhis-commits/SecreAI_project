@@ -218,7 +218,23 @@ def main(base_path=None):
                     if cached: return cached
 
                 client_ge = genai.Client(api_key=config.get("GEMINI_API_KEY"))
-                res = client_ge.models.generate_content(model=db_model_id, contents=prompt)
+                
+                gemini_config_obj = {}
+                
+                db_thinking_budget = None
+                if db_model_id == "gemini-3.1-flash-lite-preview（中）":
+                    db_model_id = "gemini-3.1-flash-lite-preview"
+                    db_thinking_budget = "medium"
+                
+                thinking_budget = db_thinking_budget if db_thinking_budget is not None else config.get("THINKING_BUDGET", "medium")
+                if db_model_id == "gemini-3.1-flash-lite-preview":
+                    gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget}
+
+                res = client_ge.models.generate_content(
+                    model=db_model_id, 
+                    contents=prompt,
+                    config=gemini_config_obj if gemini_config_obj else None
+                )
                 ans = res.text.strip()
                 
                 if api_cache:
@@ -259,7 +275,17 @@ def main(base_path=None):
                     if cached: return cached
 
                 client_ge = genai.Client(api_key=config.get("GEMINI_API_KEY"))
-                res = client_ge.models.generate_content(model=model_id, contents=prompt)
+                
+                gemini_config_obj = {}
+                thinking_budget = config.get("THINKING_BUDGET", "medium")
+                if model_id == "gemini-3.1-flash-lite-preview":
+                    gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget}
+
+                res = client_ge.models.generate_content(
+                    model=model_id, 
+                    contents=prompt,
+                    config=gemini_config_obj if gemini_config_obj else None
+                )
                 ans = res.text.strip()
 
                 if api_cache:

@@ -1,3 +1,11 @@
+ver1.0.5
+・Geminiの最新モデル「gemini-3.1-flash-lite-preview」を追加し、専用の思考レベル設定（最小/低/中/高）を導入
+・DB記憶整理用モデルの選択肢に「gemini-3.1-flash-lite-preview（中）」を追加
+・Web検索のAIモデル選択肢を拡張し、「gemini-3.1-flash-lite-previewのgrounding」を追加
+・OpenAIの最新モデル（gpt-5-mini, gpt-5.2, gpt-5.4）を選択可能に追加
+・Gemini 2.5シリーズの終了予定日（警告文）を設定画面に表示
+・追加機能によるUIテキストの多言語（10言語）対応を実施
+
 ver1.0.4
 ・Gemini Grounding と Tavily を併用する「統合検索モード」を実装
 ・検索エンジンごとに最適化された要約プロンプト（Grounding用、Tavily用、統合用）を全言語で導入
