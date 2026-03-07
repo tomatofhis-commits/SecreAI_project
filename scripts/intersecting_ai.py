@@ -39,9 +39,14 @@ def call_gemini_sync(query, image_obj, system_instr, config):
         if image_obj:
             contents.append(image_obj)
 
+        gemini_config_obj = {"system_instruction": system_instr}
+        thinking_budget = config.get("THINKING_BUDGET", "medium")
+        if model_id == "gemini-3.1-flash-lite-preview":
+            gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget}
+
         response = client.models.generate_content(
             model=model_id,
-            config={"system_instruction": system_instr},
+            config=gemini_config_obj,
             contents=contents
         )
         return f"【Gemini ({model_id}) の見解】\n{response.text}"

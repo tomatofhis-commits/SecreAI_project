@@ -520,7 +520,20 @@ def execute_background_search(search_query, config, root, session_data):
                 res_tavily = future_t.result()
         elif search_provider == "grounding":
             res_grounding = run_with_timeout(_call_grounding, timeout)
-        else: # tavily
+        elif search_provider == "grounding_3_1":
+            # gemini-3.1-flash-lite-preview のgrounding（思考レベル最小）
+            def _call_grounding_3_1():
+                increment_grounding_count(root)
+                g_model = "gemini-3.1-flash-lite-preview"
+                config_g = {
+                    'tools': [{'google_search': {}}],
+                    'thinking_config': {'thinking_level': "minimal"}  # 最小
+                }
+                prompt_g = f"「{search_query}」について最新情報を調査してください。網羅的で正確な事実関係を報告してください。"
+                response = gemini_client.models.generate_content(model=g_model, contents=prompt_g, config=config_g)
+                return response.text
+            res_grounding = run_with_timeout(_call_grounding_3_1, timeout)
+        else:  # tavily
             res_tavily = run_with_timeout(_call_tavily, timeout)
 
         # セッション中断チェック
@@ -533,15 +546,16 @@ def execute_background_search(search_query, config, root, session_data):
                 send_log_to_hub("エラー: 統合検索のすべてがタイムアウトまたは失敗しました。", is_error=True)
                 return
             
-            ctx = f"【Gemini Grounding (Main Fact Source)】:\n{res_grounding or 'N/A'}\n\n【Tavily Search (Supplementary Source)】:\n{res_tavily or 'N/A'}"
+            ctx = f"《Gemini Grounding (Main Fact Source)》:\n{res_grounding or 'N/A'}\n\n》Tavily Search (Supplementary Source)》:\n{res_tavily or 'N/A'}"
             role = ai_p.get("search_integrated_summary", "統合要約プロンプト").format(max_chars=max_chars)
-        elif search_provider == "grounding":
+        elif search_provider in ("grounding", "grounding_3_1"):
             if not res_grounding:
-                send_log_to_hub("エラー: Gemini Grounding がタイムアウトしました。", is_error=True)
+                label = "gemini-3.1-flash-lite-preview Grounding" if search_provider == "grounding_3_1" else "Gemini Grounding"
+                send_log_to_hub(f"エラー: {label} がタイムアウトしました。", is_error=True)
                 return
             ctx = res_grounding
             role = ai_p.get("search_grounding_summary", "Grounding要約プロンプト").format(max_chars=max_chars)
-        else: # tavily
+        else:  # tavily
             if not res_tavily:
                 send_log_to_hub("エラー: Tavily検索がタイムアウトしました。", is_error=True)
                 return
@@ -796,7 +810,19 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
                 role = "model" if h.startswith("AI:") else "user"
                 content = h.replace("AI:", "").replace("You: ", "").replace("あなた: ", "").strip()
                 gemini_history.append({"role": role, "parts": [{"text": content}]})
-            chat = gemini_client.chats.create(model=model_id, config={"system_instruction": system_instr}, history=gemini_history)
+
+            # --- 思考レベル設定 (gemini-3.1-flash-lite-preview のみ有効) ---
+            thinking_budget = config.get("THINKING_BUDGET", "medium") # THINKING_BUDGET
+            if model_id == "gemini-3.1-flash-lite-preview":
+                gemini_config_obj = {
+                    "system_instruction": system_instr,
+                    "thinking_config": {"thinking_level": thinking_budget}
+                }
+                send_log_to_hub(f"システム: 思考レベル {thinking_budget} で呼び出し中...")
+            else:
+                gemini_config_obj = {"system_instruction": system_instr}
+
+            chat = gemini_client.chats.create(model=model_id, config=gemini_config_obj, history=gemini_history)
             
             # --- Type Guard: Ensure prompt is string ---
             safe_prompt = str(prompt) if not isinstance(prompt, str) else prompt

@@ -172,11 +172,23 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         # Extensions
         lbl_subtitle_ext.config(text=l_set.get("enable_subtitle", "Enable Local AI Subtitle System Integration\n(Sends text to ws://localhost:8765)"))
         
-        # Search Provider (Dynamic update)
         if 'lbl_search_provider' in locals() or 'lbl_search_provider' in globals():
             lbl_search_provider.config(text=l_set.get("search_provider_label", "Search Engine:"))
         if 'lbl_grounding_notice' in locals() or 'lbl_grounding_notice' in globals():
             lbl_grounding_notice.config(text=l_set.get("search_provider_notice", "※Google Search選択時は「gemini-2.5-flash-lite」で固定されます。"))
+
+        try:
+            lbl_deprecation_notice.config(text=l_set.get("deprecation_notice", "⚠  Gemini 2.5 シリーズ 終了予定日       \nGemini 2.5 Flash: 2026年6月17日　／　Gemini 2.5 Flash-Lite: 2026年7月22日"))
+            gemini_frame.config(text=l_set.get("setting_group_gemini", " Gemini Settings "))
+            thinking_label.config(text=l_set.get("thinking_level_label", "思考レベル (3.1-flash-lite のみ):"))
+            openai_frame.config(text=l_set.get("setting_group_openai", " OpenAI Settings "))
+            llama_frame.config(text=l_set.get("setting_group_llama", " Llama (Local Ollama) Settings "))
+            lbl_local_model_id.config(text=l_set.get("label_local_model_id", "Local Model ID:"))
+            lbl_extensions_t.config(text=l_set.get("tab_extensions_title", "Extensions (Experimental)"))
+            extensions_group.config(text=l_set.get("extensions_group_api", " API / WebSockets "))
+            btn_fetch_ollama.config(text=l_set.get("btn_fetch_ollama", "Ollamaのモデルリストを取得・更新"))
+        except NameError:
+            pass
 
         # Footer
         btn_save.config(text=l_set.get("btn_save", "Save"))
@@ -198,6 +210,16 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         usage_label.config(text=f"{g_text}  /  {t_text}")
 
     # --- 1. 全般設定タブ ---
+    # --- Gemini 2.5 廃止予定日 警告ラベル ---
+    deprecation_frame = tk.Frame(tab_general, relief="ridge", bd=1, padx=8, pady=4)
+    deprecation_frame.pack(fill="x", padx=10, pady=(8, 0))
+    lbl_deprecation_notice = tk.Label(
+        deprecation_frame,
+        text=l_set.get("deprecation_notice", "⚠  Gemini 2.5 シリーズ 終了予定日       \nGemini 2.5 Flash: 2026年6月17日　／　Gemini 2.5 Flash-Lite: 2026年7月22日"),
+        fg="#cc4400", font=("MS Gothic", 9, "bold"), justify="left"
+    )
+    lbl_deprecation_notice.pack(anchor="w")
+
     lbl_ai_provider = add_label(tab_general, l_set.get("label_ai_provider", "AI Provider:"), pady=(5,0))
     provider_var = tk.StringVar(tab_general, config.get("AI_PROVIDER", "gemini"))
     provider_frame = tk.Frame(tab_general)
@@ -207,7 +229,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         tk.Radiobutton(provider_frame, text=p_val.capitalize(), variable=provider_var, value=p_val).pack(side="left", padx=5)
 
     # Gemini Frame
-    gemini_frame = tk.LabelFrame(tab_general, text=" Gemini Settings ", padx=10, pady=5)
+    gemini_frame = tk.LabelFrame(tab_general, text=l_set.get("setting_group_gemini", " Gemini Settings "), padx=10, pady=5)
     gemini_frame.pack(pady=5, fill="x", padx=20)
     add_label(gemini_frame, "Gemini API Key:", pady=0)
     gemini_key_entry = tk.Entry(gemini_frame, width=50, show="*")
@@ -216,9 +238,38 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     lbl_model_normal = add_label(gemini_frame, l_set.get("model_normal", "Normal Model:"), pady=(5,0))
     # すべての候補を維持
-    gemini_models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-pro-preview"]
+    gemini_models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite-preview"]
     model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-2.5-flash"))
     tk.OptionMenu(gemini_frame, model_var, *gemini_models).pack(pady=2)
+
+    # 思考レベル (gemini-3.1-flash-lite-preview のみ)
+    thinking_label = add_label(gemini_frame, l_set.get("thinking_level_label", "思考レベル (3.1-flash-lite のみ):"), pady=(5,0))
+    THINKING_OPTIONS = {
+        l_set.get("thinking_min", "最小"):     "minimal",
+        l_set.get("thinking_low", "低"):       "low",
+        l_set.get("thinking_mid", "中"):       "medium",
+        l_set.get("thinking_high", "高"):       "high",
+    }
+    _budget_val = config.get("THINKING_BUDGET", "medium")
+    # もし古い数値データや無効なデータが残っていた場合は medium にする
+    if _budget_val not in THINKING_OPTIONS.values():
+        _budget_val = "medium"
+    _reverse_map = {v: k for k, v in THINKING_OPTIONS.items()}
+    _initial_thinking = _reverse_map.get(_budget_val, l_set.get("thinking_mid", "中"))
+    thinking_var = tk.StringVar(gemini_frame, _initial_thinking)
+    thinking_menu = tk.OptionMenu(gemini_frame, thinking_var, *THINKING_OPTIONS.keys())
+    thinking_menu.pack(pady=2)
+
+    def update_thinking_state(*args):
+        if model_var.get() == "gemini-3.1-flash-lite-preview":
+            thinking_menu.configure(state="normal")
+            thinking_label.configure(fg="black")
+        else:
+            thinking_menu.configure(state="disabled")
+            thinking_label.configure(fg="gray")
+
+    model_var.trace_add("write", update_thinking_state)
+    update_thinking_state()
 
     lbl_model_pro = add_label(gemini_frame, l_set.get("model_pro", "Pro Model:"), pady=(5,0))
     pro_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview"]
@@ -226,19 +277,20 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     tk.OptionMenu(gemini_frame, model_pro_var, *pro_models).pack(pady=2)
 
     # OpenAI Frame
-    openai_frame = tk.LabelFrame(tab_general, text=" OpenAI Settings ", padx=10, pady=5)
+    openai_frame = tk.LabelFrame(tab_general, text=l_set.get("setting_group_openai", " OpenAI Settings "), padx=10, pady=5)
     openai_frame.pack(pady=5, fill="x", padx=20)
+    add_label(openai_frame, "OpenAI API Key:", pady=0)
     openai_key_entry = tk.Entry(openai_frame, width=50, show="*")
     openai_key_entry.insert(0, config.get("OPENAI_API_KEY", ""))
     openai_key_entry.pack(pady=2)
-    gpt_models = ["gpt-5", "gpt-5.2", "gpt-5-mini"]
+    gpt_models = ["gpt-5", "gpt-5-mini", "gpt-5.2", "gpt-5.4"]
     gpt_model_var = tk.StringVar(openai_frame, config.get("MODEL_ID_GPT", "gpt-5"))
     tk.OptionMenu(openai_frame, gpt_model_var, *gpt_models).pack(pady=2)
 
     # Llama (Ollama) Frame
-    llama_frame = tk.LabelFrame(tab_general, text=" Llama (Local Ollama) Settings ", padx=10, pady=5)
+    llama_frame = tk.LabelFrame(tab_general, text=l_set.get("setting_group_llama", " Llama (Local Ollama) Settings "), padx=10, pady=5)
     llama_frame.pack(pady=5, fill="x", padx=20)
-    add_label(llama_frame, "Local Model ID:", pady=0)
+    lbl_local_model_id = add_label(llama_frame, l_set.get("label_local_model_id", "Local Model ID:"), pady=0)
     
     # 前回取得したキャッシュモデルを使用（なければデフォルト）
     ollama_url_current = config.get("OLLAMA_URL", "http://localhost:11434/v1")
@@ -531,10 +583,19 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     # 検索プロバイダー選択
     lbl_search_provider = add_label(search_frame, l_set.get("search_provider_label", "Search Engine:"), pady=(5,0))
     search_provider_var = tk.StringVar(search_frame, config.get("SEARCH_PROVIDER", "tavily"))
-    search_provider_menu = tk.OptionMenu(search_frame, search_provider_var, "tavily", "grounding", "integrated", command=lambda _: refresh_search_usage_text())
+    SEARCH_OPTIONS = {
+        l_set.get("search_opt_grounding_2_5", "gemini-2.5-flash-liteのgrounding"):                        "grounding",
+        l_set.get("search_opt_tavily", "tavilyで検索しollamaで要約"):                               "tavily",
+        l_set.get("search_opt_integrated", "grounding + tavily をollamaで統合要約"):                    "integrated",
+        l_set.get("search_opt_grounding_3_1", "gemini-3.1-flash-lite-previewのgrounding (思考最小)"):     "grounding_3_1",
+    }
+    _sp_reverse = {v: k for k, v in SEARCH_OPTIONS.items()}
+    _initial_sp = _sp_reverse.get(config.get("SEARCH_PROVIDER", "tavily"), l_set.get("search_opt_tavily", "tavilyで検索しollamaで要約"))
+    search_disp_var = tk.StringVar(search_frame, _initial_sp)
+    search_provider_menu = tk.OptionMenu(search_frame, search_disp_var, *SEARCH_OPTIONS.keys(), command=lambda _: refresh_search_usage_text())
     search_provider_menu.pack(pady=5)
-    
-    lbl_grounding_notice = tk.Label(search_frame, text=l_set.get("search_provider_notice", ""), font=("MS Gothic", 9), fg="gray")
+
+    lbl_grounding_notice = tk.Label(search_frame, text=l_set.get("search_provider_notice", "※Google Search選択時は該当モデルが使われます"), font=("MS Gothic", 9), fg="gray")
     lbl_grounding_notice.pack(pady=0)
     
     # 既存のTavily Key
@@ -615,10 +676,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         provider = db_provider_var.get()
         if provider == "gemini":
             # 最新の gemini-2.5-flash-lite を筆頭に配置
-            models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview"]
+            models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite-preview（中）"]
         elif provider == "openai":
             # 2/13に終了する旧モデルを排除し、あなたが最適化した最新モデルのみを配置
-            models = ["gpt-5", "gpt-5.2", "gpt-5-mini"]
+            models = ["gpt-5", "gpt-5-mini", "gpt-5.2", "gpt-5.4"]
         else: # local
             # APIから取得した最新のOllamaリストを使用
             models = ollama_dynamic_models.copy() if ollama_dynamic_models else ["gemma3:4b", "gemma3:1b", "gemma3:12b", "gemma2:9b", "llama3.2:3b"]
@@ -662,10 +723,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     viewer_btn.pack(pady=10, fill="x")
 
     # --- 6. 拡張機能 (Extensions) タブ ---
-    lbl_extensions_t = tk.Label(tab_extensions, text="Extensions (Experimental)", font=("MS Gothic", 12, "bold"))
+    lbl_extensions_t = tk.Label(tab_extensions, text=l_set.get("tab_extensions_title", "Extensions (Experimental)"), font=("MS Gothic", 12, "bold"))
     lbl_extensions_t.pack(pady=10)
 
-    extensions_group = tk.LabelFrame(tab_extensions, text=" API / WebSockets ", padx=10, pady=10)
+    extensions_group = tk.LabelFrame(tab_extensions, text=l_set.get("extensions_group_api", " API / WebSockets "), padx=10, pady=10)
     extensions_group.pack(pady=10, fill="x", padx=20)
     
     # --- New Button for Ollama Model Fetch ---
@@ -740,6 +801,12 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["TAVILY_API_KEY"] = tavily_key_entry.get().strip()
         config["MODEL_ID_SUMMARY"] = summary_model_var.get()
         
+        # 思考レベル: gemini-3.1-flash-lite-preview 以外は "medium" 固定 (※API側での実質無効扱いは別途考慮するが、基本のフォールバック値)
+        if config["MODEL_ID"] == "gemini-3.1-flash-lite-preview":
+            config["THINKING_BUDGET"] = THINKING_OPTIONS.get(thinking_var.get(), "medium")
+        else:
+            config["THINKING_BUDGET"] = "medium"
+
         config["AI_PROVIDER"] = provider_var.get()
         config["GEMINI_API_KEY"] = gemini_key_entry.get()
         config["OPENAI_API_KEY"] = openai_key_entry.get()
@@ -764,7 +831,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["DB_PROVIDER"] = db_provider_var.get()
         config["DB_MODEL_ID"] = db_model_var.get()
         config["search_switch"] = search_switch_var.get()
-        config["SEARCH_PROVIDER"] = search_provider_var.get()
+        config["SEARCH_PROVIDER"] = SEARCH_OPTIONS.get(search_disp_var.get(), "tavily")
         config["TAVILY_API_KEY"] = tavily_key_entry.get()
         config["MODEL_ID_SUMMARY"] = summary_model_var.get()
         
