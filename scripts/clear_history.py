@@ -129,13 +129,14 @@ def main():
             )
 
             def generate_text(prompt):
+                local_db_model_id = db_model_id
                 if db_provider == "openai":
                     client_oa = OpenAI(api_key=config.get("OPENAI_API_KEY"))
-                    response = client_oa.chat.completions.create(model=db_model_id, messages=[{"role": "user", "content": prompt}])
+                    response = client_oa.chat.completions.create(model=local_db_model_id, messages=[{"role": "user", "content": prompt}])
                     return response.choices[0].message.content.strip()
                 elif db_provider == "local":
                     url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
-                    res = requests.post(f"{url.rstrip('/')}/chat/completions", json={"model": db_model_id, "messages": [{"role": "user", "content": prompt}], "options": {"num_ctx": 8192, "temperature": 0.3}}, timeout=240)
+                    res = requests.post(f"{url.rstrip('/')}/chat/completions", json={"model": local_db_model_id, "messages": [{"role": "user", "content": prompt}], "options": {"num_ctx": 8192, "temperature": 0.3}}, timeout=240)
                     res.raise_for_status()
                     return res.json()['choices'][0]['message']['content'].strip()
                 else: # Gemini
@@ -144,16 +145,16 @@ def main():
                     gemini_config_obj = {}
                     
                     db_thinking_budget = None
-                    if db_model_id == "gemini-3.1-flash-lite-preview（中）":
-                        db_model_id = "gemini-3.1-flash-lite-preview"
+                    if local_db_model_id == "gemini-3.1-flash-lite-preview（中）":
+                        local_db_model_id = "gemini-3.1-flash-lite-preview"
                         db_thinking_budget = "medium"
                     
                     thinking_budget = db_thinking_budget if db_thinking_budget is not None else config.get("THINKING_BUDGET", "medium")
-                    if db_model_id == "gemini-3.1-flash-lite-preview":
-                        gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget}
+                    if local_db_model_id == "gemini-3.1-flash-lite-preview":
+                        gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}
 
                     res = client_ge.models.generate_content(
-                        model=db_model_id, 
+                        model=local_db_model_id, 
                         contents=prompt,
                         config=gemini_config_obj if gemini_config_obj else None
                     )
@@ -210,7 +211,7 @@ def main():
                         gemini_config_obj = {}
                         thinking_budget = config.get("THINKING_BUDGET", "medium")
                         if main_model_id == "gemini-3.1-flash-lite-preview":
-                            gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget}
+                            gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}
 
                         res = client_ge.models.generate_content(
                             model=main_model_id, 

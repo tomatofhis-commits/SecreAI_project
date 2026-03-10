@@ -187,10 +187,11 @@ def main(base_path=None):
         # --- generate_summary_text: 要約用（DB_PROVIDER/DB_MODEL_IDを使用） ---
         def generate_summary_text(prompt):
             """要約タスク用: settings_ui.pyで設定されたデータベース用モデルを使用"""
+            local_db_model_id = db_model_id
             if db_provider == "openai":
                 client_oa = OpenAI(api_key=config.get("OPENAI_API_KEY"))
                 response = client_oa.chat.completions.create(
-                    model=db_model_id, 
+                    model=local_db_model_id, 
                     messages=[{"role": "user", "content": prompt}],
                 )
                 return response.choices[0].message.content.strip()
@@ -201,7 +202,7 @@ def main(base_path=None):
                     res = requests.post(
                         f"{url.rstrip('/')}/chat/completions",
                         json={
-                            "model": db_model_id,
+                            "model": local_db_model_id,
                             "messages": [{"role": "user", "content": prompt}],
                             "options": {"num_ctx": 8192, "temperature": 0.3}
                         },
@@ -214,7 +215,7 @@ def main(base_path=None):
             else: # gemini
                 # キャッシュチェック
                 if api_cache:
-                    cached = api_cache.get(prompt, provider=db_provider, model=db_model_id)
+                    cached = api_cache.get(prompt, provider=db_provider, model=local_db_model_id)
                     if cached: return cached
 
                 client_ge = genai.Client(api_key=config.get("GEMINI_API_KEY"))
@@ -222,23 +223,23 @@ def main(base_path=None):
                 gemini_config_obj = {}
                 
                 db_thinking_budget = None
-                if db_model_id == "gemini-3.1-flash-lite-preview（中）":
-                    db_model_id = "gemini-3.1-flash-lite-preview"
+                if local_db_model_id == "gemini-3.1-flash-lite-preview（中）":
+                    local_db_model_id = "gemini-3.1-flash-lite-preview"
                     db_thinking_budget = "medium"
                 
                 thinking_budget = db_thinking_budget if db_thinking_budget is not None else config.get("THINKING_BUDGET", "medium")
-                if db_model_id == "gemini-3.1-flash-lite-preview":
-                    gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget}
+                if local_db_model_id == "gemini-3.1-flash-lite-preview":
+                    gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}
 
                 res = client_ge.models.generate_content(
-                    model=db_model_id, 
+                    model=local_db_model_id, 
                     contents=prompt,
                     config=gemini_config_obj if gemini_config_obj else None
                 )
                 ans = res.text.strip()
                 
                 if api_cache:
-                    api_cache.set(prompt, ans, provider=db_provider, model=db_model_id)
+                    api_cache.set(prompt, ans, provider=db_provider, model=local_db_model_id)
                 return ans
 
         # --- generate_text: キーワードタグ生成用（メインAIモデルを使用） ---
@@ -279,7 +280,7 @@ def main(base_path=None):
                 gemini_config_obj = {}
                 thinking_budget = config.get("THINKING_BUDGET", "medium")
                 if model_id == "gemini-3.1-flash-lite-preview":
-                    gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget}
+                    gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}
 
                 res = client_ge.models.generate_content(
                     model=model_id, 

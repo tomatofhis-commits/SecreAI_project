@@ -527,7 +527,7 @@ def execute_background_search(search_query, config, root, session_data):
                 g_model = "gemini-3.1-flash-lite-preview"
                 config_g = {
                     'tools': [{'google_search': {}}],
-                    'thinking_config': {'thinking_level': "minimal"}  # 最小
+                    'thinking_config': {'thinking_level': "MINIMAL"}  # 最小
                 }
                 prompt_g = f"「{search_query}」について最新情報を調査してください。網羅的で正確な事実関係を報告してください。"
                 response = gemini_client.models.generate_content(model=g_model, contents=prompt_g, config=config_g)
@@ -816,7 +816,7 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
             if model_id == "gemini-3.1-flash-lite-preview":
                 gemini_config_obj = {
                     "system_instruction": system_instr,
-                    "thinking_config": {"thinking_level": thinking_budget}
+                    "thinking_config": {"thinking_level": thinking_budget.upper()}
                 }
                 send_log_to_hub(f"システム: 思考レベル {thinking_budget} で呼び出し中...")
             else:
