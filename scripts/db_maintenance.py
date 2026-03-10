@@ -56,7 +56,7 @@ def get_ai_response(prompt, config):
 
             thinking_budget = db_thinking_budget if db_thinking_budget is not None else config.get("THINKING_BUDGET", "medium")
             if model_id == "gemini-3.1-flash-lite-preview":
-                gen_config["thinking_config"] = {"thinking_level": thinking_budget}
+                gen_config["thinking_config"] = {"thinking_level": thinking_budget.upper()}
 
             res = client.models.generate_content(
                 model=model_id, 
