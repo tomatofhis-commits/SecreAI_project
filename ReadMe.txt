@@ -22,7 +22,7 @@ https://github.com/tomatofhis-commits/SecreAI_project
 ・Tavily APIキー (推奨)
 　リアルタイムのウェブ検索を行うために必要です。tavily.com から取得してください。
 ・OpenAI APIキー (任意)
-　gpt-5やgpt-5-miniなどの最新モデルを使用したい場合に必要です。platform.openai.com から取得してください。
+　gpt-5やgpt-5.4-miniなどの最新モデルを使用したい場合に必要です。platform.openai.com から取得してください。
 ・VOICEVOX (任意)
 　日本語の高品質な読み上げを行う場合に必要です。別途インストールが必要です。
 ・Ollama (任意)

@@ -283,8 +283,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     openai_key_entry = tk.Entry(openai_frame, width=50, show="*")
     openai_key_entry.insert(0, config.get("OPENAI_API_KEY", ""))
     openai_key_entry.pack(pady=2)
-    gpt_models = ["gpt-5", "gpt-5-mini", "gpt-5.2", "gpt-5.4"]
-    gpt_model_var = tk.StringVar(openai_frame, config.get("MODEL_ID_GPT", "gpt-5"))
+    gpt_models = ["gpt-5.4-nano", "gpt-5.4-mini", "gpt-5", "gpt-5.4"]
+    gpt_model_var = tk.StringVar(openai_frame, config.get("MODEL_ID_GPT", "gpt-5.4-mini"))
     tk.OptionMenu(openai_frame, gpt_model_var, *gpt_models).pack(pady=2)
 
     # Llama (Ollama) Frame
@@ -679,7 +679,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
             models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite-preview（中）"]
         elif provider == "openai":
             # 2/13に終了する旧モデルを排除し、あなたが最適化した最新モデルのみを配置
-            models = ["gpt-5", "gpt-5-mini", "gpt-5.2", "gpt-5.4"]
+            models = ["gpt-5.4-nano", "gpt-5.4-mini", "gpt-5", "gpt-5.4"]
         else: # local
             # APIから取得した最新のOllamaリストを使用
             models = ollama_dynamic_models.copy() if ollama_dynamic_models else ["gemma3:4b", "gemma3:1b", "gemma3:12b", "gemma2:9b", "llama3.2:3b"]
