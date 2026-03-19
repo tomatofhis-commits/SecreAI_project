@@ -14,7 +14,7 @@ DEFAULT_CONFIG = {
     "TAVILY_API_KEY": "",
     "MODEL_ID": "gemini-2.0-flash",
     "MODEL_ID_PRO": "gemini-2.0-flash-thinking-exp",
-    "MODEL_ID_GPT": "gpt-5",
+    "MODEL_ID_GPT": "gpt-5.4-mini",
     "OLLAMA_URL": "http://localhost:11434/v1",
     "MODEL_ID_LOCAL": "gemma3:12b",
     "MODEL_ID_SUMMARY": "gemma3:4b",
@@ -94,6 +94,13 @@ def migrate_config(config):
                 config[k] = v
         
         migrated = True
+
+    # 廃止モデルの自動置換 (v1.0.6)
+    _model_renames = {"gpt-5-mini": "gpt-5.4-mini", "gpt-5.2": "gpt-5.4"}
+    for _key in ("MODEL_ID_GPT", "DB_MODEL_ID"):
+        if config.get(_key) in _model_renames:
+            config[_key] = _model_renames[config[_key]]
+            migrated = True
 
     # 常に最新のデフォルト値で不足しているキーを補完する
     for key, default_value in DEFAULT_CONFIG.items():

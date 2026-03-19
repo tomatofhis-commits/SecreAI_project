@@ -1,3 +1,7 @@
+ver1.0.6
+・OpenAIモデルのラインナップを最新化：gpt-5-miniをgpt-5.4-miniに、gpt-5.2をgpt-5.4に置き換え、新たにgpt-5.4-nanoを追加
+・既存ユーザー向けに廃止モデル（gpt-5-mini, gpt-5.2）の自動マイグレーション機能を追加
+
 ver1.0.5
 ・Geminiの最新モデル「gemini-3.1-flash-lite-preview」を追加し、専用の思考レベル設定（最小/低/中/高）を導入
 ・DB記憶整理用モデルの選択肢に「gemini-3.1-flash-lite-preview（中）」を追加
