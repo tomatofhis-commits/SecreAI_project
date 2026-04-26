@@ -63,3 +63,6 @@ Ollama_*.bat
 lookdb.py
 日本語のリスト.txt
 game_ai.py
+
+# Backups
+* - コピー/
