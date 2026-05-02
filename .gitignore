@@ -33,19 +33,17 @@ desktop.ini
 
 # SecreAI specific
 memory_db/
-data/chat_history.json
-data/wav/
-data/temp_ss.png
-data/temp_query_image.png
-data/api_cache/
-data/search_cache/
-data/tags_counter.json
-data/current_tags.json
-data/feedback_memory.json
-config/config.json
+data/
+config/
+tests/
+scratch/
+translation_cache.json
+更新計画.txt
 stop.flag
 *.wav
 *.mp3
+*.log
+nuitka-crash-report.xml
 
 # Backup
 scripts - コピー/
