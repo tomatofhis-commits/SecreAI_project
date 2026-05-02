@@ -1,0 +1,10 @@
+__pycache__/
+venv/
+.env
+.idea/
+.vscode/
+*.pyc
+main.dist/
+*.json
+!config.json
+!translation_cache.json
