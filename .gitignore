@@ -62,5 +62,21 @@ lookdb.py
 日本語のリスト.txt
 game_ai.py
 
+# RTtranslator specific
+RTtranslator/.git
+RTtranslator/dist/
+RTtranslator/main.dist/
+RTtranslator/debug_build/
+RTtranslator/scratch/
+RTtranslator/config.json
+RTtranslator/log.json
+RTtranslator/translation_cache.json
+RTtranslator/更新計画.txt
+RTtranslator/test_ocr.py
+RTtranslator/__pycache__/
+RTtranslator/build.bat
+RTtranslator/build_debug.bat
+RTtranslator/run_builds.ps1
+
 # Backups
 * - コピー/
