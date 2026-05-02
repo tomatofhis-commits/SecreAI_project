@@ -64,7 +64,24 @@ DEFAULT_CONFIG = {
         "voice_mode": "ctrl+alt+v",
         "vision_mode": "ctrl+alt+s",
         "stop_ai": "ctrl+alt+x"
-    }
+    },
+    # --- RTtranslator 統合設定 (rtt_ プレフィックス) ---
+    "rtt_enabled": False,             # RTT機能を利用するか
+    "rtt_ollama_model": "translategemma:4b",
+    "rtt_target_language": "ja",      # 翻訳先言語コード
+    "rtt_source_language": "auto",    # 翻訳元言語コード（auto推奨）
+    "rtt_ocr_languages": ["en-US", "ru-RU", "ko-KR", "zh-Hans"],
+    "rtt_paddle_gpu_index": 0,        # 使用GPU番号（-1=CPU）
+    "rtt_paddle_gpu_mem_mb": 1024,
+    "rtt_paddle_language": "japan",
+    "rtt_capture_mode": "high",       # "high"=1秒 / "low"=2.5秒
+    "rtt_ocr_skip_sensitivity": 800,
+    "rtt_cpu_threads": 0,             # 0=自動（全コア）/ 1〜N=制限
+    "rtt_ocr_thread_limit_percent": 100,
+    "rtt_font_size": 16,
+    "rtt_overlay_opacity": 0.85,
+    "rtt_overlay_bg_color": "#1a1a2e",
+    "rtt_overlay_text_color": "#e0e0e0"
 }
 
 def migrate_config(config):

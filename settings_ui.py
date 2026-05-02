@@ -96,6 +96,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     tab_search = tk.Frame(notebook)
     tab_database = tk.Frame(notebook)
     tab_extensions = tk.Frame(notebook)
+    tab_rtt = tk.Frame(notebook)
 
     notebook.add(tab_general, text=l_set.get("tab_general", "General"))
     notebook.add(tab_audio_view, text=l_set.get("tab_audio_view", "View / Audio"))
@@ -103,6 +104,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     notebook.add(tab_search, text=l_set.get("tab_search", "Search"))
     notebook.add(tab_database, text=l_set.get("tab_database", "Database"))
     notebook.add(tab_extensions, text=l_set.get("tab_extensions", "Extensions"))
+    notebook.add(tab_rtt, text=l_set.get("tab_rtt", "RTトランスレーター"))
 
     def add_label(parent_widget, text, pady=(10,0)):
         lbl = tk.Label(parent_widget, text=text)
@@ -121,6 +123,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         notebook.tab(3, text=l_set.get("tab_search", "Search"))
         notebook.tab(4, text=l_set.get("tab_database", "Database"))
         notebook.tab(5, text=l_set.get("tab_extensions", "Extensions"))
+        notebook.tab(6, text=l_set.get("tab_rtt", "RTトランスレーター"))
 
         # 全般設定
         lbl_ai_provider.config(text=l_set.get("label_ai_provider", "AI Provider:"))
@@ -294,7 +297,11 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     
     # 前回取得したキャッシュモデルを使用（なければデフォルト）
     ollama_url_current = config.get("OLLAMA_URL", "http://localhost:11434/v1")
-    ollama_dynamic_models = config.get("CACHED_OLLAMA_MODELS", [])
+    # 本体側で取得済みのキャッシュを優先
+    ollama_dynamic_models = getattr(parent, "cached_ollama_models", [])
+    if not ollama_dynamic_models:
+        ollama_dynamic_models = config.get("CACHED_OLLAMA_MODELS", [])
+    
     if not ollama_dynamic_models:
         ollama_dynamic_models = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:1b", "gemma3:4b", "gemma3:12b"]
     
@@ -524,12 +531,16 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     btn_browse.pack(side="left", padx=5)
 
     lbl_vv_speaker = add_label(audio_group, l_set.get("voicevox_speaker", "Speaker:"), pady=0)
-    speaker_map = {"ずんだもん": 3, "四国めたん": 2, "春日部つむぎ": 8, "雨晴はう": 10}
-    try:
-        resp = requests.get("http://127.0.0.1:50021/speakers", timeout=0.5)
-        if resp.status_code == 200:
-            speaker_map = {s['name']: s['styles'][0]['id'] for s in resp.json()}
-    except: pass
+    # 本体側で取得済みのキャッシュを使用
+    speaker_map = getattr(parent, "cached_speakers", {"ずんだもん": 3, "四国めたん": 2, "春日部つむぎ": 8, "雨晴はう": 10})
+    
+    # フォールバック取得（キャッシュが空の場合のみ）
+    if len(speaker_map) <= 4:
+        try:
+            resp = requests.get("http://127.0.0.1:50021/speakers", timeout=0.5)
+            if resp.status_code == 200:
+                speaker_map = {s['name']: s['styles'][0]['id'] for s in resp.json()}
+        except: pass
     speaker_var = tk.StringVar(audio_group, config.get("SPEAKER_NAME", "ずんだもん"))
     tk.OptionMenu(audio_group, speaker_var, *speaker_map.keys()).pack(pady=5)
 
@@ -789,10 +800,215 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     )
     lbl_subtitle_ext.pack(pady=10, anchor="w")
 
+    # ================================================================
+    # --- RTトランスレーター 設定タブ ---
+    # ================================================================
+    import os as _os
+
+    rtt_canvas = tk.Canvas(tab_rtt, highlightthickness=0)
+    rtt_vsb = tk.Scrollbar(tab_rtt, orient="vertical", command=rtt_canvas.yview)
+    rtt_canvas.configure(yscrollcommand=rtt_vsb.set)
+    rtt_vsb.pack(side="right", fill="y")
+    rtt_canvas.pack(side="left", fill="both", expand=True)
+    rtt_scroll_frame = tk.Frame(rtt_canvas)
+    rtt_scroll_win = rtt_canvas.create_window((0, 0), window=rtt_scroll_frame, anchor="nw")
+    rtt_scroll_frame.bind("<Configure>", lambda e: rtt_canvas.configure(scrollregion=rtt_canvas.bbox("all")))
+    rtt_canvas.bind("<Configure>", lambda e: rtt_canvas.itemconfig(rtt_scroll_win, width=e.width))
+
+    # ── Ollama 翻訳エンジン設定グループ ──
+    rtt_ollama_group = tk.LabelFrame(rtt_scroll_frame, text=l_set.get("rtt_group_ollama", " Ollama 翻訳エンジン設定 "))
+    rtt_ollama_group.pack(fill="x", padx=8, pady=5)
+
+    tk.Label(rtt_ollama_group, text=l_set.get("rtt_label_model", "使用モデル:"), anchor="w").grid(row=0, column=0, sticky="w", padx=8, pady=4)
+    rtt_ollama_models_default = config.get("CACHED_OLLAMA_MODELS", ["translategemma:4b"])
+    rtt_model_var = tk.StringVar(value=config.get("rtt_ollama_model", "translategemma:4b"))
+    rtt_model_menu = tk.OptionMenu(rtt_ollama_group, rtt_model_var, *rtt_ollama_models_default)
+    rtt_model_menu.grid(row=0, column=1, sticky="ew", padx=8, pady=4)
+
+    def fetch_rtt_ollama_models():
+        ollama_url = config.get("OLLAMA_URL", "http://localhost:11434")
+        models = get_ollama_models(ollama_url)
+        menu = rtt_model_menu["menu"]
+        menu.delete(0, "end")
+        for m_name in models:
+            menu.add_command(label=m_name, command=lambda v=m_name: rtt_model_var.set(v))
+        if models:
+            rtt_model_var.set(models[0] if rtt_model_var.get() not in models else rtt_model_var.get())
+
+    tk.Button(rtt_ollama_group, text=l_set.get("btn_fetch_ollama", "モデルリストを取得"),
+              command=lambda: threading.Thread(target=fetch_rtt_ollama_models, daemon=True).start()
+              ).grid(row=0, column=2, padx=8, pady=4)
+
+    tk.Label(rtt_ollama_group, text="※ OllamaのURLは「全般設定」タブで変更できます。", fg="gray",
+             font=("", 9)).grid(row=1, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 6))
+    rtt_ollama_group.columnconfigure(1, weight=1)
+
+    # ── 翻訳先言語グループ ──
+    rtt_lang_group = tk.LabelFrame(rtt_scroll_frame, text=l_set.get("rtt_group_lang", " 翻訳先言語 "))
+    rtt_lang_group.pack(fill="x", padx=8, pady=5)
+
+    rtt_lang_map = {
+        "日本語": "ja", "English": "en", "Français": "fr", "Русский": "ru",
+        "中文(简体)": "zh-CN", "한국어": "ko", "Español": "es",
+        "Português": "pt", "Deutsch": "de", "Italiano": "it"
+    }
+    rtt_lang_map_rev = {v: k for k, v in rtt_lang_map.items()}
+    saved_rtt_lang = config.get("rtt_target_language", "ja")
+    rtt_lang_var = tk.StringVar(value=rtt_lang_map_rev.get(saved_rtt_lang, "日本語"))
+    tk.OptionMenu(rtt_lang_group, rtt_lang_var, *rtt_lang_map.keys()).pack(side="left", padx=8, pady=6)
+
+    # ── OCR読み取り言語グループ（2段レイアウト）──
+    rtt_ocr_group = tk.LabelFrame(rtt_scroll_frame, text=l_set.get("rtt_group_ocr_lang", " OCR読み取り言語 (WinRT) "))
+    rtt_ocr_group.pack(fill="x", padx=8, pady=5)
+
+    # 1段目: 英語・日本語
+    _OCR_ROW0 = [("英語 (en-US)", "en-US"), ("日本語 (ja-JP)", "ja-JP")]
+    # 2段目: ロシア語・韓国語・中国語
+    _OCR_ROW1 = [("ロシア語 (ru-RU)", "ru-RU"), ("韓国語 (ko-KR)", "ko-KR"), ("中国語 (zh-Hans)", "zh-Hans")]
+    ALL_RTT_OCR_LANGS = _OCR_ROW0 + _OCR_ROW1
+
+    saved_ocr_langs = set(config.get("rtt_ocr_languages", ["en-US", "ru-RU", "ko-KR", "zh-Hans"]))
+    rtt_ocr_lang_cbs = {}
+    for col_idx, (lbl_text, tag) in enumerate(_OCR_ROW0):
+        var = tk.BooleanVar(value=tag in saved_ocr_langs)
+        tk.Checkbutton(rtt_ocr_group, text=lbl_text, variable=var).grid(
+            row=0, column=col_idx, sticky="w", padx=6, pady=(4, 0))
+        rtt_ocr_lang_cbs[tag] = var
+    for col_idx, (lbl_text, tag) in enumerate(_OCR_ROW1):
+        var = tk.BooleanVar(value=tag in saved_ocr_langs)
+        tk.Checkbutton(rtt_ocr_group, text=lbl_text, variable=var).grid(
+            row=1, column=col_idx, sticky="w", padx=6, pady=(0, 4))
+        rtt_ocr_lang_cbs[tag] = var
+
+    # ── GPU / CPU設定グループ ──
+    rtt_gpu_group = tk.LabelFrame(rtt_scroll_frame, text=l_set.get("rtt_group_gpu", " GPU / CPU 設定 "))
+    rtt_gpu_group.pack(fill="x", padx=8, pady=5)
+
+    # 実際のGPUをwmic/PowerShellで取得
+    def _detect_gpus():
+        """システムのGPU名一覧を取得する。wmic → PowerShell の順で試みる。"""
+        # 本体が取得済みのキャッシュがあればそれを使用（高速化）
+        if hasattr(parent, "cached_gpus") and parent.cached_gpus:
+            return parent.cached_gpus
+
+        import subprocess as _sp
+
+        def _parse_names(text):
+            return [l.strip() for l in text.splitlines()
+                    if l.strip() and l.strip().lower() not in ("name", "")]
+
+        # 方法1: wmic (Windows 10以前)
+        try:
+            r = _sp.run(
+                ["wmic", "path", "win32_VideoController", "get", "name"],
+                capture_output=True, text=True, timeout=5
+            )
+            names = _parse_names(r.stdout)
+            if names:
+                return names
+        except Exception:
+            pass
+
+        # 方法2: PowerShell Get-CimInstance (Windows 11 / wmic非搭載環境)
+        try:
+            r = _sp.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"],
+                capture_output=True, text=True, timeout=8
+            )
+            names = _parse_names(r.stdout)
+            if names:
+                return names
+        except Exception:
+            pass
+
+        return []
+
+    _detected_gpus = _detect_gpus()
+    # GPU選択肢: 実GPUをインデックス付きで並べ、最後に「CPUのみ」を追加
+    if _detected_gpus:
+        _gpu_opts = [f"GPU {i}: {name}" for i, name in enumerate(_detected_gpus)] + ["CPU のみ (-1)"]
+        _gpu_val_map = {f"GPU {i}: {name}": i for i, name in enumerate(_detected_gpus)}
+        _gpu_val_map["CPU のみ (-1)"] = -1
+    else:
+        _gpu_opts = ["GPU 0 (デフォルト)", "CPU のみ (-1)"]
+        _gpu_val_map = {"GPU 0 (デフォルト)": 0, "CPU のみ (-1)": -1}
+    _gpu_val_map_rev = {v: k for k, v in _gpu_val_map.items()}
+
+    # 使用GPU選択
+    tk.Label(rtt_gpu_group, text=l_set.get("rtt_label_gpu", "使用GPU:"), anchor="w").grid(row=0, column=0, sticky="w", padx=8, pady=4)
+    saved_gpu_idx = config.get("rtt_paddle_gpu_index", 0)
+    rtt_gpu_var = tk.StringVar(value=_gpu_val_map_rev.get(saved_gpu_idx, _gpu_opts[0]))
+    tk.OptionMenu(rtt_gpu_group, rtt_gpu_var, *_gpu_opts).grid(row=0, column=1, sticky="w", padx=8, pady=4)
+
+    # VRAMリミット
+    tk.Label(rtt_gpu_group, text=l_set.get("rtt_label_vram", "VRAMリミット (MB):"), anchor="w").grid(row=1, column=0, sticky="w", padx=8, pady=4)
+    rtt_vram_var = tk.StringVar(value=str(config.get("rtt_paddle_gpu_mem_mb", 1024)))
+    tk.Spinbox(rtt_gpu_group, from_=256, to=8192, increment=256, textvariable=rtt_vram_var, width=8).grid(row=1, column=1, sticky="w", padx=8, pady=4)
+
+    # CPUスレッド制限 (RTT本体に合わせて％選択方式に変更)
+    tk.Label(rtt_gpu_group, text=l_set.get("rtt_label_cpu", "CPU使用制限 (パーセント):"), anchor="w").grid(row=2, column=0, sticky="w", padx=8, pady=4)
+    _cpu_pct_opts = ["25%", "50%", "75%", "100%"]
+    saved_rtt_cpu_pct = config.get("rtt_ocr_thread_limit_percent", 100)
+    # 値がリストにない場合のフォールバック
+    if saved_rtt_cpu_pct not in [25, 50, 75, 100]:
+        saved_rtt_cpu_pct = 100
+    rtt_cpu_pct_var = tk.StringVar(value=f"{saved_rtt_cpu_pct}%")
+    tk.OptionMenu(rtt_gpu_group, rtt_cpu_pct_var, *_cpu_pct_opts).grid(row=2, column=1, sticky="w", padx=8, pady=4)
+
+    # Paddle専門言語
+    tk.Label(rtt_gpu_group, text=l_set.get("rtt_label_paddle_lang", "Paddle専門言語:"), anchor="w").grid(row=3, column=0, sticky="w", padx=8, pady=4)
+    rtt_paddle_lang_map = {
+        "日本語 (JA/EN)": "japan", "英語 (EN)": "en", "韓国語 (KO)": "korean",
+        "中国語 (ZH)": "ch", "ロシア語 (RU)": "cyrillic", "欧州諸語 (Latin)": "latin"
+    }
+    rtt_paddle_lang_map_rev = {v: k for k, v in rtt_paddle_lang_map.items()}
+    saved_p_lang = config.get("rtt_paddle_language", "japan")
+    rtt_paddle_lang_var = tk.StringVar(value=rtt_paddle_lang_map_rev.get(saved_p_lang, "日本語 (JA/EN)"))
+    tk.OptionMenu(rtt_gpu_group, rtt_paddle_lang_var, *rtt_paddle_lang_map.keys()).grid(row=3, column=1, sticky="w", padx=8, pady=4)
+
+    # ── キャプチャ / パフォーマンスグループ ──
+    rtt_perf_group = tk.LabelFrame(rtt_scroll_frame, text=l_set.get("rtt_group_perf", " キャプチャ / パフォーマンス "))
+    rtt_perf_group.pack(fill="x", padx=8, pady=5)
+
+    # キャプチャモード
+    tk.Label(rtt_perf_group, text=l_set.get("rtt_label_capture", "キャプチャモード:"), anchor="w").grid(row=0, column=0, sticky="w", padx=8, pady=4)
+    rtt_capture_map = {"High (1秒・高反応)": "high", "Low (2.5秒・省電力)": "low"}
+    rtt_capture_map_rev = {v: k for k, v in rtt_capture_map.items()}
+    saved_capture = config.get("rtt_capture_mode", "high")
+    rtt_capture_var = tk.StringVar(value=rtt_capture_map_rev.get(saved_capture, "High (1秒・高反応)"))
+    tk.OptionMenu(rtt_perf_group, rtt_capture_var, *rtt_capture_map.keys()).grid(row=0, column=1, sticky="w", padx=8, pady=4)
+
+    # 処理の反応感度スライダー（直感的なラベル）
+    tk.Label(rtt_perf_group, text=l_set.get("rtt_label_sens", "処理の反応感度:"), anchor="w").grid(row=1, column=0, sticky="w", padx=8, pady=4)
+    _SENS_LABELS = ["最低", "2", "3", "4", "5", "最大"]
+    _SENS_VALUES = [1200, 1000, 800, 600, 400, 200]   # 内部値（数値が小さいほど高感度）
+    saved_sens = config.get("rtt_ocr_skip_sensitivity", 800)
+    saved_sens_idx = _SENS_VALUES.index(saved_sens) if saved_sens in _SENS_VALUES else 2
+
+    rtt_sens_frame = tk.Frame(rtt_perf_group)
+    rtt_sens_frame.grid(row=1, column=1, columnspan=2, sticky="w", padx=8)
+
+    rtt_sens_slider = tk.Scale(rtt_sens_frame, from_=0, to=5, orient="horizontal",
+                               resolution=1, showvalue=False, length=200)
+    rtt_sens_slider.set(saved_sens_idx)
+    rtt_sens_slider.pack(side="left")
+    rtt_sens_lbl = tk.Label(rtt_sens_frame, text=_SENS_LABELS[saved_sens_idx], width=4, anchor="w")
+    rtt_sens_lbl.pack(side="left", padx=4)
+    rtt_sens_slider.config(command=lambda v: rtt_sens_lbl.config(text=_SENS_LABELS[int(v)]))
+
+    # スライダー下にラベル目盛り表示
+    rtt_tick_frame = tk.Frame(rtt_perf_group)
+    rtt_tick_frame.grid(row=2, column=1, columnspan=2, sticky="w", padx=8)
+    for tick_lbl in _SENS_LABELS:
+        tk.Label(rtt_tick_frame, text=tick_lbl, font=("", 8), fg="gray", width=5).pack(side="left")
+
+
 # --- 保存処理 ---
 # （以下、save_all関数の内容およびSave & Closeボタンのコードは一切変更ありません。元のコードを維持してください）
 
     # --- 保存処理 ---
+
     def save_all(close_after=True, btn_ref=None):
         config["USE_INTERSECTING_AI"] = intersecting_ai_var.get() # これを追加
         config["search_switch"] = search_switch_var.get()
@@ -834,6 +1050,21 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["SEARCH_PROVIDER"] = SEARCH_OPTIONS.get(search_disp_var.get(), "tavily")
         config["TAVILY_API_KEY"] = tavily_key_entry.get()
         config["MODEL_ID_SUMMARY"] = summary_model_var.get()
+
+        # --- RTT 設定の保存 ---
+        config["rtt_ollama_model"] = rtt_model_var.get()
+        config["rtt_target_language"] = rtt_lang_map.get(rtt_lang_var.get(), "ja")
+        config["rtt_ocr_languages"] = [tag for tag, cb in rtt_ocr_lang_cbs.items() if cb.get()]
+        config["rtt_paddle_gpu_index"] = _gpu_val_map.get(rtt_gpu_var.get(), 0)
+        config["rtt_paddle_gpu_mem_mb"] = int(rtt_vram_var.get())
+        
+        # CPUスレッド制限: ％選択方式の値を保存
+        rtt_pct_val = int(rtt_cpu_pct_var.get().replace("%", ""))
+        config["rtt_ocr_thread_limit_percent"] = rtt_pct_val
+        config["rtt_cpu_threads"] = 0 # 判定強化ロジックにより、0なら％側が採用される
+        config["rtt_paddle_language"] = rtt_paddle_lang_map.get(rtt_paddle_lang_var.get(), "japan")
+        config["rtt_capture_mode"] = rtt_capture_map.get(rtt_capture_var.get(), "high")
+        config["rtt_ocr_skip_sensitivity"] = _SENS_VALUES[rtt_sens_slider.get()]
         
         val = alpha_var.get()
         config["WINDOW_ALPHA"] = val if val == "OFF" else float(val)

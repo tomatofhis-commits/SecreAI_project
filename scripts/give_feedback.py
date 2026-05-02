@@ -219,7 +219,9 @@ def main(feedback_type=None):
         feedback_type = sys.argv[1]
 
     root = get_app_root()
-    config_path = os.path.join(root, "config", "config.json")
+    config_path = os.path.join(root, "data", "config.json")
+    if not os.path.exists(config_path):
+        config_path = os.path.join(root, "config", "config.json")
     if not os.path.exists(config_path): return
 
     with open(config_path, "r", encoding="utf-8") as f:

@@ -108,7 +108,9 @@ def play_sound(notes="up"):
 # === メイン処理関数 ===
 def main(base_path=None):
     base = base_path if base_path else get_app_root()
-    config_path = os.path.join(base, "config", "config.json")
+    config_path = os.path.join(base, "data", "config.json")
+    if not os.path.exists(config_path):
+        config_path = os.path.join(base, "config", "config.json")
 
     # config_manager が正常にインポートできていれば使用、できてなければ直接読み込み
     if config_manager:

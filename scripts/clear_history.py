@@ -77,7 +77,9 @@ def play_sound(notes="up"):
 # === 2. メイン処理 ===
 def main():
     root = get_app_root()
-    config_path = os.path.join(root, "config", "config.json")
+    config_path = os.path.join(root, "data", "config.json")
+    if not os.path.exists(config_path):
+        config_path = os.path.join(root, "config", "config.json")
     if not os.path.exists(config_path): return
 
     with open(config_path, "r", encoding="utf-8") as f:

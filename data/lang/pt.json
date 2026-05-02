@@ -20,7 +20,11 @@
     "open_memory": "Gestão de Memória (Memory)",
     "restart": "Reiniciar",
     "exit": "Sair",
-    "tray_show": "Mostrar"
+    "tray_show": "Mostrar",
+    "rtt_cascade": "Tradutor RT",
+    "rtt_start": "Iniciar tradução",
+    "rtt_stop": "Parar tradução",
+    "rtt_settings": "Abrir configurações RTT"
   },
   "gui": {
     "log_header": "Transcrição da IA e Registro do Sistema",
@@ -126,7 +130,20 @@
     "extensions_group_api": " API / WebSockets ",
     "btn_fetching": "Obtendo...",
     "btn_fetch_success": "Sucesso!",
-    "btn_fetch_ollama": "Obter e atualizar modelos Ollama"
+    "btn_fetch_ollama": "Obter e atualizar modelos Ollama",
+    "tab_rtt": "Tradutor RT",
+    "rtt_group_ollama": " Motor de tradução Ollama ",
+    "rtt_label_model": "Modelo:",
+    "rtt_group_lang": " Idioma de destino ",
+    "rtt_group_ocr_lang": " Idiomas OCR (WinRT) ",
+    "rtt_group_gpu": " Configurações GPU / CPU ",
+    "rtt_label_gpu": "GPU:",
+    "rtt_label_vram": "Limite VRAM (MB):",
+    "rtt_label_cpu": "Limite de threads CPU:",
+    "rtt_label_paddle_lang": "Idioma Paddle:",
+    "rtt_group_perf": " Captura / Desempenho ",
+    "rtt_label_capture": "Modo de captura:",
+    "rtt_label_sens": "Sensibilidade de resposta:"
   },
   "log_messages": {
     "module_loaded": "Sistema: Módulo de atualização de memória carregado.",

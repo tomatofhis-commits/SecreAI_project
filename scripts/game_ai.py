@@ -221,7 +221,11 @@ except:
 
 # --- 2. 設定・履歴・コンテキスト管理 ---
 def load_config_manual(root):
-    path = os.path.join(root, "config", "config.json")
+    # SecreAI 本体が書き出す場所 (data/config.json) を優先し、
+    # 見つからなければ旧パス (config/config.json) にフォールバック
+    path = os.path.join(root, "data", "config.json")
+    if not os.path.exists(path):
+        path = os.path.join(root, "config", "config.json")
     if config_manager:
         conf = config_manager.load_config(path)
     else:
@@ -317,7 +321,9 @@ def search_long_term_memory(query, history=None, root=None, n_results=5):
 # --- 3. 検索・深掘り実行関数 ---
 def increment_tavily_count(root):
     """Tavilyの検索回数をインクリメントする。月が変わっていたらリセットする。"""
-    conf_path = os.path.join(root, "config", "config.json")
+    conf_path = os.path.join(root, "data", "config.json")
+    if not os.path.exists(conf_path):
+        conf_path = os.path.join(root, "config", "config.json")
     with file_lock:
         try:
             if config_manager:
@@ -351,7 +357,9 @@ def increment_tavily_count(root):
 
 def increment_grounding_count(root):
     """Groundingの検索回数をインクリメントする。日が変わっていたらリセットする。"""
-    conf_path = os.path.join(root, "config", "config.json")
+    conf_path = os.path.join(root, "data", "config.json")
+    if not os.path.exists(conf_path):
+        conf_path = os.path.join(root, "config", "config.json")
     with file_lock:
         try:
             if config_manager:
@@ -766,14 +774,14 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
             model_id = config.get("MODEL_ID_LOCAL", "llama3.2-vision:11b")
             messages = [{"role": "system", "content": system_instr}]
             for h in history[-10:]:
-                role = "assistant" if h.startswith("AI:") else "user"
+                h_role = "assistant" if h.startswith("AI:") else "user"
                 content = h.replace("AI:", "").replace("You: ", "").replace("あなた: ", "").strip()
-                messages.append({"role": role, "content": content})
+                messages.append({"role": h_role, "content": content})
             user_content = [{"type": "text", "text": prompt}]
             if image_bytes:
                 base64_image = base64.b64encode(image_bytes).decode('utf-8')
                 user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}})
-            messages.append({"role": role, "content": user_content})
+            messages.append({"role": "user", "content": user_content})  # 常に "user" で追加
             res = requests.post(
                 f"{url.rstrip('/')}/chat/completions",
                 json={
@@ -788,13 +796,17 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
             res.raise_for_status()
             answer_text = res.json()['choices'][0]['message']['content']
 
-        elif provider == "openai" and openai_client:
+        elif provider == "openai":
+            if not openai_client:
+                msg = log_m.get("ai_init_error", "{provider} initialization error: {e}").format(provider="OpenAI", e="APIキーが未設定またはクライアント初期化失敗")
+                send_log_to_hub(msg, is_error=True, error_code="api_key_invalid")
+                return "エラー: OpenAIクライアントが初期化されていません。APIキーを確認してください。"
             model_id = config.get("MODEL_ID_GPT", "gpt-5")
             messages = [{"role": "system", "content": system_instr}]
             for h in history[-10:]:
-                role = "assistant" if h.startswith("AI:") else "user"
+                h_role = "assistant" if h.startswith("AI:") else "user"
                 content = h.replace("AI:", "").replace("You: ", "").replace("あなた: ", "").strip()
-                messages.append({"role": role, "content": content})
+                messages.append({"role": h_role, "content": content})
             user_content = [{"type": "text", "text": prompt}]
             if image_bytes:
                 base64_image = base64.b64encode(image_bytes).decode('utf-8')
@@ -803,7 +815,11 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
             res = openai_client.chat.completions.create(model=model_id, messages=messages)
             answer_text = res.choices[0].message.content
 
-        elif gemini_client:
+        elif provider == "gemini":
+            if not gemini_client:
+                msg = log_m.get("ai_init_error", "{provider} initialization error: {e}").format(provider="Gemini", e="APIキーが未設定またはクライアント初期化失敗")
+                send_log_to_hub(msg, is_error=True, error_code="api_key_invalid")
+                return "エラー: GeminiクライアントがNullです。APIキーを設定画面で確認してください。"
             model_id = config.get("MODEL_ID", "gemini-2.5-flash")
             gemini_history = []
             for h in history[-10:]:

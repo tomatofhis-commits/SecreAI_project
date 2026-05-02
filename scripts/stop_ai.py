@@ -15,8 +15,10 @@ def load_config():
         else:
             curr_dir = script_dir
     
-    # APP_ROOT/config/config.json を見に行く
-    config_path = os.path.join(curr_dir, "config", "config.json")
+    # APP_ROOT/data/config.json を見に行く
+    config_path = os.path.join(curr_dir, "data", "config.json")
+    if not os.path.exists(config_path):
+        config_path = os.path.join(curr_dir, "config", "config.json")
     
     if not os.path.exists(config_path):
         # 予備として、このスクリプトだけ動かす場合のパス解決

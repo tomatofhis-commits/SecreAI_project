@@ -55,7 +55,7 @@ except ImportError:
 # ------------------------
 # 🔹 GLOBAL CONFIGURATION 🔹
 # ------------------------
-VERSION = "1.0.7"
+VERSION = "1.0.0"
 CONFIG_VERSION = "2.0"
 APP_NAME = f"SecreAI - NextGen {VERSION}"
 
@@ -63,7 +63,7 @@ APP_NAME = f"SecreAI - NextGen {VERSION}"
 settings_window_open = False
 main_gui = None
 APP_ROOT = base_dir # すでに取得済みの base_dir を使用
-CONFIG_PATH = os.path.join(APP_ROOT, "config", "config.json")
+CONFIG_PATH = os.path.join(APP_ROOT, "data", "config.json")
 
 def set_app_id():
     # Windows 7以降でタスクバーのアイコンを正しく表示させるためのID設定
@@ -261,9 +261,16 @@ class MainApp(ctk.CTk):
 
         ctk.set_appearance_mode("dark")
         self.protocol('WM_DELETE_WINDOW', self.withdraw)
-
         self.config_data = load_config_with_defaults()
         self.load_language()
+
+        # --- 設定画面高速化のためのキャッシュ用変数 ---
+        self.cached_gpus = []
+        self.cached_speakers = {"ずんだもん": 3, "四国めたん": 2, "春日部つむぎ": 8, "雨晴はう": 10}
+        self.cached_ollama_models = self.config_data.get("CACHED_OLLAMA_MODELS", [])
+        
+        # バックグラウンドで重い情報の取得を開始
+        threading.Thread(target=self._init_background_resources, daemon=True).start()
 
         # Session & Queue Management
         self.active_session_id = str(uuid.uuid4())
@@ -389,10 +396,48 @@ class MainApp(ctk.CTk):
         self.btn_save.configure(text=g.get("btn_quick_save", "Quick Save"))
         self.btn_advanced.configure(text=g.get("btn_open_settings", "Advanced Settings"))
 
+    def _init_background_resources(self):
+        """起動時に重いリソース（GPU, 音声合成話者, Ollamaモデル等）をバックグラウンドで取得する"""
+        import subprocess as _sp
+        
+        # 1. GPU情報の取得 (PowerShell)
+        try:
+            r = _sp.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"],
+                capture_output=True, text=True, timeout=8
+            )
+            lines = [l.strip() for l in r.stdout.splitlines() if l.strip()]
+            if lines:
+                self.cached_gpus = lines
+        except: pass
+
+        # 2. VOICEVOX 話者取得
+        try:
+            resp = requests.get("http://127.0.0.1:50021/speakers", timeout=2.0)
+            if resp.status_code == 200:
+                self.cached_speakers = {s['name']: s['styles'][0]['id'] for s in resp.json()}
+        except: pass
+
+        # 3. Ollama モデル取得 (URLが設定されている場合)
+        url = self.config_data.get("OLLAMA_URL", "http://localhost:11434/v1")
+        if url:
+            try:
+                base_url = url.split("/v1")[0].rstrip("/")
+                resp = requests.get(f"{base_url}/api/tags", timeout=3.0)
+                if resp.status_code == 200:
+                    models = [m.get("name", "") for m in resp.json().get("models", [])]
+                    if models:
+                        self.cached_ollama_models = models
+                        self.config_data["CACHED_OLLAMA_MODELS"] = models
+            except: pass
+
     def create_menu_bar(self):
         self.menubar = tk.Menu(self)
         self.config(menu=self.menubar)
         m = self.lang.get("menu", {})
+
+        # --- System メニュー ---
         system_menu = tk.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label=m.get("system_cascade", "System"), menu=system_menu)
         system_menu.add_command(label=m.get("refresh_windows", "Refresh Windows"), command=self.refresh_target_windows)
@@ -403,6 +448,24 @@ class MainApp(ctk.CTk):
         system_menu.add_separator()
         system_menu.add_command(label=m.get("exit", "Exit"), command=self.quit_app)
 
+        # --- RTトランスレーター メニュー ---
+        rtt_menu = tk.Menu(self.menubar, tearoff=0)
+        self.menubar.add_cascade(label=m.get("rtt_cascade", "RTトランスレーター"), menu=rtt_menu)
+        rtt_menu.add_command(
+            label=m.get("rtt_start", "翻訳を開始"),
+            command=self.rtt_start
+        )
+        rtt_menu.add_command(
+            label=m.get("rtt_stop", "翻訳を停止"),
+            command=self.rtt_stop
+        )
+        rtt_menu.add_separator()
+        rtt_menu.add_command(
+            label=m.get("rtt_settings", "RTT設定を開く"),
+            command=open_settings_guarded
+        )
+        self._rtt_menu = rtt_menu  # 状態更新用に保持
+
     def on_settings_saved(self, new_config):
         self.config_data = new_config
         self.load_language()
@@ -410,6 +473,7 @@ class MainApp(ctk.CTk):
         self.create_menu_bar()
         self.update_font_size(new_config.get("LOG_FONT_SIZE", 13))
         setup_hotkeys()
+        self.sync_rtt_settings()  # RTTが起動中なら設定を同期
         self.update_log_area(self.lang.get("log_messages", {}).get("settings_applied", "Settings applied."))
 
     def load_language(self):
@@ -501,10 +565,166 @@ class MainApp(ctk.CTk):
     def quit_app(self):
         try:
             stop_ai()
+            # RTTを確実に停止（API経由 + taskkill）
+            self.rtt_stop()
             if hasattr(self, 'tray_icon'): self.tray_icon.stop()
-            os.system(f"taskkill /F /PID {os.getpid()} /T")
+            
+            # 親プロセス（自身）と子プロセスをすべて確実にキル
+            import subprocess as _sp
+            _sp.run(f"taskkill /F /PID {os.getpid()} /T", shell=True, capture_output=True)
         except: pass
         finally: os._exit(0)
+
+    # --- RTtranslator プロセス管理 ---
+    def rtt_start(self):
+        """RTtranslator_core.exe をヘッドレスモードで起動する。
+        EXE が存在しない場合は Python スクリプトで代替起動する（開発・テスト用）。
+        """
+        if getattr(self, '_rtt_process', None) and self._rtt_process.poll() is None:
+            self.update_log_area("[RTT] 既に起動中です。")
+            return
+
+        # --- RTT 実行ファイルの探索 ---
+        # 1. 同一ディレクトリ (製品版レイアウト)
+        rtt_exe = os.path.join(base_dir, "RTtranslator_core.exe")
+        
+        # 2. 開発環境用の追加探索 (ビルド済み RTT が別フォルダにある場合など)
+        if not os.path.exists(rtt_exe):
+            potential_exe_paths = [
+                os.path.join(os.path.dirname(base_dir), "Real_Time_Translate", "main.dist", "RTtranslator_core.exe"),
+                os.path.join(os.path.dirname(os.path.dirname(base_dir)), "Real_Time_Translate", "main.dist", "RTtranslator_core.exe"),
+                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(base_dir))), "Real_Time_Translate", "main.dist", "RTtranslator_core.exe"),
+            ]
+            for p in potential_exe_paths:
+                if os.path.exists(p):
+                    rtt_exe = p
+                    break
+
+        # --- フォールバック: EXE がなければ Python スクリプトで起動 (開発用) ---
+        rtt_script = None
+        rtt_script_dir = None
+        if not os.path.exists(rtt_exe):
+            search_dirs = [
+                os.path.join(os.path.dirname(base_dir), "Real_Time_Translate"),
+                os.path.join(os.path.dirname(os.path.dirname(base_dir)), "Real_Time_Translate"),
+                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(base_dir))), "Real_Time_Translate"),
+            ]
+            for d in search_dirs:
+                p = os.path.join(d, "main.py")
+                if os.path.exists(p):
+                    rtt_script = p
+                    rtt_script_dir = d
+                    break
+            
+            if rtt_script:
+                self.update_log_area("[RTT] EXEが見つかりません。Pythonスクリプトで代替起動します（開発モード）。")
+                rtt_exe = None  # フォールバック実行フラグ
+            else:
+                self.update_log_area(
+                    f"[RTT] 実行ファイルが見つかりません: {os.path.join(base_dir, 'RTtranslator_core.exe')}\n"
+                    f"[RTT] 開発用スクリプトも見つかりませんでした。", is_error=True)
+                return
+
+        # SecreAI の config を rtt_ キーを除去した形で RTT 用設定ファイルに書き出す
+        rtt_config_path = os.path.join(base_dir, "data", "rtt_config.json")
+        rtt_cfg = self._build_rtt_config()
+        try:
+            os.makedirs(os.path.dirname(rtt_config_path), exist_ok=True)
+            with open(rtt_config_path, "w", encoding="utf-8") as f:
+                json.dump(rtt_cfg, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            self.update_log_area(f"[RTT] 設定ファイルの書き出しに失敗しました: {e}", is_error=True)
+            return
+
+        try:
+            if rtt_exe:
+                # 通常: ビルド済み EXE を起動
+                cmd = [rtt_exe, "--headless", "--config", rtt_config_path]
+            else:
+                # フォールバック: Python スクリプトを直接起動
+                cmd = [sys.executable, rtt_script, "--headless", "--config", rtt_config_path]
+
+            self._rtt_process = subprocess.Popen(
+                cmd,
+                creationflags=0x08000000,  # CREATE_NO_WINDOW
+                cwd=rtt_script_dir if not rtt_exe else base_dir
+            )
+            self.update_log_area("[RTT] リアルタイム翻訳を開始しました。")
+        except Exception as e:
+            self.update_log_area(f"[RTT] 起動に失敗しました: {e}", is_error=True)
+
+    def sync_rtt_settings(self):
+        """起動中の RTtranslator に対し、最新の設定を API 経由で送信して同期する。"""
+        if not getattr(self, '_rtt_process', None) or self._rtt_process.poll() is not None:
+            return
+        
+        def _sync():
+            try:
+                import requests as _req
+                rtt_cfg = self._build_rtt_config()
+                # ポート 5001 の RTT API へ設定を送信
+                resp = _req.post("http://localhost:5001/api/update_config", json=rtt_cfg, timeout=3)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    # RTT 側からの詳細なステータスチェックも兼ねる
+                    status_resp = _req.get("http://localhost:5001/api/status", timeout=2)
+                    if status_resp.status_code == 200:
+                        s_data = status_resp.json()
+                        err = s_data.get("error", "")
+                        if err:
+                            self.update_log_area(f"[RTT] Ollama接続エラー発生中: {err}", is_error=True)
+                        else:
+                            self.update_log_area("[RTT] 設定を同期しました。")
+            except Exception as e:
+                # 起動直後などでまだ API が立ち上がっていない場合は無視
+                pass
+        
+        threading.Thread(target=_sync, daemon=True).start()
+
+    def rtt_stop(self):
+        """起動中の RTtranslator プロセスを停止する。"""
+        proc = getattr(self, '_rtt_process', None)
+        if proc is None or proc.poll() is not None:
+            return  # 起動していない場合は何もしない
+        try:
+            # まず Flask API で停止を試みる（graceful shutdown）
+            import requests as _req
+            _req.post("http://localhost:5001/api/translate", timeout=2)
+        except Exception:
+            pass
+        try:
+            proc.terminate()
+            proc.wait(timeout=3)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        self._rtt_process = None
+        self.update_log_area("[RTT] リアルタイム翻訳を停止しました。")
+
+    def _build_rtt_config(self) -> dict:
+        """SecreAI の config_data から RTT 用設定を抽出・生成する。"""
+        # 1. デフォルト値のセット
+        rtt_cfg = {
+            "target_window_title": self.config_data.get("TARGET_GAME_TITLE", ""),
+            "target_language": self.config_data.get("rtt_target_language", "ja"),
+            "ollama_url": self.config_data.get("OLLAMA_URL", "http://localhost:11434/v1"),
+            "ollama_model": self.config_data.get("rtt_ollama_model", "translategemma:4b"),
+            "ocr_engine_mode": "dual_scout_hybrid"
+        }
+        
+        # 2. rtt_ プレフィックスの設定をマージ（キーは小文字化して統一）
+        for k, v in self.config_data.items():
+            if k.startswith("rtt_"):
+                key = k[4:].lower()
+                rtt_cfg[key] = v
+        
+        # 3. OLLAMA_URL は全般設定の値を強制的に優先させる（不整合防止）
+        ollama_url = self.config_data.get("OLLAMA_URL", "http://localhost:11434/v1")
+        rtt_cfg["ollama_url"] = ollama_url
+        
+        return rtt_cfg
 
     def refresh_target_windows(self):
         new_list = self.get_windows()
@@ -629,6 +849,28 @@ class MainApp(ctk.CTk):
                 except: pass
             
             tk.Message(top, text=text, fg='white', bg='black', font=('MS Gothic', 12), width=w-20).pack(padx=10, pady=10)
+            
+            # --- Win32 拡張スタイルの適用 ---
+            # ウィンドウが描画されてから hwnd を取得する必要があるため after(10) で遅延実行
+            def _apply_win32_style():
+                try:
+                    import ctypes
+                    hwnd = ctypes.windll.user32.FindWindowW(None, top.title() or None)
+                    # Toplevel の HWND を winfo_id() で確実に取得
+                    hwnd = top.winfo_id()
+                    GWL_EXSTYLE    = -20
+                    WS_EX_LAYERED      = 0x00080000  # 透明度サポート（必須）
+                    WS_EX_TRANSPARENT  = 0x00000020  # クリック透過（下のウィンドウにクリックが届く）
+                    WS_EX_TOOLWINDOW   = 0x00000080  # タスクバー非表示・スクリーンキャプチャ対象外
+                    WS_EX_NOACTIVATE   = 0x08000000  # フォーカスを奪わない
+                    
+                    current = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+                    new_style = current | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+                    ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, new_style)
+                except Exception as e:
+                    print(f"[Overlay] Win32スタイル適用エラー: {e}")
+            
+            top.after(10, _apply_win32_style)
             
             # Auto close
             top.after(int(display_time * 1000), lambda: top.destroy() if top.winfo_exists() else None)

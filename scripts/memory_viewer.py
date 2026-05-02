@@ -30,7 +30,9 @@ class MemoryViewer:
         self.config = config
         self.base_dir = get_app_root()
         self.db_path = os.path.join(self.base_dir, "memory_db")
-        self.config_path = os.path.join(self.base_dir, "config", "config.json")
+        self.config_path = os.path.join(self.base_dir, "data", "config.json")
+        if not os.path.exists(self.config_path):
+            self.config_path = os.path.join(self.base_dir, "config", "config.json")
         
         # 言語データ取得
         self.l_set = parent.lang.get("settings", {})
