@@ -20,7 +20,11 @@
     "open_memory": "Управление памятью (Memory)",
     "restart": "Перезагрузить",
     "exit": "Выход",
-    "tray_show": "Показать"
+    "tray_show": "Показать",
+    "rtt_cascade": "RT-переводчик",
+    "rtt_start": "Начать перевод",
+    "rtt_stop": "Остановить перевод",
+    "rtt_settings": "Открыть настройки RTT"
   },
   "gui": {
     "log_header": "Транскрипция ИИ и системный журнал",
@@ -126,7 +130,20 @@
     "extensions_group_api": " API / WebSockets ",
     "btn_fetching": "Получение...",
     "btn_fetch_success": "Успешно!",
-    "btn_fetch_ollama": "Получить и обновить модели Ollama"
+    "btn_fetch_ollama": "Получить и обновить модели Ollama",
+    "tab_rtt": "RT-переводчик",
+    "rtt_group_ollama": " Движок перевода Ollama ",
+    "rtt_label_model": "Модель:",
+    "rtt_group_lang": " Целевой язык ",
+    "rtt_group_ocr_lang": " Языки OCR (WinRT) ",
+    "rtt_group_gpu": " Настройки GPU / CPU ",
+    "rtt_label_gpu": "GPU:",
+    "rtt_label_vram": "Лимит VRAM (МБ):",
+    "rtt_label_cpu": "Лимит потоков CPU:",
+    "rtt_label_paddle_lang": "Язык Paddle:",
+    "rtt_group_perf": " Захват / Производительность ",
+    "rtt_label_capture": "Режим захвата:",
+    "rtt_label_sens": "Чувствительность реакции:"
   },
   "log_messages": {
     "module_loaded": "Система: Модуль обновления памяти загружен.",

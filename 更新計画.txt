@@ -1,0 +1,33 @@
+D:\Real_Time_Translate
+こちらのフォルダで作られているRTtranslatorの機能を「ハイブリッド統合方式」でSecreAIに組み込む。
+
+【基本コンセプト】
+・技術的衝突（PyQt6 vs tkinter）を避けるため、RTtranslatorは「別プロセス（EXE）」として動作させる。
+・ユーザー体験は「完全統合」を目指し、設定UIと言語選択、インストーラーを一つにまとめる。
+
+【実装計画】
+
+1. 設定UIの統合（SecreAI側の改修）
+   ・SecreAIの拡張設定に「翻訳 (RTT)」タブを新設する。
+   ・RTtranslatorの全設定項目（OCR言語、GPU/VRAM設定、感度、キャプチャモード等）をSecreAIのUI（tkinter）で作成する。
+   ・設定値は SecreAI の config.json 内に「rtt_」プレフィックスを付けて一括管理する。
+
+2. 言語選択の同期
+   ・SecreAIの言語設定を変更した際、RTtranslatorの翻訳先言語も自動で連動するように処理する。
+
+3. メニューバーと実行制御
+   ・SecreAIのメニューバーに「RTトランスレーター」項目を追加。
+   ・「開始」：RTtranslator.exe を非表示（設定画面なし）のオーバーレイモードで subprocess 起動する。
+   ・「停止」：API通信（localhost:5001）またはタスク終了で停止させる。
+   ・「設定」：SecreAI側の設定タブへ誘導する。
+
+4. 通信と同期
+   ・SecreAI側で設定を変更した際、起動中のRTtranslatorへAPI経由で設定変更を即時通知し、再起動なしで反映させる。
+   ・Stream Deck 等からの既存の API 操作（/api/translate）も維持する。
+
+5. ビルドとパッケージング
+   ・RTtranslator を Nuitka で単体 EXE 化（RTtranslator_core.exe）する。
+   ・SecreAI の Inno Setup スクリプトを修正し、コア EXE と必要なモデルファイルを一つのインストーラーに同梱する。
+
+6. 多言語化
+   ・RTT用の全UIテキストを SecreAI の各言語ファイル（ja.json, en.json等）に統合し、10言語対応させる。

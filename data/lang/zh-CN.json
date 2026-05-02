@@ -20,7 +20,11 @@
     "open_memory": "记忆管理 (Memory)",
     "restart": "重启",
     "exit": "退出",
-    "tray_show": "显示"
+    "tray_show": "显示",
+    "rtt_cascade": "实时翻译器",
+    "rtt_start": "开始翻译",
+    "rtt_stop": "停止翻译",
+    "rtt_settings": "打开RTT设置"
   },
   "gui": {
     "log_header": "AI 转录 & 系统日志",
@@ -126,7 +130,20 @@
     "extensions_group_api": " API / WebSockets ",
     "btn_fetching": "获取中...",
     "btn_fetch_success": "获取成功！",
-    "btn_fetch_ollama": "获取并更新 Ollama 模型"
+    "btn_fetch_ollama": "获取并更新 Ollama 模型",
+    "tab_rtt": "实时翻译器",
+    "rtt_group_ollama": " Ollama 翻译引擎设置 ",
+    "rtt_label_model": "使用模型:",
+    "rtt_group_lang": " 目标语言 ",
+    "rtt_group_ocr_lang": " OCR读取语言 (WinRT) ",
+    "rtt_group_gpu": " GPU / CPU 设置 ",
+    "rtt_label_gpu": "使用GPU:",
+    "rtt_label_vram": "VRAM限制 (MB):",
+    "rtt_label_cpu": "CPU线程限制:",
+    "rtt_label_paddle_lang": "Paddle专用语言:",
+    "rtt_group_perf": " 采集 / 性能 ",
+    "rtt_label_capture": "采集模式:",
+    "rtt_label_sens": "处理反应灵敏度:"
   },
   "log_messages": {
     "module_loaded": "系统: 记忆更新模块已加载。",

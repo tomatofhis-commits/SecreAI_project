@@ -20,7 +20,11 @@
     "open_memory": "記憶管理 (Memory)",
     "restart": "再起動",
     "exit": "終了",
-    "tray_show": "表示"
+    "tray_show": "表示",
+    "rtt_cascade": "RTトランスレーター",
+    "rtt_start": "翻訳を開始",
+    "rtt_stop": "翻訳を停止",
+    "rtt_settings": "RTT設定を開く"
   },
   "gui": {
     "log_header": "AI Transcript & System Log",
@@ -138,7 +142,20 @@
     "extensions_group_api": " API / WebSockets ",
     "btn_fetching": "取得中...",
     "btn_fetch_success": "取得完了！",
-    "btn_fetch_ollama": "Ollamaのモデルリストを取得・更新"
+    "btn_fetch_ollama": "Ollamaのモデルリストを取得・更新",
+    "tab_rtt": "RTトランスレーター",
+    "rtt_group_ollama": " Ollama 翻訳エンジン設定 ",
+    "rtt_label_model": "使用モデル:",
+    "rtt_group_lang": " 翻訳先言語 ",
+    "rtt_group_ocr_lang": " OCR読み取り言語 (WinRT) ",
+    "rtt_group_gpu": " GPU / CPU 設定 ",
+    "rtt_label_gpu": "使用GPU:",
+    "rtt_label_vram": "VRAMリミット (MB):",
+    "rtt_label_cpu": "CPU使用制限 (パーセント):",
+    "rtt_label_paddle_lang": "Paddle専門言語:",
+    "rtt_group_perf": " キャプチャ / パフォーマンス ",
+    "rtt_label_capture": "キャプチャモード:",
+    "rtt_label_sens": "処理の反応感度:"
   },
   "log_messages": {
     "module_loaded": "システム: 記憶更新モジュールをロードしました。",

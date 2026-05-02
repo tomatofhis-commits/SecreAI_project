@@ -28,7 +28,9 @@ def main():
     直近のAIの回答に「間違い」のマークを追記する
     """
     root = get_app_root()
-    config_path = os.path.join(root, "config", "config.json")
+    config_path = os.path.join(root, "data", "config.json")
+    if not os.path.exists(config_path):
+        config_path = os.path.join(root, "config", "config.json")
 
     if not os.path.exists(config_path):
         return

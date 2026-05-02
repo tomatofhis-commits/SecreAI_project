@@ -23,7 +23,11 @@
     "open_memory": "Memory Management",
     "restart": "Restart",
     "exit": "Exit",
-    "tray_show": "Show"
+    "tray_show": "Show",
+    "rtt_cascade": "RT Translator",
+    "rtt_start": "Start Translation",
+    "rtt_stop": "Stop Translation",
+    "rtt_settings": "Open RTT Settings"
   },
   "gui": {
     "log_header": "AI Transcript & System Log",
@@ -153,7 +157,20 @@
     "extensions_group_api": " API / WebSockets ",
     "btn_fetching": "Fetching...",
     "btn_fetch_success": "Fetch Success!",
-    "btn_fetch_ollama": "Fetch & Update Ollama Models"
+    "btn_fetch_ollama": "Fetch & Update Ollama Models",
+    "tab_rtt": "RT Translator",
+    "rtt_group_ollama": " Ollama Translation Engine ",
+    "rtt_label_model": "Model:",
+    "rtt_group_lang": " Target Language ",
+    "rtt_group_ocr_lang": " OCR Languages (WinRT) ",
+    "rtt_group_gpu": " GPU / CPU Settings ",
+    "rtt_label_gpu": "GPU:",
+    "rtt_label_vram": "VRAM Limit (MB):",
+    "rtt_label_cpu": "CPU Limit (Percentage):",
+    "rtt_label_paddle_lang": "Paddle Language:",
+    "rtt_group_perf": " Capture / Performance ",
+    "rtt_label_capture": "Capture Mode:",
+    "rtt_label_sens": "Response Sensitivity:"
   },
   "log_messages": {
     "module_loaded": "System: Memory update module loaded.",

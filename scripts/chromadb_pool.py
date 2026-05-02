@@ -115,7 +115,9 @@ def search_long_term_memory(query, history=None, root=None, n_results=5):
                 with open(path, "r", encoding="utf-8") as f: return json.load(f)
 
             def load_config_manual(r):
-                path = os.path.join(r, "config", "config.json")
+                path = os.path.join(r, "data", "config.json")
+                if not os.path.exists(path):
+                    path = os.path.join(r, "config", "config.json")
                 with open(path, "r", encoding="utf-8") as f: return json.load(f), None, None
 
         root = root if root else get_app_root()

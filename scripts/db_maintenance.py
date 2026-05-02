@@ -181,7 +181,9 @@ if __name__ == "__main__":
     
     base_dir = get_root()
     db_dir = os.path.join(base_dir, "memory_db") # フォルダ名を統一
-    config_path = os.path.join(base_dir, "config", "config.json")
+    config_path = os.path.join(base_dir, "data", "config.json")
+    if not os.path.exists(config_path):
+        config_path = os.path.join(base_dir, "config", "config.json")
     
     print(f"Target DB: {db_dir}")
     if os.path.exists(config_path):
