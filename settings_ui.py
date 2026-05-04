@@ -971,18 +971,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     rtt_perf_group = tk.LabelFrame(rtt_scroll_frame, text=l_set.get("rtt_group_perf", " キャプチャ / パフォーマンス "))
     rtt_perf_group.pack(fill="x", padx=8, pady=5)
 
-    # キャプチャモード
-    tk.Label(rtt_perf_group, text=l_set.get("rtt_label_capture", "キャプチャモード:"), anchor="w").grid(row=0, column=0, sticky="w", padx=8, pady=4)
-    rtt_capture_map = {"High (1秒・高反応)": "high", "Low (2.5秒・省電力)": "low"}
-    rtt_capture_map_rev = {v: k for k, v in rtt_capture_map.items()}
-    saved_capture = config.get("rtt_capture_mode", "high")
-    rtt_capture_var = tk.StringVar(value=rtt_capture_map_rev.get(saved_capture, "High (1秒・高反応)"))
-    tk.OptionMenu(rtt_perf_group, rtt_capture_var, *rtt_capture_map.keys()).grid(row=0, column=1, sticky="w", padx=8, pady=4)
-
     # 処理の反応感度スライダー（直感的なラベル）
     tk.Label(rtt_perf_group, text=l_set.get("rtt_label_sens", "処理の反応感度:"), anchor="w").grid(row=1, column=0, sticky="w", padx=8, pady=4)
     _SENS_LABELS = ["最低", "2", "3", "4", "5", "最大"]
-    _SENS_VALUES = [1200, 1000, 800, 600, 400, 200]   # 内部値（数値が小さいほど高感度）
+    _SENS_VALUES = [2400, 1200, 800, 600, 400, 200]   # 内部値（数値が小さいほど高感度）
     saved_sens = config.get("rtt_ocr_skip_sensitivity", 800)
     saved_sens_idx = _SENS_VALUES.index(saved_sens) if saved_sens in _SENS_VALUES else 2
 
@@ -1063,7 +1055,6 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["rtt_ocr_thread_limit_percent"] = rtt_pct_val
         config["rtt_cpu_threads"] = 0 # 判定強化ロジックにより、0なら％側が採用される
         config["rtt_paddle_language"] = rtt_paddle_lang_map.get(rtt_paddle_lang_var.get(), "japan")
-        config["rtt_capture_mode"] = rtt_capture_map.get(rtt_capture_var.get(), "high")
         config["rtt_ocr_skip_sensitivity"] = _SENS_VALUES[rtt_sens_slider.get()]
         
         val = alpha_var.get()

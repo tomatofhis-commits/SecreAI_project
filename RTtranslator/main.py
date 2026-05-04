@@ -177,14 +177,6 @@ ALL_OCR_LANGUAGES = [
     ("中国語 (zh-Hans)",   "zh-Hans"),
 ]
 
-# キャプチャモードの定義
-# high: 1.0秒インターバル (デフォルト・高反応)
-# low:  2.5秒インターバル (省電力・低CPU)
-CAPTURE_MODE_INTERVALS = {
-    "high": 1.0,
-    "low":  2.5,
-}
-
 DEFAULT_CONFIG = {
     "target_window_title": "",
     "target_language": "ja",
@@ -198,14 +190,14 @@ DEFAULT_CONFIG = {
     "paddle_gpu_mem_mb": 1024,
     "paddle_threshold": 0.90,
     "capture_interval_sec": 1.0,
-    "capture_mode": "high",
     "ocr_skip_sensitivity": 800,
     "ocr_thread_limit_percent": 100,
     "font_size": 16,
     "overlay_opacity": 0.85,
     "overlay_background_color": "#1a1a2e",
     "overlay_text_color": "#e0e0e0",
-    "use_vision_translation": False
+    "use_vision_translation": False,
+    "eco_mode": False
 }
 
 def load_config(config_path: str = "config.json") -> dict:
@@ -290,6 +282,7 @@ class TranslationController:
         self._prev_paddle_scores: list = []
         self._last_raw_chunks: list = []  # スキップ時に流用する前回のOCR結果
         self._last_force_ocr_time: float = 0.0  # 5秒強制チェック用
+        self._last_ocr_exec_time: float = 0.0   # エコモード用
         
         # デバッグ統計用カウンター
         self._stats_skip_count: int = 0
@@ -378,34 +371,20 @@ class TranslationController:
         self.pending_texts = set()
         self.last_request_time = 0.0      # 全体の最終送信時刻
         self.last_short_word_time = 0.0   # 短文の最終送信時刻
+        self._last_ocr_exec_time = 0.0    # エコモード用の最終OCR時刻
         
         # OBSブラウザオーバーレイ用の状態保持
         self.overlay_state = {}
         self.window_rect_data = {"x": 0, "y": 0, "w": 0, "h": 0}
 
-        # キャプチャタイマー（案C: capture_mode に応じたインターバルを設定）
-        capture_mode = config.get("capture_mode", "high")
-        interval_sec = CAPTURE_MODE_INTERVALS.get(capture_mode, 1.0)
-        interval_ms = int(interval_sec * 1000)
+        # 枠の存在確認・追従タイマー（約6FPSでメインループを駆動）
         self.timer = QTimer()
         self.timer.timeout.connect(self._on_tick)
-        self.timer.setInterval(interval_ms)
-
-        # OCR結果ポーリングタイマー（100ms間隔でメインスレッドからキューを確認）
-        self._result_timer = QTimer()
-        self._result_timer.timeout.connect(self._poll_ocr_result)
-        self._result_timer.setInterval(100)
+        self.timer.setInterval(166) 
         
-        # キャッシュ保存用タイマー (30秒間隔)
-        self.cache_save_timer = QTimer()
-        self.cache_save_timer.timeout.connect(self._periodic_cache_save)
-        self.cache_save_timer.setInterval(30000)
-        self.cache_save_timer.start()
-        
-        # 枠の存在確認・追従タイマー（6FPSで座標のみ監視）
-        self._monitor_timer = QTimer()
-        self._monitor_timer.timeout.connect(self._monitor_frame_existence)
-        self._monitor_timer.setInterval(166)
+        # 解析結果ポーリング用タイマー（100ms間隔）
+        self.poll_timer = QTimer()
+        self.poll_timer.timeout.connect(self._poll_ocr_result)
         
         # apply_cpu_limit は初期化の上方で行うように変更
 
@@ -459,9 +438,8 @@ class TranslationController:
             self.overlay.set_status("⚠️ Ollamaに接続できません")
 
         self.timer.start()
-        self._result_timer.start()
-        self.cache_save_timer.start()
-        self._monitor_timer.start()
+        self.poll_timer.start(100)
+        # self.cache_save_timer.start() # 削除
 
     def stop(self):
         """翻訳ループを停止する。"""
@@ -470,9 +448,8 @@ class TranslationController:
         
         self.is_running = False
         self.timer.stop()
-        self._result_timer.stop()
-        self.cache_save_timer.stop()
-        self._monitor_timer.stop()
+        self.poll_timer.stop()
+        # self.cache_save_timer.stop()
 
         # 停止時に状態をリセット（Webオーバーレイを空白にする）
         self.overlay_state.clear()
@@ -656,12 +633,6 @@ class TranslationController:
         except Exception as e:
             print(f"Cache save error: {e}")
 
-    def _periodic_cache_save(self):
-        """タイマーで定期的にキャッシュを保存する（30秒間隔）"""
-        if self._cache_dirty:
-            self._save_cache()
-            self._cache_dirty = False
-
     def _calc_iou(self, r1: dict, r2: dict) -> float:
         """2つの矩形のIoU（重複面積率）を返す。"""
         x_l = max(r1['x'], r2['x'])
@@ -675,34 +646,14 @@ class TranslationController:
         return i_a / union
 
     def _check_skip_ocr(self, image) -> bool:
-        """PaddleOCR GPU枠取り + エッジ密度による一本化されたスキップ判定"""
+        """エッジ密度によるスキップ判定。"""
         try:
             if not hasattr(self.ocr, 'paddle_engine') or not self.ocr.paddle_engine:
                 return False
-                
-            # 1. PaddleOCRで枠のみ取得 (GPU活用・高速)
+            
+            # PaddleOCRで枠のみ取得 (GPU活用・高速)
             blocks = self.ocr.paddle_engine.recognize(image, rec=False)
             current_boxes = [b['rect'] for b in blocks] if blocks else []
-            
-            # 2. 【並列処理：枠の移動判定と追従】OCRの動作とは完全切り離し
-            if hasattr(self, 'history_chunks') and self.history_chunks:
-                iou_thresh = 0.4
-                
-                for cid, h_chunk in self.history_chunks.items():
-                    h_rect = h_chunk['rect']
-                    best_iou = 0.0
-                    best_box = None
-                    
-                    for c_box in current_boxes:
-                        iou = self._calc_iou(h_rect, c_box)
-                        if iou > best_iou:
-                            best_iou = iou
-                            best_box = c_box
-                            
-                    if best_iou > iou_thresh and best_box:
-                        self._position_queue.put((cid, best_box))
-
-            # 3. 【OCRのスキップ判定】エッジ密度による判定
             current_scores = [self.ocr.calculate_edge_density(image, b) for b in current_boxes]
             
             if not self._prev_east_boxes:
@@ -712,123 +663,42 @@ class TranslationController:
                 
             matched_count = 0
             total_count = max(len(current_boxes), len(self._prev_east_boxes))
-            
-            if total_count == 0:
-                return True
+            if total_count == 0: return True
                 
             for i, c_box in enumerate(current_boxes):
                 c_score = current_scores[i]
                 best_iou = 0.0
                 best_score_diff = 1.0
-                
                 for j, p_box in enumerate(self._prev_east_boxes):
                     iou = self._calc_iou(c_box, p_box)
                     if iou > best_iou:
                         best_iou = iou
-                        p_score = self._prev_east_scores[j]
-                        best_score_diff = abs(c_score - p_score)
-                        
-                # タイムセール方式の基礎となる一致判定
+                        best_score_diff = abs(c_score - self._prev_east_scores[j])
+                
                 if best_iou >= 0.8 and best_score_diff < 0.05:
                     matched_count += 1
                     
             match_ratio = matched_count / total_count
-            self._last_match_ratio = match_ratio
-            
             self._prev_east_boxes = current_boxes
             self._prev_east_scores = current_scores
             
             import time
-            time_since_last = time.time() - getattr(self, '_last_winocr_time', 0.0)
+            current_time = time.time()
+            time_since_last = current_time - getattr(self, '_last_ocr_exec_time', 0.0)
             
-            if time_since_last >= 20.0:
-                skip_thresh = 1.0
-            elif time_since_last >= 10.0:
-                skip_thresh = 0.9
-            else:
-                skip_thresh = 0.8
-                
-            if match_ratio >= skip_thresh:
+            # エコモード判定
+            if self.config.get("eco_mode", False) and time_since_last < 3.0:
                 return True
+            
+            if time_since_last >= 20.0: skip_thresh = 1.0
+            elif time_since_last >= 10.0: skip_thresh = 0.9
+            else: skip_thresh = 0.8
                 
+            if match_ratio >= skip_thresh: return True
             dynamic_thresh = min(1.0, 0.4 * time_since_last)
             return match_ratio >= dynamic_thresh
-            
-        except Exception as e:
-            print(f"[OCR Filter] エラー: {e}")
+        except Exception:
             return False
-
-    def _monitor_frame_existence(self):
-        """
-        1秒おきに発火し、画面上にテキストの「枠」が今も残っているか監視する。
-        PaddleOCRの索敵 (rec=False) を使用する。
-        """
-        if not self.is_running or not self.overlay_state:
-            return
-            
-        if not hasattr(self.ocr, 'paddle_engine') or self.ocr.paddle_engine is None:
-            return
-
-        try:
-            rect = get_client_rect_on_screen(self.window_title)
-            if rect is None:
-                return
-
-            image = capture_window(self.window_title, rect=rect)
-            if image is None:
-                return
-
-            # 索敵 (rec=False) 実行
-            found_blocks = self.ocr.paddle_engine.recognize(image, rec=False)
-            
-            new_rects = []
-            for b in found_blocks:
-                if 'rect' in b:
-                    new_rects.append(b['rect'])
-
-            current_time = time.time()
-            for cid, state in list(self.overlay_state.items()):
-                if state.get('text') in {"__IGNORE__", "__IGNORE_1__", "__IGNORE_2__"}:
-                    continue
-                    
-                old_r = state['rect']
-                best_iou = 0.0
-                best_new_rect = None
-                
-                for new_r in new_rects:
-                    iou = calculate_iou(old_r, new_r)
-                    if iou > best_iou:
-                        best_iou = iou
-                        best_new_rect = new_r
-                
-                if best_iou < 0.02:
-                    if 'existence_strike' not in state:
-                        state['existence_strike'] = 1
-                    else:
-                        state['existence_strike'] += 1
-                        
-                    if state['existence_strike'] >= 3:
-                        print(f"[Monitor] 枠消失を検知: {cid} (IoU={best_iou:.2f})")
-                        if hasattr(self.overlay, 'active_labels') and cid in self.overlay.active_labels:
-                            self.overlay.active_labels[cid].deleteLater()
-                            del self.overlay.active_labels[cid]
-                        del self.overlay_state[cid]
-                        if cid in self.active_translations:
-                            del self.active_translations[cid]
-                        # --- history_chunks も同時に破棄（追跡データのメモリリーク防止）---
-                        if cid in self.history_chunks:
-                            del self.history_chunks[cid]
-                else:
-                    state['existence_strike'] = 0
-                    
-                    if best_iou >= 0.3:
-                        if abs(old_r['x'] - best_new_rect['x']) > 2 or abs(old_r['y'] - best_new_rect['y']) > 2:
-                            self.overlay.update_translation_position(cid, best_new_rect)
-                            state['rect'] = best_new_rect
-                            if cid in self.history_chunks:
-                                self.history_chunks[cid]['rect'] = best_new_rect
-        except Exception as e:
-            print(f"[Monitor Error] {e}")
 
     # ------------------------------------------------------------------
     # OCR スレッド分離
@@ -880,8 +750,8 @@ class TranslationController:
 
     def _on_tick(self):
         """
-        メインスレッドのキャプチャタイマー。
-        キャプチャ・差分判定のみを担当し、OCR は _ocr_worker スレッドに委譲する。
+        メインループ（約6FPS）。
+        1回のキャプチャで、既存枠の監視(Monitor)と新規テキストの発見(Discovery)を行う。
         """
         if not self.is_running:
             return
@@ -894,12 +764,50 @@ class TranslationController:
         # UI をターゲットのクライアント領域（枠内）へ追従させる
         self.overlay.update_geometry(rect)
 
-        # キャプチャ
+        # 1. 画面キャプチャ（1回のループで1回のみ）
         image = capture_window(self.window_title, rect=rect)
         if image is None:
             return
 
-        # === 案A: 差分スキップ ===
+        # --- A. 既存枠の監視 (Monitor) ---
+        if self.overlay_state and hasattr(self.ocr, 'paddle_engine') and self.ocr.paddle_engine:
+            try:
+                # 索敵 (rec=False) 実行
+                found_blocks = self.ocr.paddle_engine.recognize(image, rec=False)
+                new_rects = [b['rect'] for b in found_blocks if 'rect' in b]
+
+                for cid, state in list(self.overlay_state.items()):
+                    if state.get('text') in {"__IGNORE__", "__IGNORE_1__", "__IGNORE_2__"}:
+                        continue
+                    old_r = state['rect']
+                    best_iou = 0.0
+                    best_new_rect = None
+                    for new_r in new_rects:
+                        iou = self._calc_iou(old_r, new_r)
+                        if iou > best_iou:
+                            best_iou = iou
+                            best_new_rect = new_r
+                    
+                    if best_iou < 0.02:
+                        state['existence_strike'] = state.get('existence_strike', 0) + 1
+                        if state['existence_strike'] >= 3:
+                            if hasattr(self.overlay, 'active_labels') and cid in self.overlay.active_labels:
+                                self.overlay.active_labels[cid].deleteLater()
+                                del self.overlay.active_labels[cid]
+                            del self.overlay_state[cid]
+                            if cid in self.active_translations: del self.active_translations[cid]
+                            if cid in self.history_chunks: del self.history_chunks[cid]
+                    else:
+                        state['existence_strike'] = 0
+                        if best_iou >= 0.3:
+                            if abs(old_r['x'] - best_new_rect['x']) > 2 or abs(old_r['y'] - best_new_rect['y']) > 2:
+                                self.overlay.update_translation_position(cid, best_new_rect)
+                                state['rect'] = best_new_rect
+                                if cid in self.history_chunks: self.history_chunks[cid]['rect'] = best_new_rect
+            except Exception as e:
+                print(f"[Monitor Error] {e}")
+
+        # --- B. 新規テキストの発見判定 (Discovery) ---
         import numpy as np
         thumb = image.resize((64, 36)).convert("L")
         thumb_arr = np.array(thumb, dtype=np.int16)
@@ -907,26 +815,38 @@ class TranslationController:
         pixel_diff = abs(frame_hash - self._prev_frame_hash)
         self._prev_frame_hash = frame_hash
 
-        # === 感度設定に基づいた閾値計算 ===
+        # 感度設定
         sensitivity = self.config.get("ocr_skip_sensitivity", 800)
-        if sensitivity <= 10:
-            sensitivity = 800
         diff_threshold = sensitivity
         
         import time
         current_time = time.time()
         time_since_force = current_time - self._last_force_ocr_time
         
-        # 変化が小さく、かつ前回の強制実行から5秒経っていないならサボる（CPU負荷軽減）
+        # エコモード判定
+        is_eco = self.config.get("eco_mode", False)
+        time_since_last_exec = current_time - self._last_ocr_exec_time
+        if is_eco and time_since_last_exec < 3.0:
+            return
+
+        # 変化が小さく、かつ前回の強制実行から5秒経っていないならサボる
         if pixel_diff < diff_threshold and time_since_force < 5.0:
             return
             
+        # 【重要】実行頻度の制限 (最低 0.3秒 は空ける)
+        # これにより 1秒/2.5秒 設定を消したことによる暴走と破棄サイクルを防ぐ
+        if current_time - self._last_ocr_exec_time < 0.3:
+            return
+            
+        # ここを通過＝OCR実行プロセスに入る
+        if not self._ocr_busy:
+            self.overlay.set_status(f"🔍 画面を解析中... | {self.window_title}")
+            
+        self._last_ocr_exec_time = current_time
         if time_since_force >= 5.0:
             self._last_force_ocr_time = current_time
             
-        self._skip_counter = 0
-
-        # 前回の OCR がまだ実行中なら古いものを破棄して最新フレームを優先
+        # 前回の OCR がまだ実行中なら古いものを破棄
         if self._ocr_busy:
             try:
                 self._ocr_input_queue.get_nowait()
@@ -939,18 +859,15 @@ class TranslationController:
         scale_y = physical_h / logical_h if logical_h > 0 else 1.0
         self.window_rect_data = {"x": rect[0], "y": rect[1], "w": logical_w, "h": logical_h}
         
-        # フレームIDを更新（世代管理）
         self._current_frame_id += 1
         current_id = self._current_frame_id
 
-        # 変化が極めて巨大な場合（しきい値の100倍以上）のみ、完全なシーン切り替えとみなして消去
         if pixel_diff > diff_threshold * 100:
             self._last_clear_id = current_id
             self._ocr_output_queue.put(("CLEAR", None, 0, 0, current_id))
 
         self._ocr_busy = True
         thread_limit_ratio = self.config.get("ocr_thread_limit_percent", 100) / 100.0
-        # IDをタプルに含めて送る
         self._ocr_input_queue.put((image, rect, scale_x, scale_y, thread_limit_ratio, current_id))
 
     def _poll_ocr_result(self):
@@ -1000,6 +917,7 @@ class TranslationController:
                 # 【重要】届いた結果が「最後に画面をクリアした時」より古い場合のみ破棄する
                 # これにより、背景が動いて ID が進んでいても、同じシーンなら結果を表示できます
                 if fid < self._last_clear_id:
+                    self._ocr_busy = False # フラグを落とさないと次の解析が始まらない
                     continue
 
                 if res[0] == "CLEAR":
@@ -1009,6 +927,14 @@ class TranslationController:
                 # 通常のOCR結果
                 raw_chunks, rect, scale_x, scale_y, _ = res
                 self._ocr_busy = False
+                
+                # 結果が空（文字なし）の場合でもステータスを更新して「生存」を示す
+                if not raw_chunks:
+                    translated_count = len(self.overlay.active_labels)
+                    perf_info = f" | ⚡ Latency: {self.translator.avg_latency:.1f}s"
+                    self.overlay.set_status(f" 👀 監視中... (文字なし / 翻訳済: {translated_count}個){perf_info} | {self.window_title}")
+                    return
+                    
                 break 
             except queue.Empty:
                 return
@@ -1783,7 +1709,7 @@ class ControlPanel(QMainWindow):
 
         
     def _setup_window(self):
-        self.setWindowTitle("Real Time Translate - Control Panel v1.0.0")
+        self.setWindowTitle("Real Time Translate - Control Panel v1.1.1")
         self.setFixedSize(560, 640)
         
     def _setup_ui(self):
@@ -1978,44 +1904,15 @@ class ControlPanel(QMainWindow):
 
         layout.addWidget(lang_ocr_group)
 
-        # ===== 案C: キャプチャモード High / Low =====
-        capture_group = QGroupBox("キャプチャモード")
-        capture_group.setFont(QFont("Yu Gothic UI", 9))
-        capture_group.setStyleSheet("""
-            QGroupBox {
-                color: #aaaaaa;
-                border: 1px solid #555;
-                border-radius: 4px;
-                margin-top: 6px;
-                padding: 4px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 8px;
-                padding: 0 4px;
-            }
-        """)
-        capture_layout = QHBoxLayout(capture_group)
-        capture_layout.setContentsMargins(8, 8, 8, 6)
-        
-        self.combo_capture_mode = QComboBox()
-        self.combo_capture_mode.setFont(QFont("Yu Gothic UI", 9))
-        self.combo_capture_mode.addItem("High (1秒間隔・高反応)", "high")
-        self.combo_capture_mode.addItem("Low  (2.5秒間隔・省電力)", "low")
-        saved_capture_mode = self.config.get("capture_mode", "high")
-        idx = self.combo_capture_mode.findData(saved_capture_mode)
-        if idx >= 0:
-            self.combo_capture_mode.setCurrentIndex(idx)
-        
-        diff_skip_label = QLabel("差分スキップ: 有効 (自動)")
+
+        # 差分スキップのステータス表示
+        skip_status_layout = QHBoxLayout()
+        diff_skip_label = QLabel("差分スキップ: 有効 (自動インテリジェント制御)")
         diff_skip_label.setFont(QFont("Yu Gothic UI", 8))
         diff_skip_label.setStyleSheet("color: #88cc88;")
-        
-        capture_layout.addWidget(QLabel("速度モード:"))
-        capture_layout.addWidget(self.combo_capture_mode)
-        capture_layout.addStretch()
-        capture_layout.addWidget(diff_skip_label)
-        layout.addWidget(capture_group)
+        skip_status_layout.addStretch()
+        skip_status_layout.addWidget(diff_skip_label)
+        layout.addLayout(skip_status_layout)
 
         # ===== 感度設定とCPU制限のグループ =====
         settings_group = QGroupBox("パフォーマンス設定")
@@ -2038,7 +1935,7 @@ class ControlPanel(QMainWindow):
         settings_vbox.setSpacing(2)
         settings_vbox.setContentsMargins(8, 12, 8, 4)
 
-        # --- スキップ感度 (1200, 1000, 800, 600, 400, 200) ---
+        # --- スキップ感度 (2400, 1200, 800, 600, 400, 200) ---
         sens_label_box = QHBoxLayout()
         sens_title = QLabel("しきい値 (高いほど変化を無視/低負荷):")
         self.sens_val_label = QLabel("")
@@ -2048,7 +1945,7 @@ class ControlPanel(QMainWindow):
         sens_label_box.addWidget(self.sens_val_label)
         settings_vbox.addLayout(sens_label_box)
 
-        self.sens_values = [1200, 1000, 800, 600, 400, 200]
+        self.sens_values = [2400, 1200, 800, 600, 400, 200]
         self.slider_sensitivity = QSlider(Qt.Orientation.Horizontal)
         self.slider_sensitivity.setRange(0, 5)
         self.slider_sensitivity.setTickPosition(QSlider.TickPosition.TicksBelow)
@@ -2232,8 +2129,7 @@ class ControlPanel(QMainWindow):
         if not selected_ocr_langs:
             selected_ocr_langs = ["en-US"]  # 最低1言語を保証
         self.config["ocr_languages"] = selected_ocr_langs
-        # 案C: キャプチャモードを保存
-        self.config["capture_mode"] = self.combo_capture_mode.currentData()
+        # 感度を保存
         # 案A拡張: スキップ感度を保存
         self.config["ocr_skip_sensitivity"] = self.slider_sensitivity.value()
         save_config(self.config, self.config_path)
@@ -2253,7 +2149,6 @@ class ControlPanel(QMainWindow):
         self.spin_gpu_mem.setEnabled(False)
         for cb in self._ocr_lang_checkboxes.values():
             cb.setEnabled(False)
-        self.combo_capture_mode.setEnabled(False)
         self.slider_sensitivity.setEnabled(False)
 
         # ステータス表示を最新に更新
@@ -2272,7 +2167,6 @@ class ControlPanel(QMainWindow):
         self.spin_gpu_mem.setEnabled(paddle_on)
         for cb in self._ocr_lang_checkboxes.values():
             cb.setEnabled(True)
-        self.combo_capture_mode.setEnabled(True)
         self.slider_sensitivity.setEnabled(True)
 
         # ステータス表示を最新に更新

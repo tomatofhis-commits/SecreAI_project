@@ -62,6 +62,10 @@ lookdb.py
 日本語のリスト.txt
 game_ai.py
 
+# Build distribution folders
+SecreAI_ver*/
+RTtranslator_ver*/
+
 # RTtranslator specific
 RTtranslator/.git
 RTtranslator/dist/
