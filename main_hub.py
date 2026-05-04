@@ -22,7 +22,7 @@ import uuid  # Added for session ID
 import queue # Added for thread-safe GUI updates
 from flask import Flask, jsonify, request
 import customtkinter as ctk
-from PIL import Image
+from PIL import Image, ImageTk
 import pystray
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -138,6 +138,73 @@ def receive_log():
             data.get("error_code")
         )
     return jsonify({"status": "ok"})
+
+@app.route('/api/overlay', methods=['POST'])
+def trigger_overlay_api():
+    data = request.json
+    if main_gui:
+        text = data.get("text", "")
+        image_path = data.get("image_path", "")
+        alpha_val = data.get("alpha_val", 0.6)
+        display_time = data.get("display_time", 60)
+        status = data.get("status", "speaking")
+        main_gui.overlay_queue.put((text, image_path, alpha_val, display_time, status))
+    return jsonify({"status": "ok"})
+
+@app.route('/api/translate', methods=['GET', 'POST'])
+def remote_rtt_control():
+    """StreamDeck等から Hub (5000) 経由で RTT をトグル制御する"""
+    if main_gui:
+        proc = getattr(main_gui, '_rtt_process', None)
+        if proc and proc.poll() is None:
+            main_gui.rtt_stop()
+            return jsonify({"status": "ok", "action": "stop"})
+        else:
+            main_gui.rtt_start()
+            return jsonify({"status": "ok", "action": "start"})
+    return jsonify({"status": "error"}), 500
+
+@app.route('/api/retrans', methods=['GET', 'POST'])
+def remote_rtt_retrans():
+    """Hub経由でRTTに再翻訳を依頼する"""
+    try:
+        # 127.0.0.1:5001 の RTT サーバーへ転送
+        resp = requests.post("http://127.0.0.1:5001/api/retrans", timeout=2)
+        return jsonify(resp.json()), resp.status_code
+    except:
+        return jsonify({"status": "error", "message": "RTT is not running or not responding"}), 504
+
+@app.route('/api/status', methods=['GET'])
+def remote_status():
+    """HubとRTTの総合ステータスを返す"""
+    proc = getattr(main_gui, '_rtt_process', None)
+    rtt_running = proc and proc.poll() is None
+    
+    status_data = {
+        "status": "ok",
+        "version": VERSION,
+        "rtt_process": "running" if rtt_running else "stopped"
+    }
+    
+    if rtt_running:
+        try:
+            # 可能であれば RTT 内部の詳細ステータスも取得
+            rtt_resp = requests.get("http://127.0.0.1:5001/api/status", timeout=0.5)
+            if rtt_resp.status_code == 200:
+                status_data["rtt_detail"] = rtt_resp.json()
+        except:
+            status_data["rtt_detail"] = "api_not_ready"
+            
+    return jsonify(status_data)
+
+@app.route('/api/ecomode', methods=['GET', 'POST'])
+def remote_rtt_ecomode():
+    """Hub経由でRTTのエコモードをトグルする"""
+    if main_gui:
+        main_gui.toggle_rtt_eco_mode()
+        status = "on" if main_gui.config_data.get("rtt_eco_mode", False) else "off"
+        return jsonify({"status": "success", "ecomode": status})
+    return jsonify({"status": "error"}), 500
 
 @app.route('/api/<action>', methods=['GET'])
 def remote_action(action):
@@ -460,10 +527,14 @@ class MainApp(ctk.CTk):
             command=self.rtt_stop
         )
         rtt_menu.add_separator()
-        rtt_menu.add_command(
-            label=m.get("rtt_settings", "RTT設定を開く"),
-            command=open_settings_guarded
+        
+        self.rtt_eco_var = tk.BooleanVar(value=self.config_data.get("rtt_eco_mode", False))
+        rtt_menu.add_checkbutton(
+            label=m.get("rtt_eco_mode", "エコモード"),
+            variable=self.rtt_eco_var,
+            command=self.toggle_rtt_eco_mode
         )
+        
         self._rtt_menu = rtt_menu  # 状態更新用に保持
 
     def on_settings_saved(self, new_config):
@@ -605,9 +676,9 @@ class MainApp(ctk.CTk):
         rtt_script_dir = None
         if not os.path.exists(rtt_exe):
             search_dirs = [
-                os.path.join(os.path.dirname(base_dir), "Real_Time_Translate"),
-                os.path.join(os.path.dirname(os.path.dirname(base_dir)), "Real_Time_Translate"),
-                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(base_dir))), "Real_Time_Translate"),
+                os.path.join(base_dir, "RTtranslator"),
+                os.path.join(os.path.dirname(base_dir), "RTtranslator"),
+                os.path.join(os.path.dirname(os.path.dirname(base_dir)), "RTtranslator"),
             ]
             for d in search_dirs:
                 p = os.path.join(d, "main.py")
@@ -702,6 +773,28 @@ class MainApp(ctk.CTk):
                 pass
         self._rtt_process = None
         self.update_log_area("[RTT] リアルタイム翻訳を停止しました。")
+
+    def toggle_rtt_eco_mode(self):
+        """エコモードのON/OFFを切り替え、RTTへ通知する"""
+        current = self.config_data.get("rtt_eco_mode", False)
+        new_state = not current
+        self.config_data["rtt_eco_mode"] = new_state
+        if hasattr(self, 'rtt_eco_var'):
+            self.rtt_eco_var.set(new_state)
+        
+        # 設定保存
+        self.quick_save()
+        
+        # RTTが起動中ならAPIで通知
+        if hasattr(self, '_rtt_process') and self._rtt_process and self._rtt_process.poll() is None:
+            try:
+                # build_rtt_config を使って最新設定を送る
+                requests.post("http://127.0.0.1:5001/api/update_config", 
+                             json=self._build_rtt_config(), timeout=1)
+            except: pass
+        
+        mode_str = "ON" if new_state else "OFF"
+        self.update_log_area(f"[RTT] エコモードを {mode_str} にしました。")
 
     def _build_rtt_config(self) -> dict:
         """SecreAI の config_data から RTT 用設定を抽出・生成する。"""
@@ -833,6 +926,7 @@ class MainApp(ctk.CTk):
             top.overrideredirect(True)
             top.attributes("-topmost", True)
             top.attributes("-alpha", float(alpha_val))
+            top.attributes("-topmost", True)
             top.configure(bg='black')
             
             w, sw, sh = 400, top.winfo_screenwidth(), top.winfo_screenheight()
@@ -849,28 +943,36 @@ class MainApp(ctk.CTk):
                 except: pass
             
             tk.Message(top, text=text, fg='white', bg='black', font=('MS Gothic', 12), width=w-20).pack(padx=10, pady=10)
+            top.update() # 描画を強制確定
             
-            # --- Win32 拡張スタイルの適用 ---
-            # ウィンドウが描画されてから hwnd を取得する必要があるため after(10) で遅延実行
+            # --- Win32 スタイル適用 (描画確定後に実行) ---
             def _apply_win32_style():
                 try:
                     import ctypes
-                    hwnd = ctypes.windll.user32.FindWindowW(None, top.title() or None)
-                    # Toplevel の HWND を winfo_id() で確実に取得
+                    # winfo_id から始まり、真のトップレベル親ウィンドウまで遡る
                     hwnd = top.winfo_id()
-                    GWL_EXSTYLE    = -20
-                    WS_EX_LAYERED      = 0x00080000  # 透明度サポート（必須）
-                    WS_EX_TRANSPARENT  = 0x00000020  # クリック透過（下のウィンドウにクリックが届く）
-                    WS_EX_TOOLWINDOW   = 0x00000080  # タスクバー非表示・スクリーンキャプチャ対象外
-                    WS_EX_NOACTIVATE   = 0x08000000  # フォーカスを奪わない
+                    while True:
+                        parent = ctypes.windll.user32.GetParent(hwnd)
+                        if not parent: break
+                        hwnd = parent
                     
-                    current = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-                    new_style = current | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
-                    ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, new_style)
+                    # 1. 画面キャプチャ除外設定
+                    ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, 0x00000011)
+
+                    # 2. 拡張スタイルの強制設定 (RTTの成功フラグを再現)
+                    # TRANSPARENT(20) | LAYERED(80000) | NOACTIVATE(08000000) | TOOLWINDOW(80) | TOPMOST(08)
+                    GWL_EXSTYLE = -20
+                    new_flags = 0x00000020 | 0x00080000 | 0x08000000 | 0x00000080 | 0x00000008
+                    
+                    current_style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+                    ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, current_style | new_flags)
+                    
+                    # 3. 最前面を保証しつつ反映
+                    ctypes.windll.user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0013)
                 except Exception as e:
-                    print(f"[Overlay] Win32スタイル適用エラー: {e}")
+                    print(f"[Overlay] Win32 Style Error: {e}")
             
-            top.after(10, _apply_win32_style)
+            top.after(300, _apply_win32_style)
             
             # Auto close
             top.after(int(display_time * 1000), lambda: top.destroy() if top.winfo_exists() else None)

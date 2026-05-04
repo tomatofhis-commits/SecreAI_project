@@ -166,7 +166,7 @@
     "rtt_group_gpu": " GPU / CPU Settings ",
     "rtt_label_gpu": "GPU:",
     "rtt_label_vram": "VRAM Limit (MB):",
-    "rtt_label_cpu": "CPU Limit (Percentage):",
+    "rtt_label_cpu": "CPU Thread Limit:",
     "rtt_label_paddle_lang": "Paddle Language:",
     "rtt_group_perf": " Capture / Performance ",
     "rtt_label_capture": "Capture Mode:",

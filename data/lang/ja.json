@@ -151,7 +151,7 @@
     "rtt_group_gpu": " GPU / CPU 設定 ",
     "rtt_label_gpu": "使用GPU:",
     "rtt_label_vram": "VRAMリミット (MB):",
-    "rtt_label_cpu": "CPU使用制限 (パーセント):",
+    "rtt_label_cpu": "CPUスレッド制限:",
     "rtt_label_paddle_lang": "Paddle専門言語:",
     "rtt_group_perf": " キャプチャ / パフォーマンス ",
     "rtt_label_capture": "キャプチャモード:",

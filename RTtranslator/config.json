@@ -1,0 +1,28 @@
+{
+    "target_window_title": "CastCraft 1.36.2",
+    "target_language": "en",
+    "source_language": "auto",
+    "ollama_model": "translategemma:4b",
+    "ollama_url": "http://localhost:11434",
+    "ocr_engine_mode": "dual_scout_hybrid",
+    "ocr_languages": [
+        "en-US",
+        "ja-JP",
+        "ru-RU",
+        "ko-KR",
+        "zh-Hans"
+    ],
+    "paddle_language": "japan",
+    "paddle_gpu_index": 1,
+    "paddle_gpu_mem_mb": 1024,
+    "paddle_threshold": 0.9,
+    "capture_interval_sec": 1.0,
+    "capture_mode": "low",
+    "ocr_skip_sensitivity": 2,
+    "ocr_thread_limit_percent": 50,
+    "font_size": 16,
+    "overlay_opacity": 0.85,
+    "overlay_background_color": "#1a1a2e",
+    "overlay_text_color": "#e0e0e0",
+    "use_vision_translation": false
+}
