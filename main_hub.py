@@ -535,6 +535,13 @@ class MainApp(ctk.CTk):
             command=self.toggle_rtt_eco_mode
         )
         
+        self.rtt_single_var = tk.BooleanVar(value=self.config_data.get("rtt_single_mode", False))
+        rtt_menu.add_checkbutton(
+            label=m.get("rtt_single_mode", "シングルモード"),
+            variable=self.rtt_single_var,
+            command=self.toggle_rtt_single_mode
+        )
+        
         self._rtt_menu = rtt_menu  # 状態更新用に保持
 
     def on_settings_saved(self, new_config):
@@ -781,6 +788,12 @@ class MainApp(ctk.CTk):
         self.config_data["rtt_eco_mode"] = new_state
         if hasattr(self, 'rtt_eco_var'):
             self.rtt_eco_var.set(new_state)
+            
+        # シングルモードとの排他制御
+        if new_state and self.config_data.get("rtt_single_mode", False):
+            self.config_data["rtt_single_mode"] = False
+            if hasattr(self, 'rtt_single_var'):
+                self.rtt_single_var.set(False)
         
         # 設定保存
         self.quick_save()
@@ -795,6 +808,33 @@ class MainApp(ctk.CTk):
         
         mode_str = "ON" if new_state else "OFF"
         self.update_log_area(f"[RTT] エコモードを {mode_str} にしました。")
+
+    def toggle_rtt_single_mode(self):
+        """シングルモードのON/OFFを切り替え、RTTへ通知する"""
+        current = self.config_data.get("rtt_single_mode", False)
+        new_state = not current
+        self.config_data["rtt_single_mode"] = new_state
+        if hasattr(self, 'rtt_single_var'):
+            self.rtt_single_var.set(new_state)
+            
+        # エコモードとの排他制御
+        if new_state and self.config_data.get("rtt_eco_mode", False):
+            self.config_data["rtt_eco_mode"] = False
+            if hasattr(self, 'rtt_eco_var'):
+                self.rtt_eco_var.set(False)
+        
+        # 設定保存
+        self.quick_save()
+        
+        # RTTが起動中ならAPIで通知
+        if hasattr(self, '_rtt_process') and self._rtt_process and self._rtt_process.poll() is None:
+            try:
+                requests.post("http://127.0.0.1:5001/api/update_config", 
+                             json=self._build_rtt_config(), timeout=1)
+            except: pass
+        
+        mode_str = "ON" if new_state else "OFF"
+        self.update_log_area(f"[RTT] シングルモードを {mode_str} にしました。")
 
     def _build_rtt_config(self) -> dict:
         """SecreAI の config_data から RTT 用設定を抽出・生成する。"""

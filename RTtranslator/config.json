@@ -11,7 +11,7 @@
     ],
     "paddle_language": "japan",
     "paddle_gpu_index": 1,
-    "paddle_gpu_mem_mb": 1024,
+    "paddle_gpu_mem_mb": 2048,
     "paddle_threshold": 0.9,
     "capture_interval_sec": 1.0,
     "ocr_skip_sensitivity": 2,
@@ -22,5 +22,6 @@
     "overlay_text_color": "#e0e0e0",
     "use_vision_translation": false,
     "eco_mode": false,
+    "single_mode": true,
     "capture_mode": "bitblt"
 }
