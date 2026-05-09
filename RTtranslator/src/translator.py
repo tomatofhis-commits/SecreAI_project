@@ -77,6 +77,8 @@ class Translator:
         """
         target_name = self._get_lang_name(self.target_lang)
         effective_src = source_lang or self.source_lang
+        if effective_src == "language_unknown":
+            effective_src = "auto"
         
         if has_image:
             return (
@@ -106,6 +108,8 @@ class Translator:
         """
         target_name = self._get_lang_name(self.target_lang)
         effective_src = source_lang or self.source_lang
+        if effective_src == "language_unknown":
+            effective_src = "auto"
         src_hint = ""
         if effective_src and effective_src != "auto":
             src_name = self._get_lang_name(effective_src)

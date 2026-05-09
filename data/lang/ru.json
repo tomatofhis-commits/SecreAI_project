@@ -142,8 +142,9 @@
     "rtt_label_cpu": "Лимит потоков CPU:",
     "rtt_label_paddle_lang": "Язык Paddle:",
     "rtt_group_perf": " Захват / Производительность ",
-    "rtt_label_capture": "Режим захвата:",
-    "rtt_label_sens": "Чувствительность реакции:"
+    "rtt_label_capture_engine": "Движок захвата:",
+    "rtt_label_eco": "Эко-режим (3с подавление OCR)",
+    "rtt_label_sens": "Чувствительность отклика:"
   },
   "log_messages": {
     "module_loaded": "Система: Модуль обновления памяти загружен.",

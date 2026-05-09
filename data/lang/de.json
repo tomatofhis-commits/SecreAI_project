@@ -142,8 +142,9 @@
     "rtt_label_cpu": "CPU-Thread-Limit:",
     "rtt_label_paddle_lang": "Paddle-Sprache:",
     "rtt_group_perf": " Aufnahme / Leistung ",
-    "rtt_label_capture": "Aufnahmemodus:",
-    "rtt_label_sens": "Reaktionsempfindlichkeit:"
+    "rtt_label_capture_engine": "Capture-Engine:",
+    "rtt_label_eco": "Eco-Modus (3s OCR-Unterdrückung)",
+    "rtt_label_sens": "Reaktions-Empfindlichkeit:"
   },
   "log_messages": {
     "module_loaded": "System: Gedächtnisaktualisierungsmodul geladen.",

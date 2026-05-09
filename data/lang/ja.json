@@ -154,8 +154,9 @@
     "rtt_label_cpu": "CPUスレッド制限:",
     "rtt_label_paddle_lang": "Paddle専門言語:",
     "rtt_group_perf": " キャプチャ / パフォーマンス ",
-    "rtt_label_capture": "キャプチャモード:",
-    "rtt_label_sens": "処理の反応感度:"
+    "rtt_label_capture_engine": "キャプチャ方式:",
+    "rtt_label_eco": "エコモード (3秒間OCR抑制)",
+    "rtt_label_sens": "読取反応感度:"
   },
   "log_messages": {
     "module_loaded": "システム: 記憶更新モジュールをロードしました。",

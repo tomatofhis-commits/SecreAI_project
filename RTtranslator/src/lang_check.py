@@ -131,12 +131,16 @@ def is_same_as_target(text: str, target_lang: str, threshold: float = 0.7) -> bo
         for ft_lang, base_codes in _FT_TO_BASE.items():
             if detected == ft_lang:
                 if base_tgt in base_codes:
-                    return confidence >= threshold
+                    is_same = confidence >= threshold
+                    if is_same:
+                        print(f"[LangCheck] スキップ（既にターゲット言語）: '{text_single[:30]}' (detected: {detected}, conf: {confidence:.2f})")
+                    return is_same
                 break
 
         return False
 
-    except Exception:
+    except Exception as e:
+        print(f"[LangCheck] Predict Error: {e}")
         return False
 
 
@@ -230,15 +234,35 @@ def detect_source_language(
             labels, probs = _ft_model.predict(text.replace("\n", " ").strip(), k=3)
             if labels:
                 # 信頼度に関わらず fastText の実際のスコアを返す。
-                # 閉値(0.55)未満でも 0.0 でなく実スコアを返すことで、
-                # ゲーム用語混じりのイタリア語等が誤って事前ストライクされるのを防ぐ。
+                # ただし、確信度が極めて低い(0.25未満)場合は、デフォルトの en や ocr_lang_hint を優先し、
+                # 誤判定（POTLIGH -> it 等）がループするのを防ぐ。
+                top_lang = labels[0].replace("__label__", "").lower()
+                top_score = float(probs[0])
+                
+                # 確信度が極端に低い(0.10未満)場合は、言語ですらないノイズとして扱う
+                if top_score < 0.10:
+                    return "language_unknown", 0.0
+                
+                # ISOマップにあるか確認
                 for lbl, prob in zip(labels, probs):
                     ft_lang = lbl.replace("__label__", "").lower()
+                    ft_score = float(prob)
                     iso_code = _FT_TO_ISO.get(ft_lang)
+                    
                     if iso_code:
-                        return iso_code, float(prob)
-                # ISOマップにない言語だった場合も、少なくとも「何か判定した」ことを示すためスコアを返す
-                return ocr_lang_hint or "en", float(probs[0])
+                        # 【v1.1.2 統一ルール】
+                        # 0.10以上 0.35未満は language_unknown として LLM に委ねる
+                        if ft_score < 0.35:
+                            if ft_score >= 0.10:
+                                print(f"[LangDetect] '{text.replace('\n',' ')[:30]}' -> language_unknown (Low Conf: {ft_score:.2f})")
+                            return "language_unknown", ft_score
+                            
+                        # 0.35以上は判定を信頼する
+                        print(f"[LangDetect] '{text.replace('\n',' ')[:30]}' -> {iso_code} (Conf: {ft_score:.2f})")
+                        return iso_code, ft_score
+                
+                # 候補がISOマップにないがスコアはある場合
+                return "language_unknown", top_score
         except Exception:
             pass
 
@@ -246,7 +270,10 @@ def detect_source_language(
         return ocr_lang_hint if ocr_lang_hint else "en", 0.0
 
     # --- ステップ3: 上記以外（記号のみなど）→ OCR hint を使用 ---
-    return ocr_lang_hint if ocr_lang_hint else "en", 0.0
+    result_lang = ocr_lang_hint if ocr_lang_hint else "en"
+    # デバッグログ: 低信頼度や特定不能なものを把握するため
+    # print(f"[LangDetect] '{text.replace('\n',' ')[:30]}' -> {result_lang} (Confidence: 0.0/Fallback)")
+    return result_lang, 0.0
 
 
 def is_valid_translation(text: str, target_lang: str) -> bool:
@@ -296,9 +323,11 @@ def is_valid_translation(text: str, target_lang: str) -> bool:
                 # 「中国語」と高信頼で判定かつかなが皆無 → 翻訳失敗の可能性
                 # ただし確信度が 0.90 未満（曖昧）なら許容
                 if top_lang == "zh" and top_score >= 0.90:
+                    print(f"[ValidCheck] 失敗 (ターゲット:ja, 判定結果:zh, Score:{top_score:.2f}): '{text[:30]}'")
                     return False
                 # その他の言語で かつ高信頼 → 問題あり
                 if top_lang not in ("ja", "zh") and top_score >= 0.85:
+                    print(f"[ValidCheck] 失敗 (ターゲット:ja, 判定結果:{top_lang}, Score:{top_score:.2f}): '{text[:30]}'")
                     return False
                 return True
             except Exception:
@@ -327,6 +356,7 @@ def is_valid_translation(text: str, target_lang: str) -> bool:
             # 確信度0.70以上で非日本語と判定 → 明らかに翻訳失敗
             # (0.90は高すぎて "Un esordio negli eventi" 等のイタリア語がスルーしてしまうため引き下げる)
             if top_lang != "ja" and top_score >= 0.70:
+                print(f"[ValidCheck] 失敗 (ターゲット:ja, 判定結果:{top_lang}, Score:{top_score:.2f}): '{text[:30]}'")
                 return False
             return True
         except Exception:

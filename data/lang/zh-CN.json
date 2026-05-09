@@ -140,10 +140,11 @@
     "rtt_label_gpu": "使用GPU:",
     "rtt_label_vram": "VRAM限制 (MB):",
     "rtt_label_cpu": "CPU线程限制:",
-    "rtt_label_paddle_lang": "Paddle专用语言:",
+    "rtt_label_paddle_lang": "Paddle专业语言:",
     "rtt_group_perf": " 采集 / 性能 ",
-    "rtt_label_capture": "采集模式:",
-    "rtt_label_sens": "处理反应灵敏度:"
+    "rtt_label_capture_engine": "采集引擎:",
+    "rtt_label_eco": "节能模式 (3秒OCR抑制)",
+    "rtt_label_sens": "响应灵敏度:"
   },
   "log_messages": {
     "module_loaded": "系统: 记忆更新模块已加载。",
