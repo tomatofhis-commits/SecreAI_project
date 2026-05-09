@@ -333,24 +333,52 @@ class OCREngine:
             x, y, w, h = int(rect['x']), int(rect['y']), int(rect['w']), int(rect['h'])
 
             # マージンの確保（文脈読み取りのため）
-            margin_v = min(max(int(h * 0.3), 15), 40)
-            margin_h = min(max(int(w * 0.1), 10), 30)
+            # WinRTが上下の行を見落とした場合でもPaddleOCRが補完できるように、垂直マージンを少し広げる
+            margin_v = min(max(int(h * 0.4), 20), 60)
+            margin_h = min(max(int(w * 0.1), 10), 40)
 
             x0 = max(0, x - margin_h)
             y0 = max(0, y - margin_v)
             x1 = min(image.width,  x + w + margin_h)
             y1 = min(image.height, y + h + margin_v)
             crop = image.crop((x0, y0, x1, y1))
+            
+            # 【精度向上】2倍に拡大してOCRに渡す
+            # 小さな文字や / などの細い記号の認識率が劇的に向上します
+            orig_w, orig_h = crop.size
+            upscaled_crop = crop.resize((orig_w * 2, orig_h * 2), Image.Resampling.LANCZOS)
 
-            blocks = self.paddle_engine.recognize(crop)
+            blocks = self.paddle_engine.recognize(upscaled_crop)
             if not blocks:
                 return []
+            
+            # 座標を元のスケールに戻す
+            for b in blocks:
+                br = b['rect']
+                br['x'] /= 2.0
+                br['y'] /= 2.0
+                br['w'] /= 2.0
+                br['h'] /= 2.0
 
             good_blocks = [b for b in blocks if b['confidence'] >= 0.45]
             if not good_blocks:
                 return []
 
-            # 1. 座標ソート (Y座標優先、同程度ならX座標)
+            # 1. 各ブロックの「濃さ(Density)」を計算（太字判定用）
+            for b in good_blocks:
+                br = b['rect']
+                # クロップ画像から該当ブロックをさらに切り出し
+                try:
+                    block_crop = crop.crop((br['x'], br['y'], br['x']+br['w'], br['y']+br['h'])).convert("L")
+                    # 平均輝度を取得 (0:黒, 255:白)
+                    avg_brightness = np.array(block_crop).mean()
+                    # 濃さとして定義 (背景が明るい前提で 255 - 平均輝度)
+                    # 背景が暗い場合も考慮し、コントラストの強さを指標にする
+                    b['density'] = max(1.0, 255.0 - avg_brightness)
+                except Exception:
+                    b['density'] = 50.0 # フォールバック
+
+            # 2. 座標ソート (Y座標優先、同程度ならX座標)
             avg_h = max(1, sum(b['rect']['h'] for b in good_blocks) / len(good_blocks))
             band_size = max(5, int(avg_h * 0.5))
             good_blocks.sort(key=lambda b: (int(b['rect']['y'] // band_size), b['rect']['x']))
@@ -369,20 +397,52 @@ class OCREngine:
                     # 水平方向の隙間（同じ行内での判定）
                     h_gap = curr['rect']['x'] - (prev['rect']['x'] + prev['rect']['w'])
                     
+                    # 共通指標
                     h_min = min(prev['rect']['h'], curr['rect']['h'])
+                    x_diff = abs(prev['rect']['x'] - curr['rect']['x']) # 左端のズレ
+                    
+                    # テキストボックス全体の右端（能動的な判定用）
+                    max_right = max(b['rect']['x'] + b['rect']['w'] for b in good_blocks)
+                    prev_right = prev['rect']['x'] + prev['rect']['w']
                     
                     is_split = False
-                    # A. 著しい高さの違い (フォントサイズが1.5倍以上違う)
-                    # UIパーツ（タイトルと本文、ラベルと値など）を分離するための主軸判定
-                    if max(prev['rect']['h'], curr['rect']['h']) / max(1, h_min) > 1.5:
+                    
+                    # 句読点チェック (行末が 。 or . で終わっているか)
+                    # ただし ... などの連続はノイズとして除外
+                    clean_text = prev['text'].strip()
+                    has_period_end = len(clean_text) >= 1 and clean_text[-1] in ('。', '.')
+                    period_count = clean_text.count('。') + clean_text.count('.')
+                    is_period_noise = period_count >= 3 # 1行に3つ以上はノイズの可能性大
+                    
+                    # A. 【能動的ルール】句読点による分割 (ノイズでない場合)
+                    # ユーザー要望: 句読点の後に「十分な余白」または「明確な行間」がある場合に分割
+                    if has_period_end and not is_period_noise:
+                        # 行の右側に文字1.5個分以上の余白があるか、次の行との間に1.2倍以上の隙間がある場合のみ分割
+                        if prev_right < max_right - (h_min * 1.5) or v_gap > h_min * 1.2:
+                            is_split = True
+                    
+                    # B. 【能動的ルール】行末の大きな余白 (文字2.5個分以上の空きがある場合は強制分割)
+                    elif prev_right < max_right - (h_min * 2.5):
                         is_split = True
-                    # B. 垂直方向に極端に離れている (行間が文字の高さの4.0倍以上)
-                    # PaddleOCRが誤って統合した場合のフォールバック
-                    elif v_gap > h_min * 4.0:
+                    
+                    # C. フォントサイズの違い (1.5倍以上)
+                    elif max(prev['rect']['h'], curr['rect']['h']) / max(1, h_min) > 1.5:
                         is_split = True
-                    # C. 水平方向に極端に離れている (文字間が文字の高さの4.0倍以上)
-                    # 同一ライン上の異なるUI要素を分離するためのフォールバック
-                    elif h_gap > h_min * 4.0:
+                    
+                    # C. フォントの濃さ（太字）の違い (1.6倍以上)
+                    elif max(prev['density'], curr['density']) / max(1, min(prev['density'], curr['density'])) > 1.6:
+                        is_split = True
+                    
+                    # D. 垂直方向に離れている（能動的な行間判定）
+                    # 基本は 1.5倍。ただし左端が揃っている場合は 2.0倍まで許容
+                    elif v_gap > h_min * 1.5:
+                        if x_diff > h_min * 0.4: 
+                            is_split = True
+                        elif v_gap > h_min * 2.0: # 明確な行間があれば分割
+                            is_split = True
+                            
+                    # E. 水平方向に極端に離れている
+                    elif h_gap > h_min * 3.0:
                         is_split = True
                         
                     if is_split:
@@ -448,6 +508,11 @@ class OCREngine:
                 }
 
                 avg_conf = sum(b['confidence'] for b in para) / len(para) if para else 0.0
+                
+                # 【精度向上】MTG特有の誤読補正を適用
+                assembled_text = self._fix_mtg_misreads(assembled_text)
+                paddle_lines = [self._fix_mtg_misreads(l) for l in paddle_lines]
+                
                 results.append((assembled_text, abs_rect, paddle_lines, avg_conf))
 
             return results
@@ -620,22 +685,36 @@ class OCREngine:
                     # A. 重複判定 (IoU > 0.1 または 内包)
                     iou = _calc_iou(r, m)
                     
-                    # B. 近接判定（同一行かつ左右の距離が近い）
-                    # Y軸の重なりが小さい方の高さの 60% 以上あれば「同じ行」とみなす
+                    # B. 近接判定（同一行または上下に並んでいる）
+                    # Y軸の重なりがあるか、垂直方向に近い場合
                     y_overlap = max(0, min(r['y']+r['h'], m['y']+m['h']) - max(r['y'], m['y']))
                     min_h = min(r['h'], m['h'])
-                    is_same_line = (y_overlap > min_h * 0.6)
                     
-                    # 左右の隙間が文字の高さの 1.5 倍以内なら「近接」とみなす
+                    # 垂直方向の隙間チェック
+                    v_gap = 0
+                    if r['y'] + r['h'] < m['y']:
+                        v_gap = m['y'] - (r['y'] + r['h'])
+                    elif m['y'] + m['h'] < r['y']:
+                        v_gap = r['y'] - (m['y'] + m['h'])
+                    
+                    # 横方向の重なり具合 (50%以上重なっていれば縦に並んでいるとみなす)
+                    x_overlap = max(0, min(r['x']+r['w'], m['x']+m['w']) - max(r['x'], m['x']))
+                    is_v_aligned = (x_overlap > min(r['w'], m['w']) * 0.5)
+                    
+                    # 1. 同じ行にある
+                    is_same_line = (y_overlap > min_h * 0.6)
+                    # 2. 上下に並んでいる (隙間が文字高の2倍以内)
+                    is_stacked = is_v_aligned and (v_gap < min_h * 2.5)
+                    
+                    # 左右の隙間が文字の高さの 1.5 倍以内なら「近接」
                     x_gap = 0
                     if r['x'] + r['w'] < m['x']:
                         x_gap = m['x'] - (r['x'] + r['w'])
                     elif m['x'] + m['w'] < r['x']:
                         x_gap = r['x'] - (m['x'] + m['w'])
+                    is_h_close = (x_gap < min_h * 1.5)
                     
-                    is_close = (x_gap < min_h * 1.5)
-                    
-                    if iou > 0.1 or (is_same_line and is_close):
+                    if iou > 0.1 or (is_same_line and is_h_close) or is_stacked:
                         # 統合（Union）してマスター領域を拡大
                         m_nx = min(m['x'], r['x'])
                         m_ny = min(m['y'], r['y'])
@@ -662,13 +741,16 @@ class OCREngine:
                     text_no_space = p_text.replace(" ", "").replace("\n", "")
                     if not text_no_space: continue
 
-                    # 1. 記号割合チェック (35%以上が記号ならゴミ)
-                    symbol_count = len(re.findall(r'[^\wぁ-んァ-ン一-龥가-힣А-Яа-яЁёÀ-ÿ]', text_no_space))
-                    symbol_ratio = symbol_count / len(text_no_space)
-                    if (len(text_no_space) <= 12 and symbol_ratio >= 0.25) or symbol_ratio >= 0.35:
-                        if p_conf < 0.95:
+                    # 1. 記号割合チェック (MTGの +1/+1 等を考慮して緩和)
+                    # + や / は MTG では記号扱いにしない
+                    meaningful_symbols = len(re.findall(r'[+/]', text_no_space))
+                    symbol_count = len(re.findall(r'[^\wぁ-んァ-ン一-龥가-힣А-Яа-яЁёÀ-ÿ]', text_no_space)) - meaningful_symbols
+                    symbol_ratio = symbol_count / max(1, len(text_no_space))
+                    
+                    # 判定を大幅に緩和 (0.25/0.35 -> 0.45/0.60)
+                    if (len(text_no_space) <= 10 and symbol_ratio >= 0.45) or symbol_ratio >= 0.60:
+                        if p_conf < 0.85: # 高い確信度がある場合はゴミではないと判断
                             # print(f"[OCRFilter] 記号過多スキップ ({symbol_ratio:.2f}): '{p_text[:20]}'")
-                            # 2秒間のスキップキャッシュに登録
                             t_hash = hashlib.md5(p_text.encode('utf-8')).hexdigest()
                             self.skip_cache[t_hash] = time.time() + 2.0
                             continue
@@ -1398,3 +1480,27 @@ class OCREngine:
         except Exception as e:
             print(f"[OCR] エッジ密度計算エラー: {e}")
             return 0.0
+
+    def _fix_mtg_misreads(self, text: str) -> str:
+        """
+        MTG特有のOCR誤読パターンを修正する。
+        """
+        if not text: return text
+        
+        # 1. / を 1 と誤認するパターン (+11+1 -> +1/+1)
+        text = re.sub(r'\+([1I])\s*([1I])\s*\+([1I])', r'+\1/\1', text)
+        text = re.sub(r'\+([1I])\s*/\s*([1I])', r'+\1/\1', text) # 空白除去
+        # 単純な 11+1 や +11+1 の修正
+        text = text.replace("+11+1", "+1/+1").replace("+11+2", "+1/+2").replace("+21+2", "+2/+2")
+        
+        # 2. カタカナの「ト」と「卜」(ぼく)の誤認
+        text = text.replace("卜ークン", "トークン").replace("アーテイファクト", "アーティファクト")
+        
+        # 3. ライブラリーの誤読 (ノラリー, ラリー等)
+        if "ラリー" in text and "一番下" in text:
+            text = text.replace("ノラリー", "ライブラリー").replace("ラリー", "ライブラリー")
+
+        # 4. 句読点のゴミ取り (MTGでは .. や . . はあまり使われない)
+        text = re.sub(r'\.{2,}', '.', text)
+        
+        return text

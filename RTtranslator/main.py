@@ -236,6 +236,7 @@ DEFAULT_CONFIG = {
     "overlay_text_color": "#e0e0e0",
     "use_vision_translation": False,
     "eco_mode": False,
+    "single_mode": False,
     "capture_mode": "bitblt"
 }
 
@@ -420,6 +421,7 @@ class TranslationController:
         self.last_request_time = 0.0      # 全体の最終送信時刻
         self.last_short_word_time = 0.0   # 短文の最終送信時刻
         self._last_ocr_exec_time = 0.0    # エコモード用の最終OCR時刻
+        self._single_run_done = False     # シングルモード：実行済みフラグ
         
         # OBSブラウザオーバーレイ用の状態保持
         self.overlay_state = {}
@@ -429,8 +431,8 @@ class TranslationController:
         self._last_force_ocr_time = 0.0
         self._current_frame_id = 0
         
-        # スレッド安全のためのロック
-        self._lock = threading.Lock()
+        # スレッド安全のためのロック（再入可能なRLockを使用）
+        self._lock = threading.RLock()
         
         # 枠の存在確認・追従タイマー（約6FPSでメインループを駆動）
         self.timer = QTimer()
@@ -489,6 +491,7 @@ class TranslationController:
             self._auto_clean_cache()
             
             self.is_running = True
+            self.force_retranslate() # 開始時にキャッシュとUIを完全クリア
             self.overlay.set_status("🔍 Ollamaに接続中...")
             self.overlay.show()
             
@@ -506,6 +509,7 @@ class TranslationController:
         
         with self._lock:
             self.is_running = False
+            self.force_retranslate() # 停止時に画面とキャッシュを完全クリア
             # self.timer.stop() # UIスレッド以外から呼ぶと落ちるため _on_tick 内で止めるように変更
         # self.poll_timer.stop()
         # self.cache_save_timer.stop()
@@ -579,40 +583,47 @@ class TranslationController:
             print(f"[RTtranslator] 設定を更新しました: Model={self.translator.model}, CPU_Limit={self.config.get('ocr_thread_limit_percent')}%")
 
     def force_retranslate(self):
-        """現在画面上の翻訳結果のみをキャッシュから破棄し、再翻訳を強制する"""
-        target_lang = self.config.get("target_language", "ja")
+        """現在画面上の表示と追跡状態をリセットし、再スキャンを強制する（翻訳済みキャッシュは保持する）"""
         
-        # 画面に出ている文字列（または不可視として判定された文字列）のキャッシュだけを狙い撃ちで消す
-        for cid in self.active_translations:
-            if cid in self.history_chunks:
-                text_clean = self.history_chunks[cid]['text'].strip()
-                cache_key = f"{target_lang}::{text_clean}"
-                if cache_key in self.translation_cache:
-                    del self.translation_cache[cache_key]
-                    
-        # UI上のアクティブなラベルをすべて削除
-        self.overlay.sync_active_ids(set())
+        # 1. UIと状態の完全クリア
+        self.overlay.clear_labels()
+        self.overlay_state.clear()
         self.active_translations.clear()
-        
-        # テンポラリ履歴と処理中キューのクリア（全キャッシュは消さない）
         self.history_chunks.clear()
         self._history_grid.clear()
         self.pending_texts.clear()
-        self._cache_dirty = True
+        self._shadow_skip_cache.clear()
+        
+        # 3. OCR強制再開フラグと「古い結果」の破棄
+        with self._lock:
+            # IDを大きく進めて、現在キューにある、または解析中のパケットをすべて「過去のもの」として無効化する
+            self._current_frame_id += 10 
+            self._last_clear_id = self._current_frame_id
+            self._last_force_ocr_time = 0.0
+            self._single_run_done = False
+            self._cache_dirty = True
+            
+            # 4. 未処理のキューを空にする (古い結果の混入を物理的に防ぐ)
+            while not self._ocr_output_queue.empty():
+                try: self._ocr_output_queue.get_nowait()
+                except: break
+        
+        # Webオーバーレイ等へ空の状態を通知
+        self.overlay.sync_active_ids(set())
 
         
     def _load_cache(self):
         """
-        起動時は過去のキャッシュをロードせず、完全に白紙の状態からスタートする。
-        前回の終了時に残されたファイルの内容は、起動したタイミングでクリアする。
+        起動時にキャッシュを白紙化する。
+        立ち上げ直し時はゲーム内容や状況が変更されている可能性があるため、
+        常にクリーンな状態からスタートする。
         """
-        print("[Cache] 起動時にキャッシュをリセットしました（ファイルも白紙からスタート）")
-        self.translation_cache.clear()
+        from collections import OrderedDict
+        self.translation_cache = OrderedDict()
         
-        # ファイル自体も空の状態で上書き保存し、白紙化する
+        # ファイルも即座に白紙化（空の状態で保存）
         self._save_cache()
-        
-        # 起動直後のオートクリーンは翻訳開始ボタン押下時に移動したためここでは実行しません
+        print("[Cache] 起動時にキャッシュを白紙化しました（クリーンスタート）")
 
     def _auto_clean_cache(self):
         """起動時にキャッシュを最新フィルター基準で自動浄化する。"""
@@ -846,6 +857,10 @@ class TranslationController:
         perf_info = f" | Queue: {backlog} | Latency: {latency:.1f}s"
         status_prefix = self._last_analysis_status if hasattr(self, '_last_analysis_status') else "監視中"
         
+        # シングルモード実行済みならステータスを上書き
+        if self.config.get("single_mode", False) and self._single_run_done:
+            status_prefix = "シングルモード (待機)"
+            
         full_status = f"{status_prefix} | 翻訳済: {translated_count}個{perf_info} | {self.window_title}"
         self.overlay.set_status(full_status)
 
@@ -874,8 +889,15 @@ class TranslationController:
             capture_mode = self.config.get("capture_mode", "bitblt")
             image = capture_window(self.window_title, rect=rect, mode=capture_mode)
 
-            # 2. キューからの結果取得とUI反映 (画像が取得できなくてもUI更新は止めない)
+            # 2. キューからの結果取得とUI反映
             self._poll_ocr_result(image)
+            
+            # 3. ステータス更新
+            self._update_status()
+
+            # シングルモード: すでに1回スキャンを実行済みなら、ここから下の「新たなキャプチャ/監視」をスキップして表示を固定
+            if self.config.get("single_mode", False) and self._single_run_done:
+                return
 
             if image is None:
                 if not self._ocr_busy:
@@ -1082,6 +1104,12 @@ class TranslationController:
             if is_eco and time_since_last_exec < 3.0:
                 return
 
+            # シングルモード判定
+            is_single = self.config.get("single_mode", False)
+            if is_single and self._single_run_done:
+                # 実行済みなら OCR を一切走らせない（表示固定）
+                return
+
             # (一旦ピクセル単体での return は削除し、後続のエッジ判定と統合して判断します)
                 
             # 【重要】実行頻度の制限 (最低 0.3秒 は空ける)
@@ -1233,6 +1261,9 @@ class TranslationController:
 
                     raw_chunks, rect, scale_x, scale_y, _ = res
                     self._ocr_busy = False
+                    # シングルモード: 結果を受け取ったら「実行済み」としてロック
+                    if self.config.get("single_mode", False):
+                        self._single_run_done = True
                     
                     if not raw_chunks:
                         translated_count = len(self.overlay.active_labels)
@@ -1306,13 +1337,10 @@ class TranslationController:
                     
                     text_sim = SequenceMatcher(None, chunk['text'], old_chunk['text']).ratio()
                     
-                    # 【調整】「同じ」判定基準は弱めに（エッジが極めて近くても、テキストも70%以上の一致を要求）
+                    # 【調整】「同じ」判定基準を大幅に緩和（細分化対応）
                     is_same_item = False
-                    if density_diff_ratio < 0.08: # より厳格なエッジ一致(8%以内)
-                        if text_sim > 0.7: # テキスト条件も控えめに緩和 (0.5 -> 0.7)
-                            is_same_item = True
-                    else:
-                        if text_sim > 0.85: # エッジが違うならテキストはさらに厳格に
+                    if density_diff_ratio < 0.30: # エッジ一致を 30% まで許容
+                        if text_sim > 0.35: # テキスト一致も 35% まで緩和
                             is_same_item = True
                             
                     if is_same_item:
@@ -1323,9 +1351,8 @@ class TranslationController:
                 
                 # IDが固定されなかった場合、新規IDを生成
                 if chunk['id'].startswith("new_"):
-                    # エッジ密度を25段階(0.04刻み)でIDに組み込むことで、見た目の変化にさらに敏感にする
-                    density_step = int(cur_density * 25)
-                    area_id = f"{gx}_{gy}_{density_step}"
+                    # 密度ステップを除去し、座標とテキストのみで安定化させる
+                    area_id = f"{gx}_{gy}"
                     t_hash = hashlib.md5(chunk['text'].encode('utf-8')).hexdigest()
                     chunk['id'] = f"{t_hash[:8]}_{area_id}"
 
@@ -1509,9 +1536,9 @@ class TranslationController:
                         density_diff_ratio = abs(cur_density - old_density) / max(0.01, old_density)
                         
                         # 同一性の定義: 
-                        # 1. エッジが極めて安定(5%以内) かつ テキストも半分以上(0.5)一致している場合のみ「同じ」とみなす (弱めの判定)
-                        # 2. または、テキストが 0.80 以上一致している場合
-                        is_same_item = (density_diff_ratio < 0.05 and similarity > 0.5) or (similarity > 0.80)
+                        # 1. エッジが安定(25%以内) かつ テキストも30%以上(0.3)一致している場合
+                        # 2. または、テキストが 0.65 以上一致している場合
+                        is_same_item = (density_diff_ratio < 0.25 and similarity > 0.3) or (similarity > 0.65)
                         
                         # --- ケースA: 同一性が認められる場合 (表示維持) ---
                         if is_same_item:
@@ -1531,8 +1558,8 @@ class TranslationController:
                                 continue
 
                         # --- ケースB: 内容が変化している場合 (不一致判定) ---
-                        # テキストが異なり、かつエッジ密度も変化している場合は「別物」と確信 (標準的な判定)
-                        if similarity < 0.6:
+                        # 細分化ロジック導入に伴い、類似度の判定を緩和
+                        if similarity < 0.35:
                             # --- 【v1.1.2 強化】キャッシュ・ファストパス & 即時パージ ---
                             # キャッシュに既にある場合や、完全に別物（sim<0.25）の場合はストライクを待たずに即時更新する。
                             target_lang = self.config.get("target_language", "ja")
@@ -1546,7 +1573,8 @@ class TranslationController:
                                 mismatch_strikes = 2
                             
                             # エッジもテキストも両方違うなら、即座に2ストライク（即パージ確定）
-                            if density_diff_ratio > 0.20:
+                            # 判定を緩和 (0.20 -> 0.50)
+                            if density_diff_ratio > 0.50:
                                 mismatch_strikes = 2
                             
                             # スコアによる強制更新判定
@@ -1556,8 +1584,8 @@ class TranslationController:
                                 mismatch_strikes = 2
                             
                             state['mismatch_strikes'] = mismatch_strikes
-                            if mismatch_strikes >= 2:
-                                print(f"[Evict] ID={active_cid} | Reason: 内容変化(Sim:{similarity:.2f}, Strikes:{mismatch_strikes}) | New: '{new_text[:15]}'")
+                            if mismatch_strikes >= 3:
+                                print(f"[Evict] ID={active_cid} | Reason: 内容変化(Sim:{similarity:.2f}, Strikes:{mismatch_strikes}) | New: '{new_text[:30]}'")
                                 # 消去された原文をブラックリストに登録（5秒間はキャッシュ復活を阻止）
                                 if not hasattr(self, "_recent_cleared_texts"): self._recent_cleared_texts = OrderedDict()
                                 norm_cleared = normalize_text(old_text)
@@ -2556,6 +2584,66 @@ class ControlPanel(QMainWindow):
 
         layout.addWidget(settings_group)
 
+        # ===== 動作モード設定グループ =====
+        mode_group = QGroupBox("動作モード")
+        mode_group.setFont(QFont("Yu Gothic UI", 9))
+        mode_group.setStyleSheet("""
+            QGroupBox {
+                color: #aaaaaa;
+                border: 1px solid #555;
+                border-radius: 4px;
+                margin-top: 5px;
+                padding: 4px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 4px;
+            }
+        """)
+        mode_vbox = QVBoxLayout(mode_group)
+        mode_vbox.setSpacing(4)
+
+        self.chk_eco    = QCheckBox("エコモード (3秒間隔)")
+        self.chk_single = QCheckBox("シングル（リード）モード")
+
+        for cb in (self.chk_eco, self.chk_single):
+            cb.setFont(QFont("Yu Gothic UI", 9))
+            cb.setStyleSheet("color: #cccccc;")
+            mode_vbox.addWidget(cb)
+
+        mode_hint = QLabel("シングル: 開始ボタンで1回読み取り→停止まで表示を固定\n※エコとシングルは同時選択できません。")
+        mode_hint.setFont(QFont("Yu Gothic UI", 8))
+        mode_hint.setStyleSheet("color: #888888; padding-left: 4px;")
+        mode_vbox.addWidget(mode_hint)
+
+        # 保存済み設定を反映
+        self.chk_eco.setChecked(self.config.get("eco_mode", False))
+        self.chk_single.setChecked(self.config.get("single_mode", False))
+
+        def on_mode_changed():
+            is_eco    = self.chk_eco.isChecked()
+            is_single = self.chk_single.isChecked()
+            
+            # 排他制御（グレーアウト）
+            self.chk_eco.setEnabled(not is_single)
+            self.chk_single.setEnabled(not is_eco)
+            
+            self.config["eco_mode"]    = is_eco
+            self.config["single_mode"] = is_single
+            if hasattr(self, 'controller') and self.controller:
+                self.controller.config["eco_mode"]    = is_eco
+                self.controller.config["single_mode"] = is_single
+            save_config(self.config, self.config_path)
+
+        self.chk_eco.stateChanged.connect(on_mode_changed)
+        self.chk_single.stateChanged.connect(on_mode_changed)
+        
+        # 初期状態のグレーアウト反映
+        on_mode_changed()
+
+        layout.addWidget(mode_group)
+
         # --- キャプチャ設定エリア ---
         capture_group = QGroupBox("キャプチャ設定")
         capture_group.setFont(QFont("Yu Gothic UI", 9))
@@ -2730,10 +2818,24 @@ class ControlPanel(QMainWindow):
         
         # コントローラーを開始
         self.controller.update_config(self.config)
-        self.controller.start()
+
+        is_single = self.config.get("single_mode", False)
+        if is_single:
+            # シングルモード: すでに実行中なら「強制再読み取り」を実行（UIクリア含む）
+            if self.controller.is_running:
+                self.controller.force_retranslate()
+                self._update_single_btn_label()
+                return
+            else:
+                self.controller.start()
+        else:
+            self.controller.start()
         
         # UI状態更新
-        self.btn_start.setEnabled(False)
+        is_single = self.config.get("single_mode", False)
+        if not is_single:
+            # 通常/エコモードのみ開始中に無効化する（シングルは繰り返し押せる）
+            self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.window_combo.setEnabled(False)
         self.lang_combo.setEnabled(False)
@@ -2746,12 +2848,27 @@ class ControlPanel(QMainWindow):
         self.slider_sensitivity.setEnabled(False)
         self.capture_combo.setEnabled(False)
 
+        if is_single:
+            self.btn_start.setText("再読み取り")
+            self.btn_start.setEnabled(True)
+            self.btn_start.setStyleSheet("background-color: #1565c0; color: white;")
+
         # ステータス表示を最新に更新
         self._refresh_status_labels()
+
+    def _update_single_btn_label(self):
+        """シングルモード時のボタンテキストを状態に応じて更新"""
+        is_single = self.config.get("single_mode", False)
+        if is_single and self.controller and self.controller.is_running:
+            self.btn_start.setText("再読み取り")
+            self.btn_start.setStyleSheet("background-color: #1565c0; color: white;")
+            self.btn_start.setEnabled(True)
 
     def stop_translation(self):
         self.controller.stop()
         self.btn_start.setEnabled(True)
+        self.btn_start.setText("翻訳を開始")
+        self.btn_start.setStyleSheet("background-color: #2e7d32; color: white;")
         self.btn_stop.setEnabled(False)
         self.window_combo.setEnabled(True)
         self.lang_combo.setEnabled(True)

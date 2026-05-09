@@ -171,6 +171,7 @@ class PaddleOCREngine:
                 gpu_mem=self.gpu_mem_mb,
                 det_limit_side_len=3000,
                 det_limit_type="max",
+                det_db_unclip_ratio=1.6,
                 det_model_dir=None,
                 rec_model_dir=None,
                 structure_version="PP-StructureV2",
