@@ -141,8 +141,9 @@
     "rtt_label_vram": "Limite VRAM (Mo):",
     "rtt_label_cpu": "Limite fils CPU:",
     "rtt_label_paddle_lang": "Langue Paddle:",
-    "rtt_group_perf": " Capture / Performances ",
-    "rtt_label_capture": "Mode de capture:",
+    "rtt_group_perf": " Capture / Performance ",
+    "rtt_label_capture_engine": "Moteur de capture:",
+    "rtt_label_eco": "Mode Éco (suppression OCR 3s)",
     "rtt_label_sens": "Sensibilité de réponse:"
   },
   "log_messages": {

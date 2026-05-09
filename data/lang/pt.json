@@ -140,9 +140,10 @@
     "rtt_label_gpu": "GPU:",
     "rtt_label_vram": "Limite VRAM (MB):",
     "rtt_label_cpu": "Limite de threads CPU:",
-    "rtt_label_paddle_lang": "Idioma Paddle:",
+    "rtt_label_paddle_lang": "Idioma do Paddle:",
     "rtt_group_perf": " Captura / Desempenho ",
-    "rtt_label_capture": "Modo de captura:",
+    "rtt_label_capture_engine": "Motor de captura:",
+    "rtt_label_eco": "Modo Eco (supressão OCR 3s)",
     "rtt_label_sens": "Sensibilidade de resposta:"
   },
   "log_messages": {

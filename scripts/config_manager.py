@@ -74,8 +74,9 @@ DEFAULT_CONFIG = {
     "rtt_paddle_gpu_index": 0,        # 使用GPU番号（-1=CPU）
     "rtt_paddle_gpu_mem_mb": 1024,
     "rtt_paddle_language": "japan",
-    "rtt_capture_mode": "high",       # "high"=1秒 / "low"=2.5秒
-    "rtt_ocr_skip_sensitivity": 800,
+    "rtt_capture_mode": "bitblt",     # キャプチャ方式: "bitblt", "printwindow", "mss"
+    "rtt_capture_interval_sec": 1.0,  # キャプチャ間隔
+    "rtt_ocr_skip_sensitivity": 2400, # 文字変化判定のしきい値
     "rtt_cpu_threads": 0,             # 0=自動（全コア）/ 1〜N=制限
     "rtt_ocr_thread_limit_percent": 100,
     "rtt_font_size": 16,
@@ -110,6 +111,14 @@ def migrate_config(config):
             if k not in config:
                 config[k] = v
         
+        # RTTのキャプチャモード刷新 (v1.1.2)
+        if config.get("rtt_capture_mode") == "high":
+            config["rtt_capture_mode"] = "bitblt"
+            config["rtt_capture_interval_sec"] = 1.0
+        elif config.get("rtt_capture_mode") == "low":
+            config["rtt_capture_mode"] = "bitblt"
+            config["rtt_capture_interval_sec"] = 2.5
+
         migrated = True
 
     # 廃止モデルの自動置換 (v1.0.6)

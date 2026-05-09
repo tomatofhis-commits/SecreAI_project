@@ -55,16 +55,22 @@ build/
 main_hub.build/
 main_hub.onefile-build/
 
-# 作業用一時ファイル
+# Memo and Test files
 IMPROVEMENT_GUIDE.md
 Ollama_*.bat
 lookdb.py
 日本語のリスト.txt
 game_ai.py
+RTT_Architecture_v1.1.2.md
+RTT_Logic_Check_Memo.md
+RTT_Performance_Notes.md
+Build_Standard.md
+search_yesterday.py
 
 # Build distribution folders
 SecreAI_ver*/
 RTtranslator_ver*/
+installer_output/
 
 # RTtranslator specific
 RTtranslator/.git

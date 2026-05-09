@@ -9,6 +9,8 @@ import winocr
 import re
 from PIL import Image
 from concurrent.futures import ThreadPoolExecutor
+import time
+import numpy as np
 
 try:
     from src.lang_check import is_same_as_target as _lang_check
@@ -152,6 +154,12 @@ class OCREngine:
         if not self.available_langs:
             print("[OCR CRITICAL] 有効なOCR言語が一つもありません。デフォルトの 'en' を強制使用します。")
             self.available_langs = ["en"]
+            
+        self.skip_cache = {}        # {text_hash: expiry_time}
+        self.skip_cache_ttl = 5.0   # 5秒間は同じゴミを無視する
+        
+        # 部首ハルシネーションチェック用 (PaddleOCR特有の誤読)
+        self.radical_chars = set('亻冫刂彐尸儿匕卩廾弋夂夊宀彑彡忄扌攵旡殳氵灬爿犭疒癶礻糹纟罒艹虍衤覀訁讠貝贝辶釒钅隹阝韋飠饣髟鬥麻黽齊齒龜龠卜丿乀乁丨亅丶亠')
 
     def _recognize_single(self, image: Image.Image, lang: str):
         try:
@@ -194,6 +202,7 @@ class OCREngine:
         t_lang: str,
         target_lang: str,
         attach_image: bool = False,
+        parent_rect: dict = None,
     ) -> None:
         """
         テキストチャンクを検証し、問題なければ clean_chunks に追加する。
@@ -203,10 +212,21 @@ class OCREngine:
         if not t_text or len(t_text.strip()) <= 1:
             return
         if _lang_check(t_text, target_lang, threshold=0.7):
+            # 既に翻訳先言語（日本語など）の場合はスキップ
+            t_hash = hashlib.md5(t_text.encode('utf-8')).hexdigest()
+            self.skip_cache[t_hash] = time.time() + self.skip_cache_ttl
             return
 
+        t_hash = hashlib.md5(t_text.encode('utf-8')).hexdigest()
+        # 既にスキップキャッシュにあるか確認
+        if t_hash in self.skip_cache:
+            if time.time() < self.skip_cache[t_hash]:
+                return
+            else:
+                del self.skip_cache[t_hash]
+
         area_id = f"{t_rect['x'] // 20}_{t_rect['y'] // 20}"
-        cid = f"{hashlib.md5(t_text.encode('utf-8')).hexdigest()[:8]}_{area_id}"
+        cid = f"{t_hash[:8]}_{area_id}"
 
         px, py, pw, ph = t_rect['x'], t_rect['y'], t_rect['w'], t_rect['h']
 
@@ -238,6 +258,51 @@ class OCREngine:
             crop_img.save(buffered, format="PNG")
             img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
+        # --- 【v1.1.2 追加】ブラケットペアチェック (短いテキストのみ) ---
+        text_no_space = t_text.replace(" ", "").replace("\n", "")
+        if len(text_no_space) <= 20:
+            unpaired = False
+            brackets = {'(': ')', '[': ']', '{': '}', '「': '」', '『': '』', '【': '】', '（': '）', '〈': '〉', '《': '》'}
+            for op, cl in brackets.items():
+                if (op in t_text) != (cl in t_text):
+                    unpaired = True
+                    break
+            if unpaired:
+                return
+
+        # --- 【v1.1.2 統合】日本語特有の補正 ---
+        if t_lang == 'ja' or (target_lang == 'ja' and re.search(r'[ぁ-んァ-ヶ一-龥]', t_text)):
+            t_text = t_text.replace('<', 'く')
+            t_text = re.sub(r'(?<=[ァ-ヶ])-(?=[ァ-ヶ])', 'ー', t_text)
+            t_text = re.sub(r'(?<=\n)-(?=[ァ-ヶ])', 'ー', t_text)
+            t_text = re.sub(r'^-(?=[ァ-ヶ])', 'ー', t_text)
+            
+            # 不要なスペースの除去
+            new_chars = []
+            for i, c in enumerate(t_text):
+                if c == ' ':
+                    if i > 0 and i < len(t_text) - 1:
+                        if t_text[i-1].isascii() and t_text[i+1].isascii():
+                            new_chars.append(c)
+                            continue
+                    continue
+                new_chars.append(c)
+            t_text = "".join(new_chars)
+
+        # --- 【v1.1.2 強化】PaddleOCRが見た瞬間の画像でエッジ密度を確定させる ---
+        base_density = self.calculate_edge_density(image, t_rect)
+        
+        # --- 【v1.1.2 追加】Step 3 の枠情報と追従用画像を保存 ---
+        step3_crop_np = None
+        p_rect_store = parent_rect if parent_rect else t_rect
+        if p_rect_store:
+            cx = max(0, p_rect_store['x'])
+            cy = max(0, p_rect_store['y'])
+            cw = max(1, min(image.width - cx, p_rect_store['w']))
+            ch = max(1, min(image.height - cy, p_rect_store['h']))
+            crop_img = image.crop((cx, cy, cx + cw, cy + ch)).convert("L")
+            step3_crop_np = np.array(crop_img)
+
         clean_chunks.append({
             "text": t_text,
             "rect": t_rect,
@@ -247,26 +312,29 @@ class OCREngine:
             "bg_color": f"rgba({r}, {g}, {b}, 1.0)",
             "text_color": text_color,
             "text_lines": t_lines,
-            "image_b64": img_b64
+            "image_b64": img_b64,
+            "base_density": base_density,
+            "parent_rect": p_rect_store,
+            "step3_crop": step3_crop_np
         })
 
     def _try_paddle_refine(
         self,
         image: Image.Image,
         rect: dict,
-    ) -> list[tuple[str, dict, list[str]]]:
+    ) -> list[tuple[str, dict, list[str], float]]:
         """
         PaddleOCRで指定矩形を適切なマージンで切り出して再認識する。
+        統合された大きな枠を、内部の物理的な配置に基づいて適切に細分化(Subdivide)する。
         """
         if self.paddle_engine is None:
             return []
         try:
             x, y, w, h = int(rect['x']), int(rect['y']), int(rect['w']), int(rect['h'])
 
-            # 垂直方向: 前後行のコンテキストを確保するが、テキストボックス等ですでにhが大きい場合は過剰な拡大を防ぐため上限(40px)を設ける
-            # 水平方向: 列をまたがず別UIを吸収しないよう上限(40px)を設ける
-            margin_v = min(max(int(h * 1.5), 20), 40)
-            margin_h = min(max(int(h * 0.5), 12), 40)
+            # マージンの確保（文脈読み取りのため）
+            margin_v = min(max(int(h * 0.3), 15), 40)
+            margin_h = min(max(int(w * 0.1), 10), 30)
 
             x0 = max(0, x - margin_h)
             y0 = max(0, y - margin_v)
@@ -278,34 +346,50 @@ class OCREngine:
             if not blocks:
                 return []
 
-            good_blocks = [b for b in blocks if b['confidence'] >= 0.5]
+            good_blocks = [b for b in blocks if b['confidence'] >= 0.45]
             if not good_blocks:
                 return []
 
-            # ブロックの平均高さを算出し、その半分の高さを「同じ行」とみなす帯(band)として動的ソート
+            # 1. 座標ソート (Y座標優先、同程度ならX座標)
             avg_h = max(1, sum(b['rect']['h'] for b in good_blocks) / len(good_blocks))
             band_size = max(5, int(avg_h * 0.5))
             good_blocks.sort(key=lambda b: (int(b['rect']['y'] // band_size), b['rect']['x']))
             
+            # 2. 段落(Paragraph)の細分化判定
+            # 物理的に離れているものを別々のチャンクとして切り出す
             paragraphs = []
-            current_paragraph = []
-            last_b = None
-            
-            for b in good_blocks:
-                if last_b is None:
-                    current_paragraph.append(b)
-                else:
-                    gap = b['rect']['y'] - (last_b['rect']['y'] + last_b['rect']['h'])
-                    h_min = min(b['rect']['h'], last_b['rect']['h'])
-                    # 行間が文字の高さの0.8倍以上空いている場合は別の段落（別枠）として分割
-                    if gap > h_min * 0.8:
+            if good_blocks:
+                current_paragraph = [good_blocks[0]]
+                for i in range(1, len(good_blocks)):
+                    prev = good_blocks[i-1]
+                    curr = good_blocks[i]
+                    
+                    # 垂直方向の隙間
+                    v_gap = curr['rect']['y'] - (prev['rect']['y'] + prev['rect']['h'])
+                    # 水平方向の隙間（同じ行内での判定）
+                    h_gap = curr['rect']['x'] - (prev['rect']['x'] + prev['rect']['w'])
+                    
+                    h_min = min(prev['rect']['h'], curr['rect']['h'])
+                    
+                    is_split = False
+                    # A. 著しい高さの違い (フォントサイズが1.5倍以上違う)
+                    # UIパーツ（タイトルと本文、ラベルと値など）を分離するための主軸判定
+                    if max(prev['rect']['h'], curr['rect']['h']) / max(1, h_min) > 1.5:
+                        is_split = True
+                    # B. 垂直方向に極端に離れている (行間が文字の高さの4.0倍以上)
+                    # PaddleOCRが誤って統合した場合のフォールバック
+                    elif v_gap > h_min * 4.0:
+                        is_split = True
+                    # C. 水平方向に極端に離れている (文字間が文字の高さの4.0倍以上)
+                    # 同一ライン上の異なるUI要素を分離するためのフォールバック
+                    elif h_gap > h_min * 4.0:
+                        is_split = True
+                        
+                    if is_split:
                         paragraphs.append(current_paragraph)
-                        current_paragraph = [b]
+                        current_paragraph = [curr]
                     else:
-                        current_paragraph.append(b)
-                last_b = b
-                
-            if current_paragraph:
+                        current_paragraph.append(curr)
                 paragraphs.append(current_paragraph)
                 
             results = []
@@ -313,17 +397,24 @@ class OCREngine:
                 assembled_text = ""
                 paddle_lines = []
                 current_line_text = ""
-                last_p = None
+                last_b = None
+                
+                # 段落内での座標ソート
+                para.sort(key=lambda b: (int(b['rect']['y'] // band_size), b['rect']['x']))
+                
                 for b in para:
                     txt = b['text'].strip()
                     if not txt: continue
-                    if last_p is None:
+                    
+                    if last_b is None:
                         assembled_text = txt
                         current_line_text = txt
                     else:
-                        y_diff = abs(b['rect']['y'] - last_p['rect']['y'])
-                        h_min = min(b['rect']['h'], last_p['rect']['h'])
-                        if y_diff < h_min * 0.5:
+                        y_diff = abs(b['rect']['y'] - last_b['rect']['y'])
+                        h_min = min(b['rect']['h'], last_b['rect']['h'])
+                        # 同じ行内かどうかの判定
+                        if y_diff < h_min * 0.6:
+                            # 日本語・中国語ならスペースなしで結合
                             if re.search(r'[ぁ-んァ-ヶ一-龥ー]', assembled_text[-1:]) and re.search(r'[ぁ-んァ-ヶ一-龥ー]', txt[:1]):
                                 assembled_text += txt
                                 current_line_text += txt
@@ -331,21 +422,24 @@ class OCREngine:
                                 assembled_text += " " + txt
                                 current_line_text += " " + txt
                         else:
+                            # 改行
                             paddle_lines.append(current_line_text)
                             assembled_text += "\n" + txt
                             current_line_text = txt
-                    last_p = b
+                    last_b = b
+                
                 if current_line_text:
                     paddle_lines.append(current_line_text)
                 
                 if not assembled_text.strip():
                     continue
 
-                # 画像全体の座標系に変換した矩形を計算
+                # 元画像全体の座標系に変換
                 all_bx  = [b['rect']['x']              + x0 for b in para]
                 all_by  = [b['rect']['y']              + y0 for b in para]
                 all_bx2 = [b['rect']['x'] + b['rect']['w'] + x0 for b in para]
                 all_by2 = [b['rect']['y'] + b['rect']['h'] + y0 for b in para]
+                
                 abs_rect = {
                     'x': min(all_bx),
                     'y': min(all_by),
@@ -353,12 +447,13 @@ class OCREngine:
                     'h': max(all_by2) - min(all_by),
                 }
 
-                results.append((assembled_text, abs_rect, paddle_lines))
+                avg_conf = sum(b['confidence'] for b in para) / len(para) if para else 0.0
+                results.append((assembled_text, abs_rect, paddle_lines, avg_conf))
 
             return results
 
         except Exception as e:
-            print(f"[OCR Paddle] 再認識エラー: {e}")
+            print(f"[OCR Paddle] 再認識・細分化エラー: {e}")
             return []
 
 
@@ -460,6 +555,8 @@ class OCREngine:
         import os
         try:
             results_by_lang = {}
+            # CPU数に基づいた並列実行数の決定
+            max_workers = max(1, int((os.cpu_count() or 1) * thread_limit_ratio))
             
             # --- Only Paddle モード (タイル分割索敵) ---
             if self.ocr_mode == "paddle_only" and self.paddle_engine is not None:
@@ -469,43 +566,170 @@ class OCREngine:
                 clean_chunks = []
                 for b in scout_blocks:
                     refine_results = self._try_paddle_refine(image, b['rect'])
-                    for text, r_rect, r_lines in refine_results:
+                    for text, r_rect, r_lines, r_conf in refine_results:
                         self._append_chunk(clean_chunks, image, text, r_rect, r_lines, "ja", target_lang, attach_image)
                 return clean_chunks, True
 
-            # --- 以下、従来のハイブリッド / WinRT モード ---
-            # スレッド数を制限（論理コア数 × 制限率 と、要求言語数の小さい方を採用）
-            cpu_count = os.cpu_count() or 4
-            limit_workers = max(1, int(cpu_count * thread_limit_ratio))
-            max_workers = min(len(self.available_langs), limit_workers)
+            # --- 第1パス: 矩形群の獲得と統合 (Discovery OCR) ---
+            # WinRT(全言語) と Paddle(索敵) を並列実行して「どこに文字があるか」を確定させる
+            scout_rects = []
             
-            # WinRT全言語を並列実行
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = [executor.submit(self._recognize_single, image, lang) for lang in self.available_langs]
-                for future in futures:
+            with ThreadPoolExecutor(max_workers=max_workers + 1) as executor:
+                # WinRT スキャン
+                winrt_futures = [executor.submit(self._recognize_single, image, lang) for lang in self.available_langs]
+                # Paddle 索敵スキャン (rec=False)
+                paddle_scout_future = executor.submit(self.paddle_engine.recognize, image, rec=False) if self.paddle_engine else None
+                
+                # WinRT スキャン (Discovery: 枠の検出のみに使用し、テキストは破棄する)
+                for future in winrt_futures:
                     lang, res = future.result()
-                    if res:
-                        results_by_lang[lang] = res
+                    if res and "lines" in res:
+                        for line in res["lines"]:
+                            if "words" in line:
+                                # 座標のみを抽出し、WinRTが読み取ったテキスト内容は一切使用しない
+                                xs = [w['bounding_rect']['x'] for w in line["words"]]
+                                ys = [w['bounding_rect']['y'] for w in line["words"]]
+                                rs = [w['bounding_rect']['x'] + w['bounding_rect']['width'] for w in line["words"]]
+                                bs = [w['bounding_rect']['y'] + w['bounding_rect']['height'] for w in line["words"]]
+                                scout_rects.append({"x": min(xs), "y": min(ys), "w": max(rs) - min(xs), "h": max(bs) - min(ys)})
+                
+                # Paddle の結果から矩形を抽出
+                if paddle_scout_future:
+                    p_blocks = paddle_scout_future.result()
+                    if p_blocks:
+                        for b in p_blocks:
+                            scout_rects.append(b['rect'])
 
-            # dual_scout_hybrid: PaddleOCRも全画面スキャンして索敵結果に加える
-            # dual_scout_hybrid: PaddleOCRも全画面スキャンして索敵結果に加える
-            if self.ocr_mode == "dual_scout_hybrid" and self.paddle_engine is not None:
-                # 第1パス(索敵)では認識処理をスキップ(rec=False)して高速化する
-                blocks = self.paddle_engine.recognize(image, rec=False)
-                if blocks:
-                    pseudo_lines = []
-                    for b in blocks:
-                        # rec=False の場合はテキストがないため、空文字をセット
-                        pseudo_lines.append({
-                            "text": b['text'],
-                            "words": [{"bounding_rect": {"x": b['rect']['x'], "y": b['rect']['y'], "width": b['rect']['w'], "height": b['rect']['h']}}]
-                        })
-                    if "ja" in results_by_lang:
-                        results_by_lang["paddle_ja"] = {"lines": pseudo_lines}
-                    else:
-                        results_by_lang["ja"] = {"lines": pseudo_lines}
-                        
-            all_raw_chunks = []
+            # 矩形群を統合整理 (IoUでマージして重複を消す)
+            if not scout_rects:
+                return [], False
+            
+            # 矩形群を統合整理 (アグレッシブ・マージ)
+            # 重複だけでなく、同一行にある近接した枠も一つの文章ブロックとして連結する
+            master_rects = []
+            scout_rects.sort(key=lambda r: r['w'] * r['h'], reverse=True)
+            
+            # [v1.1.2 Guard] 異常な数の矩形がある場合は制限（ノイズによるハング防止）
+            if len(scout_rects) > 800:
+                print(f"[OCR Guard] 警告: 検出された矩形が多すぎます ({len(scout_rects)}個)。上位400個に制限します。")
+                scout_rects = scout_rects[:400]
+
+            for r in scout_rects:
+                is_merged = False
+                for m in master_rects:
+                    # A. 重複判定 (IoU > 0.1 または 内包)
+                    iou = _calc_iou(r, m)
+                    
+                    # B. 近接判定（同一行かつ左右の距離が近い）
+                    # Y軸の重なりが小さい方の高さの 60% 以上あれば「同じ行」とみなす
+                    y_overlap = max(0, min(r['y']+r['h'], m['y']+m['h']) - max(r['y'], m['y']))
+                    min_h = min(r['h'], m['h'])
+                    is_same_line = (y_overlap > min_h * 0.6)
+                    
+                    # 左右の隙間が文字の高さの 1.5 倍以内なら「近接」とみなす
+                    x_gap = 0
+                    if r['x'] + r['w'] < m['x']:
+                        x_gap = m['x'] - (r['x'] + r['w'])
+                    elif m['x'] + m['w'] < r['x']:
+                        x_gap = r['x'] - (m['x'] + m['w'])
+                    
+                    is_close = (x_gap < min_h * 1.5)
+                    
+                    if iou > 0.1 or (is_same_line and is_close):
+                        # 統合（Union）してマスター領域を拡大
+                        m_nx = min(m['x'], r['x'])
+                        m_ny = min(m['y'], r['y'])
+                        m_nw = max(m['x'] + m['w'], r['x'] + r['w']) - m_nx
+                        m_nh = max(m['y'] + m['h'], r['y'] + r['h']) - m_ny
+                        m['x'], m['y'], m['w'], m['h'] = m_nx, m_ny, m_nw, m_nh
+                        is_merged = True
+                        break
+                if not is_merged:
+                    master_rects.append(r)
+
+            # --- 第2パス: 高精度読み取り (Recognition) ---
+            # [v1.1.2 Guard] 最終的な読取対象が多すぎる場合も制限
+            if len(master_rects) > 100:
+                print(f"[OCR Guard] 読取対象が多すぎます ({len(master_rects)}個)。上位60個に制限します。")
+                master_rects = master_rects[:60]
+
+            clean_chunks = []
+            for m_rect in master_rects:
+                # PaddleOCR で精読
+                refine_results = self._try_paddle_refine(image, m_rect)
+                for p_text, p_rect, p_lines, p_conf in refine_results:
+                    # 【v1.1.2 独立ガードレール】OCR直後のノイズを物理的に排除
+                    text_no_space = p_text.replace(" ", "").replace("\n", "")
+                    if not text_no_space: continue
+
+                    # 1. 記号割合チェック (35%以上が記号ならゴミ)
+                    symbol_count = len(re.findall(r'[^\wぁ-んァ-ン一-龥가-힣А-Яа-яЁёÀ-ÿ]', text_no_space))
+                    symbol_ratio = symbol_count / len(text_no_space)
+                    if (len(text_no_space) <= 12 and symbol_ratio >= 0.25) or symbol_ratio >= 0.35:
+                        if p_conf < 0.95:
+                            # print(f"[OCRFilter] 記号過多スキップ ({symbol_ratio:.2f}): '{p_text[:20]}'")
+                            # 2秒間のスキップキャッシュに登録
+                            t_hash = hashlib.md5(p_text.encode('utf-8')).hexdigest()
+                            self.skip_cache[t_hash] = time.time() + 2.0
+                            continue
+
+                    # 2. 部首ハルシネーションチェック (PaddleOCR特有の誤読)
+                    radical_count = sum(1 for c in text_no_space if c in self.radical_chars)
+                    if radical_count >= 3 or (len(text_no_space) <= 15 and radical_count >= 2):
+                        if p_conf < 0.90:
+                            # print(f"[OCRFilter] 部首ハルシネーションスキップ: '{p_text[:20]}'")
+                            # 2秒間のスキップキャッシュに登録
+                            t_hash = hashlib.md5(str(p_text).encode('utf-8')).hexdigest()
+                            self.skip_cache[t_hash] = time.time() + 2.0
+                            continue
+
+                    # 3. Unicodeブロック判定（有効な全言語を考慮）
+                    # 基本の許可セット（英数字、スペース、基本記号、ラテン文字）
+                    allowed_ranges = r'0-9A-Za-z\s\.,!\?\-\u0020-\u007F\u00A0-\u00FF'
+                    
+                    # 有効な言語に基づいて許可範囲を拡張
+                    lang_tags = [l.split("-")[0].lower() for l in self.available_langs] if self.available_langs else ["en"]
+                    src_lang = lang_tags[0]
+                    if "ja" in lang_tags:
+                        allowed_ranges += r'\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF'
+                    if "ko" in lang_tags:
+                        allowed_ranges += r'\uAC00-\uD7A3\u1100-\u11FF'
+                    if "ru" in lang_tags:
+                        allowed_ranges += r'\u0400-\u04FF'
+                    
+                    # 正規表現で不適合文字をカウント
+                    pattern = f'[^{allowed_ranges}]'
+                    invalid_chars = len(re.findall(pattern, text_no_space))
+                    
+                    if invalid_chars / len(text_no_space) > 0.4:
+                        if p_conf < 0.85:
+                            debug_lang = "/".join(lang_tags)
+                            # print(f"[OCRFilter] Unicodeブロック不適合スキップ ({debug_lang}): '{p_text[:20]}'")
+                            # 2秒間のスキップキャッシュに登録
+                            t_hash = hashlib.md5(str(p_text).encode('utf-8')).hexdigest()
+                            self.skip_cache[t_hash] = time.time() + 2.0
+                            continue
+
+                    # 4. 極端な短文排除
+                    if len(text_no_space) <= 3 and not (p_rect['h'] > image.height * 0.1):
+                        if p_conf < 0.80:
+                            # print(f"[OCRFilter] 短文低確信度スキップ: '{p_text[:20]}' (conf: {p_conf:.2f})")
+                            # 2秒間のスキップキャッシュに登録
+                            t_hash = hashlib.md5(p_text.encode('utf-8')).hexdigest()
+                            self.skip_cache[t_hash] = time.time() + 2.0
+                            continue
+
+                    # スキップキャッシュの最終チェック
+                    t_hash = hashlib.md5(str(p_text).encode('utf-8')).hexdigest()
+                    if t_hash in self.skip_cache:
+                        if time.time() < self.skip_cache[t_hash]:
+                            continue
+                    
+                    # ソース言語を推測して渡す
+                    self._append_chunk(clean_chunks, image, p_text, p_rect, p_lines, src_lang, target_lang, attach_image, parent_rect=m_rect)
+            
+            return clean_chunks, True
+
             
             # 1. まず各言語ごとにクラスタリング（段落の組み立て）を行う
             for lang_key, result in results_by_lang.items():
@@ -1007,8 +1231,12 @@ class OCREngine:
 
                 if needs_paddle:
                     paddle_results = self._try_paddle_refine(image, group['rect'])
+                    print(f"  [Engine] PaddleOCR: Found {len(paddle_results) if paddle_results else 0} blocks")
                     if paddle_results:
-                        for p_text, p_rect, p_lines in paddle_results:
+                        for p_text, p_rect, p_lines, p_conf in paddle_results:
+                            # Paddleの確信度に基づいた最終フィルタ
+                            if p_conf < 0.5:
+                                continue
                             if p_rect:
                                 paddle_absorbed_rects.append(p_rect)
                             self._append_chunk(

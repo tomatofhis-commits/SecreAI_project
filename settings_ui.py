@@ -971,15 +971,27 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     rtt_perf_group = tk.LabelFrame(rtt_scroll_frame, text=l_set.get("rtt_group_perf", " キャプチャ / パフォーマンス "))
     rtt_perf_group.pack(fill="x", padx=8, pady=5)
 
+    # キャプチャ方式の選択
+    tk.Label(rtt_perf_group, text=l_set.get("rtt_label_capture_engine", "キャプチャ方式:"), anchor="w").grid(row=0, column=0, sticky="w", padx=8, pady=4)
+    rtt_engine_map = {"BitBlt (推奨/高精細)": "bitblt", "PrintWindow (互換/高精細)": "printwindow", "mss (標準)": "mss"}
+    rtt_engine_map_rev = {v: k for k, v in rtt_engine_map.items()}
+    saved_engine = config.get("rtt_capture_mode", "bitblt")
+    rtt_engine_var = tk.StringVar(value=rtt_engine_map_rev.get(saved_engine, "BitBlt (推奨/高精細)"))
+    tk.OptionMenu(rtt_perf_group, rtt_engine_var, *rtt_engine_map.keys()).grid(row=0, column=1, sticky="w", padx=8, pady=4)
+
+    # エコモード
+    rtt_eco_var = tk.BooleanVar(value=config.get("rtt_eco_mode", False))
+    tk.Checkbutton(rtt_perf_group, text=l_set.get("rtt_label_eco", "エコモード (3秒間OCR抑制)"), variable=rtt_eco_var).grid(row=1, column=0, columnspan=2, sticky="w", padx=8, pady=4)
+
     # 処理の反応感度スライダー（直感的なラベル）
-    tk.Label(rtt_perf_group, text=l_set.get("rtt_label_sens", "処理の反応感度:"), anchor="w").grid(row=1, column=0, sticky="w", padx=8, pady=4)
+    tk.Label(rtt_perf_group, text=l_set.get("rtt_label_sens", "読取反応感度:"), anchor="w").grid(row=2, column=0, sticky="w", padx=8, pady=4)
     _SENS_LABELS = ["最低", "2", "3", "4", "5", "最大"]
     _SENS_VALUES = [2400, 1200, 800, 600, 400, 200]   # 内部値（数値が小さいほど高感度）
-    saved_sens = config.get("rtt_ocr_skip_sensitivity", 800)
-    saved_sens_idx = _SENS_VALUES.index(saved_sens) if saved_sens in _SENS_VALUES else 2
+    saved_sens = config.get("rtt_ocr_skip_sensitivity", 2400)
+    saved_sens_idx = _SENS_VALUES.index(saved_sens) if saved_sens in _SENS_VALUES else 0
 
     rtt_sens_frame = tk.Frame(rtt_perf_group)
-    rtt_sens_frame.grid(row=1, column=1, columnspan=2, sticky="w", padx=8)
+    rtt_sens_frame.grid(row=2, column=1, columnspan=2, sticky="w", padx=8)
 
     rtt_sens_slider = tk.Scale(rtt_sens_frame, from_=0, to=5, orient="horizontal",
                                resolution=1, showvalue=False, length=200)
@@ -991,7 +1003,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     # スライダー下にラベル目盛り表示
     rtt_tick_frame = tk.Frame(rtt_perf_group)
-    rtt_tick_frame.grid(row=2, column=1, columnspan=2, sticky="w", padx=8)
+    rtt_tick_frame.grid(row=3, column=1, columnspan=2, sticky="w", padx=8)
     for tick_lbl in _SENS_LABELS:
         tk.Label(rtt_tick_frame, text=tick_lbl, font=("", 8), fg="gray", width=5).pack(side="left")
 
@@ -1048,6 +1060,12 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["rtt_target_language"] = rtt_lang_map.get(rtt_lang_var.get(), "ja")
         config["rtt_ocr_languages"] = [tag for tag, cb in rtt_ocr_lang_cbs.items() if cb.get()]
         config["rtt_paddle_gpu_index"] = _gpu_val_map.get(rtt_gpu_var.get(), 0)
+        config["rtt_paddle_gpu_mem_mb"] = int(rtt_vram_var.get())
+        config["rtt_ocr_thread_limit_percent"] = int(rtt_cpu_pct_var.get().replace("%",""))
+        config["rtt_paddle_language"] = rtt_paddle_lang_map.get(rtt_paddle_lang_var.get(), "japan")
+        config["rtt_capture_mode"] = rtt_engine_map.get(rtt_engine_var.get(), "bitblt")
+        config["rtt_eco_mode"] = rtt_eco_var.get()
+        config["rtt_ocr_skip_sensitivity"] = _SENS_VALUES[int(rtt_sens_slider.get())]
         config["rtt_paddle_gpu_mem_mb"] = int(rtt_vram_var.get())
         
         # CPUスレッド制限: ％選択方式の値を保存

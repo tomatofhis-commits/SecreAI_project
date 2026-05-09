@@ -140,8 +140,9 @@
     "rtt_label_cpu": "CPU 스레드 제한:",
     "rtt_label_paddle_lang": "Paddle 전용 언어:",
     "rtt_group_perf": " 캡처 / 성능 ",
-    "rtt_label_capture": "캡처 모드:",
-    "rtt_label_sens": "처리 반응 감도:"
+    "rtt_label_capture_engine": "캡처 엔진:",
+    "rtt_label_eco": "에코 모드 (3초 OCR 억제)",
+    "rtt_label_sens": "응답 감도:"
   },
   "log_messages": {
     "module_loaded": "시스템: 기억 업데이트 모듈이 로드되었습니다.",

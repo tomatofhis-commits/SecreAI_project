@@ -78,11 +78,19 @@ class PaddleOCREngine:
         self._ocr = None           # PaddleOCR インスタンス
         self._lock = threading.Lock()
         self._initialized = False
+        self._is_loading = False   # 読み込み中フラグ
         self._init_error: Optional[str] = None
 
     # ------------------------------------------------------------------
     # パブリックAPI
     # ------------------------------------------------------------------
+
+    def preload(self):
+        """ワーカー・スレッドなどから呼び出し、初期化を同期的に済ませる"""
+        if not self.enabled:
+            return
+        if not self._initialized:
+            self._initialize()
 
     def recognize(self, image: Image.Image, rec: bool = True) -> Optional[list[dict]]:
         """
@@ -96,10 +104,16 @@ class PaddleOCREngine:
         if not self.enabled:
             return None
 
-        with self._lock:
-            if not self._initialized:
+        # 未初期化の場合のハンドリング
+        if not self._initialized:
+            # UIのフリーズを防ぐため、メインスレッドからの呼び出し時は待たずに None を返す
+            if threading.current_thread() == threading.main_thread():
+                return None
+            else:
+                # バックグラウンドスレッド（_ocr_worker等）なら初期化を実行
                 self._initialize()
 
+        with self._lock:
             if self._ocr is None:
                 return None
 
@@ -115,6 +129,7 @@ class PaddleOCREngine:
             self.lang = new_lang
             self._ocr = None  # 古いモデルを破棄（メモリ解放）
             self._initialized = False
+            self._is_loading = False
             self._init_error = None
 
     def get_status(self) -> str:
@@ -123,11 +138,11 @@ class PaddleOCREngine:
             return "[OFF] PaddleOCR 無効"
         if self._init_error:
             return f"[ERROR] PaddleOCR: {self._init_error}"
+        if self._is_loading:
+            return "PaddleOCR 初期化中... (バックグラウンド)"
         if self._ocr:
             mode = "GPU" if self.gpu_index >= 0 else "CPU"
             return f"[OK] PaddleOCR 有効 ({mode}, {self.gpu_mem_mb}MB)"
-        if self._initialized:
-            return "PaddleOCR 初期化中..."
         return "PaddleOCR 準備完了 (開始時に起動)"
 
     # ------------------------------------------------------------------
@@ -135,41 +150,55 @@ class PaddleOCREngine:
     # ------------------------------------------------------------------
 
     def _initialize(self):
-        """PaddleOCR を初期化する（初回呼び出し時のみ実行）。"""
-        self._initialized = True
+        """PaddleOCR を初期化する。"""
+        with self._lock:
+            if self._initialized:
+                return
+            self._is_loading = True
+            
         try:
-            from paddleocr import PaddleOCR  # pip install paddleocr
+            # 重いインポートとインスタンス生成
+            from paddleocr import PaddleOCR
 
             use_gpu = self.gpu_index >= 0
             gpu_id = self.gpu_index if use_gpu else 0
 
-            self._ocr = PaddleOCR(
-                use_angle_cls=True,         # 文字の傾き補正を有効化
+            new_ocr = PaddleOCR(
+                use_angle_cls=True,
                 lang=self.lang,
                 use_gpu=use_gpu,
                 gpu_id=gpu_id,
                 gpu_mem=self.gpu_mem_mb,
-                det_limit_side_len=3000,    # 文字潰れ防止 (縮小制限サイズを引き上げ)
+                det_limit_side_len=3000,
                 det_limit_type="max",
-                # Serverモデルを明示的に指定
-                det_model_dir=None,         # None = デフォルト（自動ダウンロード）
+                det_model_dir=None,
                 rec_model_dir=None,
-                # Serverモデルの使用
                 structure_version="PP-StructureV2",
-                enable_mkldnn=not use_gpu,  # CPUモード時は MKL-DNN を有効化
+                enable_mkldnn=not use_gpu,
                 cpu_threads=self.cpu_threads if self.cpu_threads > 0 else 10,
                 show_log=False,
             )
+            
+            with self._lock:
+                self._ocr = new_ocr
+                self._initialized = True
+                self._init_error = None
+
             mode = f"GPU:{self.gpu_index}" if use_gpu else "CPU"
             print(f"[PaddleEngine] PaddleOCR 初期化完了 ({mode}, {self.gpu_mem_mb}MB, lang={self.lang})")
 
         except ImportError:
-            self._init_error = "paddleocr がインストールされていません"
+            with self._lock:
+                self._init_error = "paddleocr がインストールされていません"
             print(f"[PaddleEngine] {self._init_error}")
         except Exception as e:
-            self._init_error = str(e)
+            with self._lock:
+                self._init_error = str(e)
+                self._ocr = None
             print(f"[PaddleEngine] 初期化エラー: {e}")
-            self._ocr = None
+        finally:
+            with self._lock:
+                self._is_loading = False
 
     def _run_ocr(self, image: Image.Image, rec: bool = True) -> Optional[list[dict]]:
         """実際の認識処理を行い、正規化された結果リストを返す。"""

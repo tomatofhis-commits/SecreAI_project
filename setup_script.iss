@@ -4,15 +4,15 @@
 ; ============================================================
 
 #define MyAppName        "SecreAI"
-#define MyAppVersion     "1.1.1"
+#define MyAppVersion     "1.1.2"
 #define MyAppPublisher   "SecreAI Dev Team"
 #define MyAppExeName     "secreAI.exe"
 
 ; --- ソースフォルダ定義 ---
-; SecreAI のビルド成果物フォルダ（整理済み）
-#define SecreAIDistDir   "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\SecreAI_ver1.1.1"
-#define RTTDistDir       "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\RTtranslator_ver1.0.1"
-#define RTTSourceDir     "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\RTtranslator_ver1.0.1"
+; SecreAI のビルド成果物フォルダ
+#define SecreAIDistDir   "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\SecreAI_ver1.1.2"
+#define RTTDistDir       "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\RTtranslator_ver1.0.2"
+#define RTTSourceDir     "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\RTtranslator_ver1.0.2"
 
 [Setup]
 AppId={{C12F4B7A-9E5C-4F3D-8A1B-2C3D4E5F6G7H}
@@ -23,7 +23,7 @@ DefaultDirName={localappdata}\{#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
-OutputDir=C:\Users\amach\OneDrive\デスクトップ\アップ用作業
+OutputDir=d:\SecreAI_Build\installer_output
 OutputBaseFilename=SecreAI_v{#MyAppVersion}_Setup
 SetupIconFile=d:\SecreAI_Build\SecreAI.ico
 Compression=lzma

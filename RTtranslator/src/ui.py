@@ -147,48 +147,56 @@ class TranslationOverlay(QMainWindow):
         #     return
             
         # すでに描画済みならスキップ
-        if cid in self.active_labels:
-            return
-
-        lines_count = chunk.get("lines_count", 1)
         rect = chunk["rect"]
-        x = int(rect["x"])
-        y = int(rect["y"])
-        w = int(rect["w"])
-        h = int(rect["h"])
+        nx, ny = int(rect["x"]), int(rect["y"])
+        nw, nh = int(rect["w"]), int(rect["h"])
+
+        # すでに表示中のラベルがある場合のガードと高速更新
+        if cid in self.active_labels:
+            label = self.active_labels[cid]
+            # 1. テキスト内容が同じなら位置・サイズの更新のみ（再描画スキップ）
+            if getattr(label, '_last_text', '') == translated:
+                # わずかな座標変化でも追従を優先して move() を実行
+                label.move(nx, ny)
+                label.setFixedSize(nw, nh)
+                return
+            
+            # 2. テキスト内容が変わった場合は、以下で再描画（既存のラベルを再利用）
+            pass
+        else:
+            # 新規作成
+            label = QLabel(self.central)
+            label.setWordWrap(True)
+            label.setTextFormat(Qt.TextFormat.RichText)
+            self.active_labels[cid] = label
+
+        # --- 以下、新規作成またはテキスト変更時のみ実行される重い処理 ---
+        label._last_text = translated
         
-        # --- フォントサイズ: 枠内に収まる最大サイズをバイナリサーチで決定 ---
-        # 上限: 枠の高さ÷行数、ただし上限32px / 下限8px
+        lines_count = chunk.get("lines_count", 1)
+        x, y, w, h = nx, ny, nw, nh
+        
         # 翻訳先言語に応じたフォントファミリーの決定
         target_base = target_lang.split("-")[0].lower()
         if target_base == "ko":
             font_family = "'Malgun Gothic', 'Yu Gothic UI', sans-serif"
-            font_min = 10  # ハングルは8pxだと潰れやすいため10pxを最小に
-            boost = 4     # ブーストを4へ増加
+            font_min = 10
+            boost = 4
         elif target_base in ["ja", "zh"]:
             font_family = "'Yu Gothic UI', 'Meiryo', 'MS Gothic', sans-serif"
             font_min = 10
-            boost = 4     # ブーストを4へ増加
+            boost = 4
         else:
             font_family = "'Yu Gothic UI', sans-serif"
             font_min = 8
             boost = 0
 
-        # --- フォントサイズ: 枠内に収まる最大サイズをバイナリサーチで決定 ---
-        # 上限: 枠の高さ÷行数、ただし上限32px / 下限 font_min
         line_height_px = h / max(1, lines_count)
-        base_px = int(line_height_px) + boost
-        base_px = max(font_min, min(32, base_px))
+        base_px = max(font_min, min(32, int(line_height_px) + boost))
         
         bg_color = chunk.get("bg_color", "rgba(0, 0, 0, 1.0)")
         text_color = chunk.get("text_color", "#eeeeee")
         
-        # QLabelを使用し、幅固定・高さ自動調整(WordWrap)にする
-        label = QLabel(self.central)
-        label.setWordWrap(True)
-        label.setTextFormat(Qt.TextFormat.RichText)
-        
-        # パディングを最小化し、枠内の文字領域を最大化する
         label.setStyleSheet(f"""
             QLabel {{
                 background-color: {bg_color};
@@ -200,84 +208,58 @@ class TranslationOverlay(QMainWindow):
         """)
         
         label_w = w
-        
         if lines_count == 1 and '\n' not in translated:
-            # 一単語（空白なし）の場合、枠を少しだけ(+2px)大きくする
             if ' ' not in translated.strip() and '　' not in translated.strip():
                 w += 2
                 h += 2
                 label_w = w
-                
-            # === 1行モード: white-space:nowrap で最大フォントを探す ===
+            
             label.setWordWrap(False)
             text_to_render = translated.replace('\n', '').replace('\r', '')
             
-            lo = font_min
-            hi = 32
+            lo, hi = font_min, 32
             best_px = font_min
-            
-            def _test_render_single(px):
-                html = f'<div style="font-size: {px}px; font-weight: bold; font-family: {font_family}; white-space: nowrap; line-height: 1.0;"><nobr>{text_to_render}</nobr></div>'
-                label.setText(html)
-                label.adjustSize()
-                return label.width() <= label_w and label.height() <= h
-            
-            # 二分探索で枠内に収まる最大のフォントサイズを特定
             while lo <= hi:
                 mid = (lo + hi) // 2
-                if _test_render_single(mid):
+                html = f'<div style="font-size: {mid}px; font-weight: bold; font-family: {font_family}; white-space: nowrap; line-height: 1.0;"><nobr>{text_to_render}</nobr></div>'
+                label.setText(html)
+                label.adjustSize()
+                if label.width() <= label_w and label.height() <= h:
                     best_px = mid
                     lo = mid + 1
                 else:
                     hi = mid - 1
             
-            # 文字サイズが枠の高さに対して大きい場合、上の余白を削る（上に引き上げる）
             margin_top = 0
             if best_px >= h * 0.8:
                 margin_top = -min(4, int((best_px - h * 0.8) * 0.5) + 1)
             
-            html = f'<div style="font-size: {best_px}px; font-weight: bold; font-family: {font_family}; white-space: nowrap; line-height: 1.0; margin-top: {margin_top}px;"><nobr>{text_to_render}</nobr></div>'
-            label.setText(html)
-            
+            final_html = f'<div style="font-size: {best_px}px; font-weight: bold; font-family: {font_family}; white-space: nowrap; line-height: 1.0; margin-top: {margin_top}px;"><nobr>{text_to_render}</nobr></div>'
+            label.setText(final_html)
             label.setFixedSize(w, h)
             label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         else:
-            # === 複数行モード: 高さ厳守で最大フォントを探す ===
-            # 改行コードを一度すべてリセットし、PyQtのWordWrapに完全自動改行させる
             text_to_render = translated.replace('\n', '').replace('\r', '')
-            
-            lo = font_min
-            hi = 32
+            lo, hi = font_min, 32
             best_px = font_min
-            
-            def _test_render(px):
-                html = f'<div style="font-size: {px}px; font-weight: bold; font-family: {font_family}; line-height: 1.0;">{text_to_render}</div>'
+            while lo <= hi:
+                mid = (lo + hi) // 2
+                html = f'<div style="font-size: {mid}px; font-weight: bold; font-family: {font_family}; line-height: 1.0;">{text_to_render}</div>'
                 label.setText(html)
                 label.setFixedWidth(label_w)
                 label.adjustSize()
-                return label.height() <= h
-            
-            # 二分探索で枠内に収まる最大のフォントサイズを特定
-            while lo <= hi:
-                mid = (lo + hi) // 2
-                if _test_render(mid):
+                if label.height() <= h:
                     best_px = mid
                     lo = mid + 1
                 else:
                     hi = mid - 1
             
-            # 最適なフォントサイズで最終描画
-            html = f'<div style="font-size: {best_px}px; font-weight: bold; font-family: {font_family}; line-height: 1.0;">{text_to_render}</div>'
-            label.setText(html)
-            label.setFixedWidth(label_w)
-            label.adjustSize()
-            
+            final_html = f'<div style="font-size: {best_px}px; font-weight: bold; font-family: {font_family}; line-height: 1.0;">{text_to_render}</div>'
+            label.setText(final_html)
             label.setFixedSize(w, h)
             label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
-        # 元のテキスト位置にぴったり重ねる
         label.move(x, y)
-        
         label.show()
         self.active_labels[cid] = label
         
