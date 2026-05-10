@@ -1,5 +1,5 @@
 {
-    "target_window_title": "MTGA",
+    "target_window_title": "sc.jpg",
     "target_language": "en",
     "source_language": "auto",
     "ollama_model": "translategemma:4b",
@@ -23,5 +23,5 @@
     "use_vision_translation": false,
     "eco_mode": false,
     "single_mode": true,
-    "capture_mode": "bitblt"
+    "capture_mode": "mss"
 }
