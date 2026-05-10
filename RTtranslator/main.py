@@ -603,6 +603,12 @@ class TranslationController:
             self._single_run_done = False
             self._cache_dirty = True
             
+            # 【重要】画像比較・スキップ判定用の基準値をすべてリセット
+            self._last_ocr_image_hash = None
+            self._prev_gray = np.zeros((72, 128), dtype=np.uint8) # 128x72の監視用バッファ
+            self._prev_edge_count = 0
+            self._last_raw_chunks = [] # 前回のOCR結果をクリア
+            
             # 4. 未処理のキューを空にする (古い結果の混入を物理的に防ぐ)
             while not self._ocr_output_queue.empty():
                 try: self._ocr_output_queue.get_nowait()

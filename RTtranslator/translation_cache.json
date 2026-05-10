@@ -1,11 +1,9 @@
 {
+  "en::このアーティファクトが戦場に出ちとき、あ\n枚を見る。「その中からクリーチャー・カー\nド最天2枚を公開し、あなたの手札に加え\nじッこのアーティファクトを生け贄に捧け\nる・宝物・トークン1つを生成する。": "When this artifact is put onto the battlefield, look at the top two cards of the library. You may put one of them into your hand and put this artifact on the battlefield as a creature token. Then, sacrifice any equipment, artifact, or token.",
+  "en::このトークンを生け贄に捧け\n1色のマナ1点を加": "Sacrifice this token to add 1 blue mana.",
   "en::GISBERT": "__IGNORE_1__",
-  "en::DIEGC": "__IGNORE_1__",
-  "en::ALAYNA": "__IGNORE_1__",
-  "en::DANNER": "__IGNORE_1__",
-  "en::ノラリーの一番下に無作為の順番で置\nレのこのアーテイファクトを生け贄に\nる：宝物・トークン1つを生成する。": "Place this artifact randomly at the bottom of No Mercy: Sacrifice it to generate: 1 Treasure or Token.",
-  "en::この卜ークンを生け贄に捧げ\n：好きな色": "Sacrifice this token to the gods: in the color you desire.",
-  "en::あなたがマナ総量が4以上である呪文\nつを唱えるたび、このクリーチャーは各\n対戦相手にそれぞれ1点のダメージを与\nえる。": "Whenever you cast a spell with a mana cost of 4 or higher, this creature deals 1 damage to each opponent.",
-  "en::余剰の戦闘ダ\nヤーカプレイつ\nできます。": "I can play extra combat games.",
-  "en::起動は\nソーサリーとしてのみ行う。": "It can only be activated as a sorcery."
+  "en::ScjJPg": "__IGNORE_1__",
+  "en::トランプルを持つクリーチャーは、余剰の戦闘ダ\nメージをそれが攻撃しているプレイヤーかプレイン\nズウォーカーに写えることができます。": "Creatures with Trample can redirect excess combat damage to the player or planeswalker they are attacking.",
+  "en::あなたがマナ総量が4以上である呪文1\nつを唱えるたび、このクリーチやーは各\n対戦相手にそれぞれ1点のダメージを与\nえる。": "Each time you cast a spell that requires a mana cost of 4 or more, this creature deals 1 damage to each opponent.",
+  "en::5ć：このクリーチャーの上に\n+1/1カウンク": "5th: Place this creature on top of"
 }

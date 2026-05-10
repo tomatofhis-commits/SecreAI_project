@@ -343,10 +343,10 @@ class OCREngine:
             y1 = min(image.height, y + h + margin_v)
             crop = image.crop((x0, y0, x1, y1))
             
-            # 【精度向上】2倍に拡大してOCRに渡す
-            # 小さな文字や / などの細い記号の認識率が劇的に向上します
+            # 【精度向上】1.5倍に拡大してOCRに渡す
+            # 2倍よりもノイズが抑えられ、かつ小さな文字の認識率も維持できるバランスを狙います
             orig_w, orig_h = crop.size
-            upscaled_crop = crop.resize((orig_w * 2, orig_h * 2), Image.Resampling.LANCZOS)
+            upscaled_crop = crop.resize((int(orig_w * 1.5), int(orig_h * 1.5)), Image.Resampling.LANCZOS)
 
             blocks = self.paddle_engine.recognize(upscaled_crop)
             if not blocks:
@@ -355,10 +355,10 @@ class OCREngine:
             # 座標を元のスケールに戻す
             for b in blocks:
                 br = b['rect']
-                br['x'] /= 2.0
-                br['y'] /= 2.0
-                br['w'] /= 2.0
-                br['h'] /= 2.0
+                br['x'] /= 1.5
+                br['y'] /= 1.5
+                br['w'] /= 1.5
+                br['h'] /= 1.5
 
             good_blocks = [b for b in blocks if b['confidence'] >= 0.45]
             if not good_blocks:
