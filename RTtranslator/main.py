@@ -825,8 +825,7 @@ class TranslationController:
                         attach_image=use_vision,
                         thread_limit_ratio=thread_limit_ratio,
                     )
-                    elapsed = time.time() - start_t
-                    print(f"[OCR_Exec] Done: {ocr_mode} | Found: {len(raw_chunks)} chunks | Time: {elapsed:.2f}s")
+                    # self._last_raw_chunks = raw_chunks
                     
                     self._last_raw_chunks = raw_chunks
                     self._last_winocr_time = time.time()
@@ -1126,13 +1125,13 @@ class TranslationController:
             # --- C. スキップ判定 (第2フィルタ) ---
             # 比較対象を「直前フレーム」に戻す
             edge_count = count_curr
-            is_forced = (time_since_force >= 5.0)
+            is_forced = (time_since_force >= 10.0)
             
             # 判定フロー：
             # 1. エッジ激変 (10%以上): 内容が変わったため実行
             if edge_diff_rate > 0.10:
                 pass 
-            # 2. 強制実行（5秒）: 念のため定期実行
+            # 2. 強制実行（10秒）: 念のため定期実行
             elif is_forced:
                 pass
             # 3. 【最優先】エッジ安定 (5%未満): 文字の形が変わっていないため、ピクセル変化を無視してスキップ
@@ -1175,12 +1174,12 @@ class TranslationController:
                 self._update_status()
                 
             self._last_ocr_exec_time = current_time
-            if time_since_force >= 5.0:
+            if time_since_force >= 10.0:
                 self._last_force_ocr_time = current_time
                 
             # --- 【v1.1.2 強化】OCR実行トリガーの詳細ログ ---
             trigger_reason = ""
-            if is_forced: trigger_reason = "強制実行(5s)"
+            if is_forced: trigger_reason = "強制実行(10s)"
             elif edge_diff_rate > 0.10: trigger_reason = f"エッジ激変({edge_diff_rate:.1%})"
             else: trigger_reason = f"ピクセル変化(diff={pixel_diff} > threshold={diff_threshold}, edges={edge_diff_rate:.1%})"
             
