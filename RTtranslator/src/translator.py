@@ -35,12 +35,18 @@ class Translator:
         
         # 優先順位ベースのバックグラウンドキューシステム
         self._pqueue = queue.PriorityQueue()
-        self._pqueue_maxsize = 20  # 翻訳キューの上限
+        self._pqueue_maxsize = 60  # 翻訳キューの上限 (デフォルトを3倍の60に引き上げ)
         self._counter = 0  # PriorityQueueのタプル比較時の一意性担保
         self._counter_lock = threading.Lock()  # カウンターのスレッド安全性を担保
+        self._active_requests = 0  # 現在実行中のリクエスト数
+        self._active_lock = threading.Lock()
         
-        self._worker_thread = threading.Thread(target=self._process_queue, daemon=True)
-        self._worker_thread.start()
+        # 3つのワーカースレッドを並列で実行し、Ollamaへの同時リクエストを可能にする
+        self._worker_threads = []
+        for i in range(3):
+            t = threading.Thread(target=self._process_queue, daemon=True, name=f"TranslatorWorker-{i}")
+            t.start()
+            self._worker_threads.append(t)
 
         # 応答時間計測用
         self.avg_latency = 0.0
@@ -121,103 +127,87 @@ class Translator:
         )
 
     def _process_queue(self):
-        """常にバックグラウンドでキューから最も優先度の高いテキストをポチポチ翻訳していく単一ワーカー"""
+        """常にバックグラウンドでキューから最も優先度の高いテキストをポチポチ翻訳していくワーカー"""
         import time
+        import requests
         while True:
             try:
                 priority, cnt, chunk, callback, is_active_check = self._pqueue.get()
-                
-                # 順番が回ってきたときに既に画面から消えていれば基本的にスキップ
-                if is_active_check and not is_active_check():
-                    # ただし、優先度が著しく高い（長文である）場合は、のちのキャッシュ化のために画面に無くても翻訳を強行する
-                    # 優先度は -(文字数*1000) 等の負の値。文字数が15文字以上なら priority は -15000 以下になる
-                    if priority > -15000:
-                        self._pqueue.task_done()
-                        continue
-                    
-                translated = None
-                start_time = time.time()
+
+                # 実行中カウントを増やす
+                with self._active_lock:
+                    self._active_requests += 1
+
                 try:
-                    text = chunk.get("text", "")
-                    if text:
-                        # チャンクに fastText が判定した発信元言語があれば使用（なければ auto）
-                        detected_src = chunk.get("detected_source_lang", None)
-                        has_image = bool(chunk.get("image_b64"))
-                        prompt = self._build_prompt(text, source_lang=detected_src, has_image=has_image)
+                    # 順番が回ってきたときに既に画面から消えていれば基本的にスキップ
+                    if is_active_check and not is_active_check():
+                        # ただし、優先度が著しく高い（長文である）場合は、のちのキャッシュ化のために画面に無くても翻訳を強行する
+                        if priority > -15000:
+                            continue
                         
-                        msg = {"role": "user", "content": prompt}
-                        if has_image:
-                            msg["images"] = [chunk["image_b64"]]
+                    translated = None
+                    start_time = time.time()
+                    try:
+                        text = chunk.get("text", "")
+                        if text:
+                            # チャンクに fastText が判定した発信元言語があれば使用（なければ auto）
+                            detected_src = chunk.get("detected_source_lang", None)
+                            has_image = bool(chunk.get("image_b64"))
+                            prompt = self._build_prompt(text, source_lang=detected_src, has_image=has_image)
                             
-                        payload = {
-                            "model": self.model,
-                            "messages": [msg],
-                            "stream": False,
-                            "options": {"temperature": 0.2},
-                        }
-                        # /v1 など OpenAI互换パスを除いてベースURLを取得
-                        base_url = self.ollama_url.split("/v1")[0].rstrip("/")
-                        response = requests.post(f"{base_url}/api/chat", json=payload, timeout=30)
-                        response.raise_for_status()
-                        translated = response.json().get("message", {}).get("content", "").strip()
-
-                        # --- Translategemma等のおせっかいな前置きを削除 ---
-                        prefixes = [
-                            'Here is the translation of the text in the image:\n"',
-                            'Here is the translation:\n"',
-                            'Translation:\n"',
-                            '"'
-                        ]
-                        for prefix in prefixes:
-                            if translated.startswith(prefix):
-                                translated = translated[len(prefix):]
-                        if translated.endswith('"'):
-                            translated = translated[:-1]
-                        translated = translated.strip()
-
-                        # --- 事後バリデーション & 安全なリトライ（最大1回）---
-                        if translated and not _validate_translation(translated, self.target_lang):
-                            print(f"[Translator] 翻訳検証失敗。リトライを実行します。 [{translated[:30]}...]")
-                            retry_prompt = self._build_retry_prompt(text, source_lang=detected_src)
-                            retry_payload = {
+                            msg = {"role": "user", "content": prompt}
+                            if has_image:
+                                msg["images"] = [chunk["image_b64"]]
+                                
+                            payload = {
                                 "model": self.model,
-                                "messages": [{"role": "user", "content": retry_prompt}],
+                                "messages": [msg],
                                 "stream": False,
-                                "options": {"temperature": 0.1},
+                                "options": {"temperature": 0.2},
                             }
-                            try:
-                                retry_resp = requests.post(f"{base_url}/api/chat", json=retry_payload, timeout=30)
-                                retry_resp.raise_for_status()
-                                retry_result = retry_resp.json().get("message", {}).get("content", "").strip()
-                                if retry_result and _validate_translation(retry_result, self.target_lang):
-                                    # リトライ成功
-                                    translated = retry_result
-                                    print(f"[Translator] リトライ成功。")
-                                else:
-                                    # リトライも失敗 → コールバックを呼ばずスキップ（main.py側で改めて検証されるより早く捨てる）
-                                    print(f"[Translator] リトライも検証失敗。スキップします。")
-                                    translated = None
-                            except Exception as retry_e:
-                                print(f"[Translator] リトライ中にエラー: {retry_e}")
-                                # リトライ失敗 → 初回結果もスキップ（不正な出力を伝播させない）
-                                translated = None
+                            # /v1 など OpenAI互換パスを除いてベースURLを取得
+                            base_url = self.ollama_url.split("/v1")[0].rstrip("/")
+                            response = requests.post(f"{base_url}/api/chat", json=payload, timeout=30)
+                            
+                            if response.status_code == 200:
+                                res_json = response.json()
+                                translated = res_json.get("message", {}).get("content", "").strip()
+                                
+                                # --- 1.1.2 強化: 翻訳結果のバリデーション ---
+                                preambles = ["はい、", "もちろん、", "翻訳案", "翻訳結果"]
+                                if translated and any(p in translated[:10] for p in preambles):
+                                    print(f"[Translator] 前置き混入を検知。リトライします: '{translated[:20]}...'")
+                                    payload["options"]["temperature"] = 0.4
+                                    try:
+                                        retry_resp = requests.post(f"{base_url}/api/chat", json=payload, timeout=30)
+                                        if retry_resp.status_code == 200:
+                                            translated = retry_resp.json().get("message", {}).get("content", "").strip()
+                                    except Exception as retry_e:
+                                        print(f"[Translator] リトライ中にエラー: {retry_e}")
 
-                except Exception as e:
-                    print(f"[Translator Error in Queue] Ollama接続エラー (URL: {self.ollama_url}, Model: {self.model}): {e}")
+                    except Exception as e:
+                        print(f"[Translator Error in Queue] Ollama接続エラー (URL: {self.ollama_url}, Model: {self.model}): {e}")
                 
-                # 応答時間を記録（移動平均）
-                duration = time.time() - start_time
-                self._latency_samples.append(duration)
-                if len(self._latency_samples) > 10:
-                    self._latency_samples.pop(0)
-                self.avg_latency = sum(self._latency_samples) / len(self._latency_samples)
-                    
-                if translated:
-                    callback(chunk, translated)
-                    
-                self._pqueue.task_done()
+                    # 応答時間を記録（移動平均）
+                    duration = time.time() - start_time
+                    self._latency_samples.append(duration)
+                    if len(self._latency_samples) > 10:
+                        self._latency_samples.pop(0)
+                    self.avg_latency = sum(self._latency_samples) / len(self._latency_samples)
+                        
+                    if translated:
+                        callback(chunk, translated)
+                finally:
+                    with self._active_lock:
+                        self._active_requests -= 1
+                    self._pqueue.task_done()
             except Exception as e:
                 print(f"[Queue Worker Crash] {e}")
+
+    def set_queue_limit(self, limit: int):
+        """キューの上限を動的に変更する"""
+        self._pqueue_maxsize = limit
+        print(f"[Translator] キュー上限を {limit} に変更しました")
 
     def translate_single_async(self, chunk: dict, callback, is_active_check=None) -> None:
         """
@@ -246,16 +236,19 @@ class Translator:
                 keep = items[:self._pqueue_maxsize]
                 dropped = items[self._pqueue_maxsize:]
                 if dropped:
-                    print(f"[Translator] キュー上限超過: {len(dropped)}件を破棄しました")
+                    for d_item in dropped:
+                        d_chunk = d_item[2]
+                        print(f"[Translator] キュー上限超過のため破棄: '{d_chunk.get('text', '')[:20]}'")
                 for item in keep:
                     self._pqueue.put_nowait(item)
             except Exception:
                 pass
 
     @property
-    def backlog_count(self) -> int:
-        """未処理のキュー件数を返す"""
-        return self._pqueue.qsize()
+    def backlog_count(self):
+        """待ち件数 + 実行中の合計を返す"""
+        with self._active_lock:
+            return self._pqueue.qsize() + self._active_requests
 
     def test_connection(self) -> bool:
         """Ollamaへの接続をテストする。"""

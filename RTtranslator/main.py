@@ -116,6 +116,7 @@ def is_time_sensitive(text):
     
     num_chars = sum(c.isdigit() or c in ':/.-' for c in clean_text)
     if (num_chars / len(clean_text)) > 0.6:
+        # print(f"[Discard:TimeSensitive] {text}") # デバッグ用に残す
         return True
         
 def _score_ocr_text(text: str) -> float:
@@ -320,6 +321,9 @@ class TranslationController:
         self._ocr_busy: bool = False
         self._current_frame_id = 0
         self._last_clear_id = 0
+        self._single_run_done = False
+        self._single_run_done_candidate = False
+        self._single_scan_backlog = []
         self._prev_frame_hash = 0
         self._prev_thumb_arr = None
         self._prev_gray = None
@@ -601,6 +605,8 @@ class TranslationController:
             self._last_clear_id = self._current_frame_id
             self._last_force_ocr_time = 0.0
             self._single_run_done = False
+            self._single_run_done_candidate = False
+            self._single_scan_backlog = [] # シングルモード用の未送信キュー
             self._cache_dirty = True
             
             # 【重要】画像比較・スキップ判定用の基準値をすべてリセット
@@ -772,7 +778,7 @@ class TranslationController:
             # エコモード判定
             if self.config.get("eco_mode", False) and time_since_last < 3.0:
                 return True
-            
+
             if time_since_last >= 20.0: skip_thresh = 1.0
             elif time_since_last >= 10.0: skip_thresh = 0.9
             else: skip_thresh = 0.8
@@ -900,9 +906,21 @@ class TranslationController:
             # 3. ステータス更新
             self._update_status()
 
-            # シングルモード: すでに1回スキャンを実行済みなら、ここから下の「新たなキャプチャ/監視」をスキップして表示を固定
-            if self.config.get("single_mode", False) and self._single_run_done:
-                return
+            # シングルモード: 
+            # 1. バックログが残っている場合は、スロットリングに従って小出しに送信する
+            # 2. すべて送信済みで、かつ翻訳結果もすべて受け取り済みなら、表示を固定する
+            is_single_mode = self.config.get("single_mode", False)
+            if is_single_mode:
+                if self._single_run_done:
+                    return
+                # まだ送信待ちがある場合は継続。
+                # ただし、処理中でなくバックログもない時は、手動トリガー(0.0)がない限りスキップして節約する
+                is_manual_trigger = (self._last_force_ocr_time == 0.0)
+                if not self._ocr_busy and not self._single_scan_backlog and not is_manual_trigger:
+                    self._poll_ocr_result(None)
+                    return
+                if is_manual_trigger:
+                    print(f"[SingleMode] 手動トリガー検知、スキャンを開始します...")
 
             if image is None:
                 if not self._ocr_busy:
@@ -1125,16 +1143,21 @@ class TranslationController:
             # --- C. スキップ判定 (第2フィルタ) ---
             # 比較対象を「直前フレーム」に戻す
             edge_count = count_curr
-            is_forced = (time_since_force >= 10.0)
+            is_single = self.config.get("single_mode", False)
+            if is_single:
+                # シングルモード：手動トリガー(0.0)のみを許可し、10秒の自動強制は無視する
+                is_forced = (self._last_force_ocr_time == 0.0)
+            else:
+                is_forced = (time_since_force >= 10.0)
             
             # 判定フロー：
-            # 1. エッジ激変 (10%以上): 内容が変わったため実行
-            if edge_diff_rate > 0.10:
-                pass 
-            # 2. 強制実行（10秒）: 念のため定期実行
-            elif is_forced:
+            # 1. 【最優先】強制実行（手動ボタン等）: 画面の状態に関わらず実行
+            if is_forced:
                 pass
-            # 3. 【最優先】エッジ安定 (5%未満): 文字の形が変わっていないため、ピクセル変化を無視してスキップ
+            # 2. エッジ激変 (10%以上): 内容が変わったため実行
+            elif edge_diff_rate > 0.10:
+                pass 
+            # 3. エッジ安定 (5%未満): 文字の形が変わっていないため、ピクセル変化を無視してスキップ
             elif edge_diff_rate < 0.05:
                 self._prev_edge_count = edge_count # 安定継続
                 if not self._ocr_busy:
@@ -1210,6 +1233,13 @@ class TranslationController:
         メインループから呼び出され、OCR結果の反映とUI更新を行う。
         """
         current_time = time.time()
+        raw_chunks = []
+        got_new_result = False
+        new_chunks = []
+        final_new_chunks = []
+        is_single = self.config.get("single_mode", False)
+        backlog = self.translator.backlog_count
+        latency = self.translator.avg_latency
         try:
             if not self.is_running:
                 return
@@ -1266,794 +1296,813 @@ class TranslationController:
 
                     raw_chunks, rect, scale_x, scale_y, _ = res
                     self._ocr_busy = False
-                    # シングルモード: 結果を受け取ったら「実行済み」としてロック
-                    if self.config.get("single_mode", False):
-                        self._single_run_done = True
+                    got_new_result = True
+                    # シングルモード: フラグはこのメソッドの最後でセットする（途中の早期リターンでの消失を防ぐ）
+                    is_single = self.config.get("single_mode", False)
                     
                     if not raw_chunks:
                         translated_count = len(self.overlay.active_labels)
                         perf_info = f" | Latency: {self.translator.avg_latency:.1f}s"
                         status_prefix = "初期化中" if (self.ocr.paddle_engine and not self.ocr.paddle_engine._initialized) else "監視中"
                         self._update_status(f"{status_prefix} (文字なし)")
-                        return
+                        # 文字なしの場合は履歴更新フェーズに進む（画面上の枠を消すため）
                         
                     break 
                 except queue.Empty:
-                    return
+                    break
 
-            # ---- 以下は旧 _on_tick の OCR 実行後の処理をそのまま移植 ----
-            translated_count = 0
-            chunks = []
-            new_history = {}
-            
-            for chunk in raw_chunks:
-                # --- 1. 座標を物理ピクセルから論理座標に変換（DPIスケーリング補正） ---
-                chunk['rect']['x'] /= scale_x
-                chunk['rect']['y'] /= scale_y
-                chunk['rect']['w'] /= scale_x
-                chunk['rect']['h'] /= scale_y
+            if got_new_result:
+                # ---- 以下は旧 _on_tick の OCR 実行後の処理をそのまま移植 ----
+                translated_count = 0
+                chunks = []
+                new_history = {}
                 
-                if 'parent_rect' in chunk and chunk['parent_rect']:
-                    chunk['parent_rect']['x'] /= scale_x
-                    chunk['parent_rect']['y'] /= scale_y
-                    chunk['parent_rect']['w'] /= scale_x
-                    chunk['parent_rect']['h'] /= scale_y
-
-                # --- 【v1.1.2 強化】OCR実行時のエッジ密度（base_density）をそのまま採用する ---
-                # 以前はここで再計算していたが、タイムラグによる不一致を防ぐため、OCR時点の値を優先する
-                cur_density = chunk.get('base_density', 0.0)
-                
-                if cur_density < 0.005: # 密度が極端に低い（ほぼ空白）場合は無視
-                    if cur_density > 0:
-                        print(f"[Queue] Skip low-density chunk: '{chunk['text'][:20]}' (density: {cur_density:.4f})")
-                    continue
-
-                # --- 2. 空間トラッキング（IDの安定化） ---
-                best_match_id = None
-                best_iou = 0.1
-                
-                cr = chunk['rect']
-                gx = int(cr['x'] // 40)
-                gy = int(cr['y'] // 40)
-                neighbor_cids = set()
-                for dx in range(-1, 2):
-                    for dy in range(-1, 2):
-                        for cid in self._history_grid.get((gx + dx, gy + dy), []):
-                            neighbor_cids.add(cid)
-                
-                for old_cid in neighbor_cids:
-                    old_chunk = self.history_chunks.get(old_cid)
-                    if not old_chunk:
+                for chunk in raw_chunks:
+                    # --- 1. 座標を物理ピクセルから論理座標に変換（DPIスケーリング補正） ---
+                    chunk['rect']['x'] /= scale_x
+                    chunk['rect']['y'] /= scale_y
+                    chunk['rect']['w'] /= scale_x
+                    chunk['rect']['h'] /= scale_y
+                    
+                    if 'parent_rect' in chunk and chunk['parent_rect']:
+                        chunk['parent_rect']['x'] /= scale_x
+                        chunk['parent_rect']['y'] /= scale_y
+                        chunk['parent_rect']['w'] /= scale_x
+                        chunk['parent_rect']['h'] /= scale_y
+    
+                    # --- 【v1.1.2 強化】OCR実行時のエッジ密度（base_density）をそのまま採用する ---
+                    # 以前はここで再計算していたが、タイムラグによる不一致を防ぐため、OCR時点の値を優先する
+                    cur_density = chunk.get('base_density', 0.0)
+                    
+                    if cur_density < 0.005: # 密度が極端に低い（ほぼ空白）場合は無視
+                        if cur_density > 0:
+                            print(f"[Queue] Skip low-density chunk: '{chunk['text'][:20]}' (density: {cur_density:.4f})")
                         continue
-                    iou = calculate_iou(cr, old_chunk['rect'])
-                    if iou > best_iou:
-                        best_iou = iou
-                        best_match_id = old_cid
-                        
-                if best_match_id:
-                    old_chunk = self.history_chunks[best_match_id]
-                    # 類似度の判定: エッジ情報の比較対象を「前回のOCR時点の値」に固定する
-                    # overlay_state にあればそこから、なければ履歴(old_chunk)から取得
-                    old_density = self.overlay_state.get(best_match_id, {}).get('base_density')
-                    if old_density is None:
-                        old_density = old_chunk.get('base_density', cur_density)
+    
+                    # --- 2. 空間トラッキング（IDの安定化） ---
+                    best_match_id = None
+                    best_iou = 0.1
                     
-                    density_diff_ratio = abs(cur_density - old_density) / max(0.01, old_density)
+                    cr = chunk['rect']
+                    gx = int(cr['x'] // 40)
+                    gy = int(cr['y'] // 40)
+                    neighbor_cids = set()
+                    for dx in range(-1, 2):
+                        for dy in range(-1, 2):
+                            for cid in self._history_grid.get((gx + dx, gy + dy), []):
+                                neighbor_cids.add(cid)
                     
-                    text_sim = SequenceMatcher(None, chunk['text'], old_chunk['text']).ratio()
-                    
-                    # 【調整】「同じ」判定基準を大幅に緩和（細分化対応）
-                    is_same_item = False
-                    if density_diff_ratio < 0.30: # エッジ一致を 30% まで許容
-                        if text_sim > 0.35: # テキスト一致も 35% まで緩和
-                            is_same_item = True
+                    for old_cid in neighbor_cids:
+                        old_chunk = self.history_chunks.get(old_cid)
+                        if not old_chunk:
+                            continue
+                        iou = calculate_iou(cr, old_chunk['rect'])
+                        if iou > best_iou:
+                            best_iou = iou
+                            best_match_id = old_cid
                             
-                    if is_same_item:
-                        chunk['id'] = best_match_id
-                        # 過去のラベルの位置を新座標へテレポートさせる
-                        if hasattr(self, 'overlay') and best_match_id in self.overlay.active_labels:
-                            self.overlay.update_translation_position(best_match_id, chunk['rect'])
-                
-                # IDが固定されなかった場合、新規IDを生成
-                if chunk['id'].startswith("new_"):
-                    # 密度ステップを除去し、座標とテキストのみで安定化させる
-                    area_id = f"{gx}_{gy}"
-                    t_hash = hashlib.md5(chunk['text'].encode('utf-8')).hexdigest()
-                    chunk['id'] = f"{t_hash[:8]}_{area_id}"
-
-                cid = chunk['id']
-                
-                # --- 追加バリデーション：既存IDの場合、内容の激変をチェック ---
-                # (この判定は後段の空間パージ/不一致判定に統合されたため、ここではスルーする)
-
-                # --- 【復活・強化】空間的な重複排除：新しい枠が古い枠を上書きする場合、古い方を即座に消す ---
-                for old_cid in list(self.overlay_state.keys()):
-                    if old_cid == cid: continue
-                    old_rect = self.overlay_state[old_cid]['rect']
-                    # 新しい枠と古い枠が50%以上重なっているなら、古い方は「残骸」とみなす
-                    if calculate_iou(chunk['rect'], old_rect) > 0.5:
-                        if hasattr(self.overlay, 'active_labels') and old_cid in self.overlay.active_labels:
-                            self.overlay.active_labels[old_cid].deleteLater()
-                            del self.overlay.active_labels[old_cid]
-                        if old_cid in self.overlay_state: del self.overlay_state[old_cid]
-                        if old_cid in self.active_translations: del self.active_translations[old_cid]
-
-                new_history[cid] = chunk
-                chunks.append(chunk)
-
-                # --- 3. キャッシュチェックと表示ステートの更新 ---
-                target_lang = self.config.get("target_language", "ja")
-                text_raw = chunk['text'].strip()
-                norm_text = normalize_text(text_raw)
-                
-                # 直前に消去されたばかりのテキスト（ブラックリスト）は、5秒間キャッシュ復活を阻止
-                if hasattr(self, "_recent_cleared_texts"):
-                    expiry = self._recent_cleared_texts.get(norm_text, 0)
-                    if time.time() < expiry:
-                        # ブラックリスト期間中
-                        new_history[cid] = chunk
-                        chunks.append(chunk)
-                        continue
-
-                cache_key = f"{target_lang}::{text_raw}"
-                cached_trans = self.translation_cache.get(cache_key)
-                
-                if cached_trans:
-                    translated_count += 1
-                    # ソフトIGNOREも含め、全IGNORE系の値はオーバーレイに表示しない
-                    _all_ignores = {"__IGNORE__", "__IGNORE_1__", "__IGNORE_2__"}
-                    if cached_trans not in _all_ignores:
-                        # デスクトップ用オーバーレイ（PyQt）の更新
-                        self.overlay.show_translation(cid, chunk, cached_trans, target_lang)
-                        # OBS API用ステートの更新（ブラウザ用）
-                        self.overlay_state[cid] = {
-                            "text": cached_trans,
-                            "text_raw": text_raw, # 類似度比較用に原文を保持
-                            "rect": chunk["rect"],
-                            "bg_color": chunk.get("bg_color", "rgba(0,0,0,1.0)"),
-                            "text_color": chunk.get("text_color", "#eeeeee"),
-                            "lines_count": chunk.get("lines_count", 1),
-                            "base_density": chunk.get("base_density", 0.0),
-                            "parent_rect": chunk.get("parent_rect"),
-                            "step3_crop": chunk.get("step3_crop")
-                        }
-
-            # 空間バケットを再構築
-            new_grid = {}
-            for cid, c in new_history.items():
-                gx = int(c['rect']['x'] // 40)
-                gy = int(c['rect']['y'] // 40)
-                if (gx, gy) not in new_grid:
-                    new_grid[(gx, gy)] = []
-                new_grid[(gx, gy)].append(cid)
-            self._history_grid = new_grid
-            self.history_chunks = new_history
-
-            # 【パス1】まずcurrent_idsを完成させる（全チャンクのIDを収集）
-            current_ids = set(chunk['id'] for chunk in chunks)
-            self.current_ids = current_ids
-
-            # 画面から消えたチャンクの生存確認:
-            # 時間ベースの Grace Period は廃止し、_on_tick 側の不在ストライク制(3回)に一本化しました。
-            # ここでは last_seen の更新のみ行い、削除判断はストライク側に任せます。
-            for cid in list(self.overlay_state.keys()):
-                if cid in current_ids:
-                    self.overlay_state[cid]['last_seen'] = current_time
-                
-            # ゴーストとして生き残っているIDも含めて同期するが、
-            # 重複削除のあとで再度同期する必要がある
-            
-            # 同一フレーム内の重複・包含排除（表示の同一性 > 安定性 > 内容スコア > サイズ の順で優先）
-            valid_chunks = []
-
-            def get_sort_key(c):
-                cid = c['id']
-                is_active = 1 if cid in self.overlay_state else 0
-                
-                # 同一性チェック: 今表示されている内容と原文が一致するか
-                matches_display = 0
-                if is_active:
-                    old_raw = self.overlay_state[cid].get('raw_text', '')
-                    if normalize_text(c['text']) == normalize_text(old_raw):
-                        matches_display = 1
-                
-                return (matches_display, is_active, _score_ocr_text(c['text']), c['rect']['w'] * c['rect']['h'])
-
-            sorted_chunks = sorted(chunks, key=get_sort_key, reverse=True)
-
-            for i, c1 in enumerate(sorted_chunks):
-                is_dupe = False
-                for j, c2 in enumerate(sorted_chunks):
-                    # 自分より優先順位が高い(インデックスが小さい)ものと比較
-                    if j >= i: break
-                    
-                    r1, r2 = c1['rect'], c2['rect']
-                    iou = calculate_iou(r1, r2)
-                    
-                    # A. 空間的な重複判定 (IoU > 0.6)
-                    if iou > 0.6:
-                        is_dupe = True
-                        break
-                    
-                    # B. 包含関係のチェック (c1がc2に70%以上覆われている)
-                    area1 = max(1, r1['w'] * r1['h'])
-                    ix = max(0, min(r1['x']+r1['w'], r2['x']+r2['w']) - max(r1['x'], r2['x']))
-                    iy = max(0, min(r1['y']+r1['h'], r2['y']+r2['h']) - max(r1['y'], r2['y']))
-                    intersection_area = ix * iy
-                    if intersection_area / area1 > 0.7:
-                        is_dupe = True
-                        break
-                    
-                    # C. 内容の同一性による集約 (重なりが少しでもあり、かつ正規化テキストが同じ)
-                    if intersection_area > 0:
-                        if normalize_text(c1['text']) == normalize_text(c2['text']):
-                            is_dupe = True
-                            break
+                    if best_match_id:
+                        old_chunk = self.history_chunks[best_match_id]
+                        # 類似度の判定: エッジ情報の比較対象を「前回のOCR時点の値」に固定する
+                        # overlay_state にあればそこから、なければ履歴(old_chunk)から取得
+                        old_density = self.overlay_state.get(best_match_id, {}).get('base_density')
+                        if old_density is None:
+                            old_density = old_chunk.get('base_density', cur_density)
                         
-                if not is_dupe:
-                    valid_chunks.append(c1)
-            chunks = valid_chunks
-            
-            # 空間的（座標）キャッシュ強化：既存の翻訳と強く重なる新規チャンクは品質比較を行う
-            filtered_chunks = []
-            for chunk in chunks:
-                cid = chunk['id']
-                is_flicker = False
-                if cid in self.active_translations:
-                    filtered_chunks.append(chunk)
-                    # 翻訳済みのチャンクが表示される際、下敷きになっている古いゴーストを掃除する
-                    for active_cid, state in list(self.overlay_state.items()):
-                        if active_cid == cid: continue
-                        # 重なり判定を甘く (0.3) して、近傍の古いゴミを積極的に消す
-                        if calculate_iou(chunk['rect'], state['rect']) > 0.3:
-                            old_raw = state.get('text_raw', state['text'])
-                            if _score_ocr_text(chunk['text']) > _score_ocr_text(old_raw) + 0.4:
-                                print(f"[Evict] ID={active_cid} | Reason: 高品質な上書き(Score:{_score_ocr_text(chunk['text']):.2f} > {_score_ocr_text(old_raw):.2f})")
-                                if active_cid in self.overlay_state:
-                                    del self.overlay_state[active_cid]
-                                if active_cid in self.active_translations:
-                                    del self.active_translations[active_cid]
-                    continue
-                    
-                # ディクショナリ変更エラーを避けるため list() でラップ
-                for active_cid, state in list(self.overlay_state.items()):
-                    if active_cid == cid: continue
-                    
-                    r1 = chunk['rect']
-                    r2 = state['rect']
-                    
-                    area1 = max(1, r1['w'] * r1['h'])
-                    area2 = max(1, r2['w'] * r2['h'])
-                    ix = max(0, min(r1['x']+r1['w'], r2['x']+r2['w']) - max(r1['x'], r2['x']))
-                    iy = max(0, min(r1['y']+r1['h'], r2['y']+r2['h']) - max(r1['y'], r2['y']))
-                    intersection_area = ix * iy
-                    
-                    ioa = intersection_area / min(area1, area2)
-                    
-                    # 包含関係・部分的な重なり判定を甘く (0.3)
-                    if ioa > 0.3:
-                        old_text = state.get('text_raw', state['text'])
-                        new_text = chunk['text']
-                        similarity = SequenceMatcher(None, old_text.strip(), new_text.strip()).ratio()
-                        
-                        # --- 同一性判定: まず物理的形状(エッジ)の一致を確認するが、「同じ」判定には慎重に使う ---
-                        old_density = state.get('base_density', 0)
                         density_diff_ratio = abs(cur_density - old_density) / max(0.01, old_density)
                         
-                        # 同一性の定義: 
-                        # 1. エッジが安定(25%以内) かつ テキストも30%以上(0.3)一致している場合
-                        # 2. または、テキストが 0.65 以上一致している場合
-                        is_same_item = (density_diff_ratio < 0.25 and similarity > 0.3) or (similarity > 0.65)
+                        text_sim = SequenceMatcher(None, chunk['text'], old_chunk['text']).ratio()
                         
-                        # --- ケースA: 同一性が認められる場合 (表示維持) ---
+                        # 【調整】「同じ」判定基準を大幅に緩和（細分化対応）
+                        is_same_item = False
+                        if density_diff_ratio < 0.45: # エッジ一致を 45% まで大幅に許容
+                            if text_sim > 0.25: # テキスト一致も 25% まで緩和
+                                is_same_item = True
+                                
                         if is_same_item:
-                            # 座標の揺れを吸収しつつ寿命を延ばす
-                            if area1 < area2 * 0.7:
-                                is_flicker = True
-                                self.overlay.update_translation_position(active_cid, chunk['rect'])
-                                state['rect'] = chunk['rect']
-                                state['last_seen'] = time.time()
-                                state['mismatch_strikes'] = 0 
-                                break
-                            elif area2 < area1 * 0.7:
-                                # 古い方が明らかに小さい残骸ならパージ
-                                print(f"[Evict] ID={active_cid} | Reason: サイズ不一致(残骸排除)")
-                                if active_cid in self.overlay_state: del self.overlay_state[active_cid]
-                                if active_cid in self.active_translations: del self.active_translations[active_cid]
-                                continue
-
-                        # --- ケースB: 内容が変化している場合 (不一致判定) ---
-                        # 細分化ロジック導入に伴い、類似度の判定を緩和
-                        if similarity < 0.35:
-                            # --- 【v1.1.2 強化】キャッシュ・ファストパス & 即時パージ ---
-                            # キャッシュに既にある場合や、完全に別物（sim<0.25）の場合はストライクを待たずに即時更新する。
-                            target_lang = self.config.get("target_language", "ja")
-                            cache_key = f"{target_lang}::{new_text}"
-                            cached_trans = self.translation_cache.get(cache_key)
-                            is_cached = cached_trans and cached_trans not in ("__IGNORE__", "__IGNORE_1__", "__IGNORE_2__")
+                            chunk['id'] = best_match_id
+                            # 過去のラベルの位置を新座標へテレポートさせる
+                            if hasattr(self, 'overlay') and best_match_id in self.overlay.active_labels:
+                                self.overlay.update_translation_position(best_match_id, chunk['rect'])
+                    
+                    # IDが固定されなかった場合、新規IDを生成
+                    if chunk['id'].startswith("new_"):
+                        # 密度ステップを除去し、座標とテキストのみで安定化させる
+                        area_id = f"{gx}_{gy}"
+                        t_hash = hashlib.md5(chunk['text'].encode('utf-8')).hexdigest()
+                        chunk['id'] = f"{t_hash[:8]}_{area_id}"
+    
+                    cid = chunk['id']
+                    
+                    # --- 追加バリデーション：既存IDの場合、内容の激変をチェック ---
+                    # (この判定は後段の空間パージ/不一致判定に統合されたため、ここではスルーする)
+    
+                    # --- 【復活・強化】空間的な重複排除：新しい枠が古い枠を上書きする場合、古い方を即座に消す ---
+                    for old_cid in list(self.overlay_state.keys()):
+                        if old_cid == cid: continue
+                        old_rect = self.overlay_state[old_cid]['rect']
+                        # 新しい枠と古い枠が50%以上重なっているなら、古い方は「残骸」とみなす
+                        if calculate_iou(chunk['rect'], old_rect) > 0.5:
+                            if hasattr(self.overlay, 'active_labels') and old_cid in self.overlay.active_labels:
+                                self.overlay.active_labels[old_cid].deleteLater()
+                                del self.overlay.active_labels[old_cid]
+                            if old_cid in self.overlay_state: del self.overlay_state[old_cid]
+                            if old_cid in self.active_translations: del self.active_translations[old_cid]
+    
+                    new_history[cid] = chunk
+                    chunks.append(chunk)
+    
+                    # --- 3. キャッシュチェックと表示ステートの更新 ---
+                    target_lang = self.config.get("target_language", "ja")
+                    text_raw = chunk['text'].strip()
+                    norm_text = normalize_text(text_raw)
+                    
+                    # 直前に消去されたばかりのテキスト（ブラックリスト）は、5秒間キャッシュ復活を阻止
+                    if hasattr(self, "_recent_cleared_texts"):
+                        expiry = self._recent_cleared_texts.get(norm_text, 0)
+                        if time.time() < expiry:
+                            # ブラックリスト期間中
+                            new_history[cid] = chunk
+                            chunks.append(chunk)
+                            continue
+    
+                    cache_key = f"{target_lang}::{text_raw}"
+                    cached_trans = self.translation_cache.get(cache_key)
+                    
+                    if cached_trans:
+                        translated_count += 1
+                        # ソフトIGNOREも含め、全IGNORE系の値はオーバーレイに表示しない
+                        _all_ignores = {"__IGNORE__", "__IGNORE_1__", "__IGNORE_2__"}
+                        if cached_trans not in _all_ignores:
+                            # デスクトップ用オーバーレイ（PyQt）の更新
+                            self.overlay.show_translation(cid, chunk, cached_trans, target_lang)
+                            # OBS API用ステートの更新（ブラウザ用）
+                            self.overlay_state[cid] = {
+                                "text": cached_trans,
+                                "text_raw": text_raw, # 類似度比較用に原文を保持
+                                "rect": chunk["rect"],
+                                "bg_color": chunk.get("bg_color", "rgba(0,0,0,1.0)"),
+                                "text_color": chunk.get("text_color", "#eeeeee"),
+                                "lines_count": chunk.get("lines_count", 1),
+                                "base_density": chunk.get("base_density", 0.0),
+                                "parent_rect": chunk.get("parent_rect"),
+                                "step3_crop": chunk.get("step3_crop")
+                            }
+    
+                # 空間バケットを再構築
+                new_grid = {}
+                for cid, c in new_history.items():
+                    gx = int(c['rect']['x'] // 40)
+                    gy = int(c['rect']['y'] // 40)
+                    if (gx, gy) not in new_grid:
+                        new_grid[(gx, gy)] = []
+                    new_grid[(gx, gy)].append(cid)
+                self._history_grid = new_grid
+                self.history_chunks = new_history
+    
+                # 【パス1】まずcurrent_idsを完成させる（全チャンクのIDを収集）
+                current_ids = set(chunk['id'] for chunk in chunks)
+                self.current_ids = current_ids
+    
+                # 画面から消えたチャンクの生存確認:
+                # 時間ベースの Grace Period は廃止し、_on_tick 側の不在ストライク制(3回)に一本化しました。
+                # ここでは last_seen の更新のみ行い、削除判断はストライク側に任せます。
+                for cid in list(self.overlay_state.keys()):
+                    if cid in current_ids:
+                        self.overlay_state[cid]['last_seen'] = current_time
+                    
+                # ゴーストとして生き残っているIDも含めて同期するが、
+                # 重複削除のあとで再度同期する必要がある
+                
+                # 同一フレーム内の重複・包含排除 ＆ テキストの統合 (v1.1.2 強化)
+                # 以前は重なりがある場合に小さい方を破棄していましたが、
+                # それだと「+1/+1」等の記号行が大きな枠に飲まれて消えるため、
+                # 重なっている場合は文章をマージするように変更します。
+                merged_results = []
+                
+                # 処理を安定させるため、まずは Y 座標順（上から下）にソート
+                chunks.sort(key=lambda c: (c['rect']['y'], c['rect']['x']))
+                
+                for c in chunks:
+                    is_merged = False
+                    cr = c['rect']
+                    c_text = c['text'].strip()
+                    
+                    for mc in merged_results:
+                        mcr = mc['rect']
+                        # 重なり判定
+                        area_c = max(1, cr['w'] * cr['h'])
+                        area_mc = max(1, mcr['w'] * mcr['h'])
+                        
+                        ix = max(0, min(cr['x']+cr['w'], mcr['x']+mcr['w']) - max(cr['x'], mcr['x']))
+                        iy = max(0, min(cr['y']+cr['h'], mcr['y']+mcr['h']) - max(cr['y'], mcr['y']))
+                        intersection = ix * iy
+                        
+                        # 包含関係が強い (70%以上) ならマージ
+                        if intersection / area_c > 0.7 or intersection / area_mc > 0.7:
+                            # テキストがすでに含まれていないかチェック
+                            mc_text = mc['text'].strip()
+                            if c_text and c_text not in mc_text:
+                                if mc_text not in c_text:
+                                    # 両方のテキストを統合 (Y座標順に結合)
+                                    if cr['y'] < mcr['y']:
+                                        mc['text'] = c_text + "\n" + mc_text
+                                    else:
+                                        mc['text'] = mc_text + "\n" + c_text
+                                else:
+                                    # c の方が情報量が多い場合は置換
+                                    mc['text'] = c_text
                             
-                            mismatch_strikes = state.get('mismatch_strikes', 0) + 1
+                            # 矩形を外接矩形に拡張
+                            x0 = min(cr['x'], mcr['x'])
+                            y0 = min(cr['y'], mcr['y'])
+                            x1 = max(cr['x']+cr['w'], mcr['x']+mcr['w'])
+                            y1 = max(cr['y']+cr['h'], mcr['y']+mcr['h'])
+                            mc['rect'] = {'x': x0, 'y': y0, 'w': x1-x0, 'h': y1-y0}
                             
-                            if is_cached or similarity < 0.25:
-                                mismatch_strikes = 2
+                            # IDの継承: すでに active_translations にある方を優先
+                            if c['id'] in self.active_translations and mc['id'] not in self.active_translations:
+                                mc['id'] = c['id']
+                                
+                            is_merged = True
+                            break
+                    
+                    if not is_merged:
+                        merged_results.append(c)
+                chunks = merged_results
+                
+                # 空間的（座標）キャッシュ強化：既存の翻訳と強く重なる新規チャンクは品質比較を行う
+                filtered_chunks = []
+                for chunk in chunks:
+                    cid = chunk['id']
+                    is_flicker = False
+                    if cid in self.active_translations:
+                        filtered_chunks.append(chunk)
+                        # 翻訳済みのチャンクが表示される際、下敷きになっている古いゴーストを掃除する
+                        for active_cid, state in list(self.overlay_state.items()):
+                            if active_cid == cid: continue
+                            # 重なり判定を甘く (0.3) して、近傍の古いゴミを積極的に消す
+                            if calculate_iou(chunk['rect'], state['rect']) > 0.3:
+                                old_raw = state.get('text_raw', state['text'])
+                                if _score_ocr_text(chunk['text']) > _score_ocr_text(old_raw) + 0.4:
+                                    print(f"[Evict] ID={active_cid} | Reason: 高品質な上書き(Score:{_score_ocr_text(chunk['text']):.2f} > {_score_ocr_text(old_raw):.2f})")
+                                    if active_cid in self.overlay_state:
+                                        del self.overlay_state[active_cid]
+                                    if active_cid in self.active_translations:
+                                        del self.active_translations[active_cid]
+                        continue
+                        
+                    # ディクショナリ変更エラーを避けるため list() でラップ
+                    for active_cid, state in list(self.overlay_state.items()):
+                        if active_cid == cid: continue
+                        
+                        r1 = chunk['rect']
+                        r2 = state['rect']
+                        
+                        area1 = max(1, r1['w'] * r1['h'])
+                        area2 = max(1, r2['w'] * r2['h'])
+                        ix = max(0, min(r1['x']+r1['w'], r2['x']+r2['w']) - max(r1['x'], r2['x']))
+                        iy = max(0, min(r1['y']+r1['h'], r2['y']+r2['h']) - max(r1['y'], r2['y']))
+                        intersection_area = ix * iy
+                        
+                        ioa = intersection_area / min(area1, area2)
+                        
+                        # 包含関係・部分的な重なり判定を甘く (0.3)
+                        if ioa > 0.3:
+                            old_text = state.get('text_raw', state['text'])
+                            new_text = chunk['text']
+                            similarity = SequenceMatcher(None, old_text.strip(), new_text.strip()).ratio()
                             
-                            # エッジもテキストも両方違うなら、即座に2ストライク（即パージ確定）
-                            # 判定を緩和 (0.20 -> 0.50)
-                            if density_diff_ratio > 0.50:
-                                mismatch_strikes = 2
+                            # --- 同一性判定: まず物理的形状(エッジ)の一致を確認するが、「同じ」判定には慎重に使う ---
+                            old_density = state.get('base_density', 0)
+                            density_diff_ratio = abs(cur_density - old_density) / max(0.01, old_density)
                             
-                            # スコアによる強制更新判定
-                            new_score = _score_ocr_text(new_text)
-                            old_score = _score_ocr_text(old_text)
-                            if new_score > old_score + 0.5:
-                                mismatch_strikes = 2
+                            # 同一性の定義: 
+                            # 1. エッジが安定(40%以内) かつ テキストも20%以上(0.2)一致している場合
+                            # 2. または、テキストが 0.55 以上一致している場合
+                            is_same_item = (density_diff_ratio < 0.40 and similarity > 0.20) or (similarity > 0.55)
                             
-                            state['mismatch_strikes'] = mismatch_strikes
-                            if mismatch_strikes >= 3:
-                                print(f"[Evict] ID={active_cid} | Reason: 内容変化(Sim:{similarity:.2f}, Strikes:{mismatch_strikes}) | New: '{new_text[:30]}'")
-                                # 消去された原文をブラックリストに登録（5秒間はキャッシュ復活を阻止）
-                                if not hasattr(self, "_recent_cleared_texts"): self._recent_cleared_texts = OrderedDict()
-                                norm_cleared = normalize_text(old_text)
-                                self._recent_cleared_texts[norm_cleared] = time.time() + 5.0
-                                # LRU的に古いものを消す
-                                if len(self._recent_cleared_texts) > 50:
-                                    self._recent_cleared_texts.popitem(last=False)
-
+                            # --- ケースA: 同一性が認められる場合 (表示維持) ---
+                            if is_same_item:
+                                # 座標の揺れを吸収しつつ寿命を延ばす
+                                if area1 < area2 * 0.7:
+                                    is_flicker = True
+                                    self.overlay.update_translation_position(active_cid, chunk['rect'])
+                                    state['rect'] = chunk['rect']
+                                    state['last_seen'] = time.time()
+                                    state['mismatch_strikes'] = 0 
+                                    break
+                                elif area2 < area1 * 0.7:
+                                    # 古い方が明らかに小さい残骸ならパージ
+                                    print(f"[Evict] ID={active_cid} | Reason: サイズ不一致(残骸排除)")
+                                    if active_cid in self.overlay_state: del self.overlay_state[active_cid]
+                                    if active_cid in self.active_translations: del self.active_translations[active_cid]
+                                    continue
+    
+                            # --- ケースB: 内容が変化している場合 (不一致判定) ---
+                            # 細分化ロジック導入に伴い、類似度の判定を緩和
+                            if similarity < 0.35:
+                                # --- 【v1.1.2 強化】キャッシュ・ファストパス & 即時パージ ---
+                                # キャッシュに既にある場合や、完全に別物（sim<0.25）の場合はストライクを待たずに即時更新する。
+                                target_lang = self.config.get("target_language", "ja")
+                                cache_key = f"{target_lang}::{new_text}"
+                                cached_trans = self.translation_cache.get(cache_key)
+                                is_cached = cached_trans and cached_trans not in ("__IGNORE__", "__IGNORE_1__", "__IGNORE_2__")
+                                
+                                mismatch_strikes = state.get('mismatch_strikes', 0) + 1
+                                
+                                if is_cached or similarity < 0.25:
+                                    mismatch_strikes = 2
+                                
+                                # エッジもテキストも両方違うなら、即座に2ストライク（即パージ確定）
+                                # 判定を緩和 (0.20 -> 0.50)
+                                if density_diff_ratio > 0.50:
+                                    mismatch_strikes = 2
+                                
+                                # スコアによる強制更新判定
+                                new_score = _score_ocr_text(new_text)
+                                old_score = _score_ocr_text(old_text)
+                                if new_score > old_score + 0.5:
+                                    mismatch_strikes = 2
+                                
+                                state['mismatch_strikes'] = mismatch_strikes
+                                if mismatch_strikes >= 3:
+                                    print(f"[Evict] ID={active_cid} | Reason: 内容変化(Sim:{similarity:.2f}, Strikes:{mismatch_strikes}) | New: '{new_text[:30]}'")
+                                    # 消去された原文をブラックリストに登録（5秒間はキャッシュ復活を阻止）
+                                    if not hasattr(self, "_recent_cleared_texts"): self._recent_cleared_texts = OrderedDict()
+                                    norm_cleared = normalize_text(old_text)
+                                    self._recent_cleared_texts[norm_cleared] = time.time() + 5.0
+                                    # LRU的に古いものを消す
+                                    if len(self._recent_cleared_texts) > 50:
+                                        self._recent_cleared_texts.popitem(last=False)
+    
+                                    if active_cid in self.overlay_state:
+                                        # 古いデカい枠をパージして、新しい(細分化された)枠への道を空ける
+                                        # print(f"[Queue] 重複パージ(内容変化): ID={active_cid} vs NewText='{new_text[:15].replace('\n', ' ')}'")
+                                        if hasattr(self.overlay, 'active_labels') and active_cid in self.overlay.active_labels:
+                                            self.overlay.active_labels[active_cid].deleteLater()
+                                            del self.overlay.active_labels[active_cid]
+                                        del self.overlay_state[active_cid]
+                                    if active_cid in self.active_translations:
+                                        del self.active_translations[active_cid]
+                                    if active_cid in self.history_chunks:
+                                        del self.history_chunks[active_cid]
+                                    # ここでは break せず、他の重なりもチェックする
+                                    continue
+                                else:
+                                    is_flicker = True
+                                    break
+                            elif similarity > 0.95:
+                                state['mismatch_strikes'] = 0
+    
+                            # 新しい方が明らかに高品質な文章なら、古い方を削除(細分化・改善のケース)
+                            if _score_ocr_text(new_text) > _score_ocr_text(old_text) + 0.4:
                                 if active_cid in self.overlay_state:
-                                    # 古いデカい枠をパージして、新しい(細分化された)枠への道を空ける
-                                    # print(f"[Queue] 重複パージ(内容変化): ID={active_cid} vs NewText='{new_text[:15].replace('\n', ' ')}'")
-                                    if hasattr(self.overlay, 'active_labels') and active_cid in self.overlay.active_labels:
-                                        self.overlay.active_labels[active_cid].deleteLater()
-                                        del self.overlay.active_labels[active_cid]
                                     del self.overlay_state[active_cid]
                                 if active_cid in self.active_translations:
                                     del self.active_translations[active_cid]
-                                if active_cid in self.history_chunks:
-                                    del self.history_chunks[active_cid]
-                                # ここでは break せず、他の重なりもチェックする
+                                # 新しい方を表示させるため continue
                                 continue
-                            else:
-                                is_flicker = True
-                                break
-                        elif similarity > 0.95:
-                            state['mismatch_strikes'] = 0
-
-                        # 新しい方が明らかに高品質な文章なら、古い方を削除(細分化・改善のケース)
-                        if _score_ocr_text(new_text) > _score_ocr_text(old_text) + 0.4:
-                            if active_cid in self.overlay_state:
-                                del self.overlay_state[active_cid]
-                            if active_cid in self.active_translations:
-                                del self.active_translations[active_cid]
-                            # 新しい方を表示させるため continue
+                            
+                            # どちらでもない、または同程度ならフリッカーとして新しい方を捨てる
+                            is_flicker = True
+                            break
+                    if not is_flicker:
+                        filtered_chunks.append(chunk)
+                    
+                chunks = filtered_chunks
+                
+                # 不要なチャンクを削除し終えた後で最終的な active_ids を UI と同期
+                active_ids = set(self.overlay_state.keys())
+                self.overlay.sync_active_ids(active_ids)
+    
+                # 【パス2】キャッシュ照会と新規チャンクの仕分け
+                new_chunks = []
+                target_lang = self.config.get("target_language", "ja")
+    
+                for chunk in chunks:
+                    cid = chunk['id']
+                    text_raw = chunk['text'].strip()
+                    norm_text = normalize_text(text_raw)
+                    
+                    # ブラックリストチェック
+                    if hasattr(self, "_recent_cleared_texts"):
+                        expiry = self._recent_cleared_texts.get(norm_text, 0)
+                        if time.time() < expiry:
                             continue
-                        
-                        # どちらでもない、または同程度ならフリッカーとして新しい方を捨てる
-                        is_flicker = True
-                        break
-                if not is_flicker:
-                    filtered_chunks.append(chunk)
-                
-            chunks = filtered_chunks
-            
-            # 不要なチャンクを削除し終えた後で最終的な active_ids を UI と同期
-            active_ids = set(self.overlay_state.keys())
-            self.overlay.sync_active_ids(active_ids)
-
-            # 【パス2】キャッシュ照会と新規チャンクの仕分け
-            new_chunks = []
-            target_lang = self.config.get("target_language", "ja")
-
-            for chunk in chunks:
-                cid = chunk['id']
-                text_raw = chunk['text'].strip()
-                norm_text = normalize_text(text_raw)
-                
-                # ブラックリストチェック
-                if hasattr(self, "_recent_cleared_texts"):
-                    expiry = self._recent_cleared_texts.get(norm_text, 0)
-                    if time.time() < expiry:
+    
+                    text_lines = chunk.get('text_lines', [])
+    
+                    if cid in self.active_translations:
+                        # ステートがある場合は位置更新のみ行う（生存・密度変化の監視は _on_tick に集約）
+                        if cid in self.overlay_state:
+                            self.overlay.update_translation_position(cid, chunk['rect'])
+                            self.overlay_state[cid]['rect'] = chunk['rect']
+                            self.overlay_state[cid]['last_seen'] = time.time()
                         continue
-
-                text_lines = chunk.get('text_lines', [])
-
-                if cid in self.active_translations:
-                    # ステートがある場合は位置更新のみ行う（生存・密度変化の監視は _on_tick に集約）
-                    if cid in self.overlay_state:
-                        self.overlay.update_translation_position(cid, chunk['rect'])
-                        self.overlay_state[cid]['rect'] = chunk['rect']
-                        self.overlay_state[cid]['last_seen'] = time.time()
-                    continue
-
-
-                
-                # --- 新規または変化したテキストの処理 ---
-                if True: # elseブロックの代わり（30%ルールで抜けてきた場合も通るように）
-                    if len(text_lines) > 1:
-                        # ユーザー提案の「論理的結合パターン」を生成
-                        ja_end_chars = tuple("。！？）」』…")
-                        en_end_chars = tuple(".!?'\"")
-                        
-                        # 1. 日本語・中国語・ハングル向けパターン（句読点がなければスペース無しで結合）
-                        ja_pattern = ""
-                        for i, line in enumerate(text_lines):
-                            if i == 0:
-                                ja_pattern += line
-                            else:
-                                prev_line = text_lines[i-1]
-                                if prev_line.endswith(ja_end_chars):
-                                    ja_pattern += "\n" + line
-                                else:
+    
+    
+                    
+                    # --- 新規または変化したテキストの処理 ---
+                    if True: # elseブロックの代わり（30%ルールで抜けてきた場合も通るように）
+                        if len(text_lines) > 1:
+                            # ユーザー提案の「論理的結合パターン」を生成
+                            ja_end_chars = tuple("。！？）」』…")
+                            en_end_chars = tuple(".!?'\"")
+                            
+                            # 1. 日本語・中国語・ハングル向けパターン（句読点がなければスペース無しで結合）
+                            ja_pattern = ""
+                            for i, line_obj in enumerate(text_lines):
+                                line = line_obj['text'] if isinstance(line_obj, dict) else line_obj
+                                if i == 0:
                                     ja_pattern += line
-                                    
-                        # 2. 英語・ロシア語等のアルファベット向けパターン（句読点がなければスペース有りで結合）
-                        en_pattern = ""
-                        for i, line in enumerate(text_lines):
-                            if i == 0:
-                                en_pattern += line
-                            else:
-                                prev_line = text_lines[i-1]
-                                if prev_line.endswith(en_end_chars):
-                                    en_pattern += "\n" + line
                                 else:
-                                    en_pattern += " " + line
+                                    prev_line_obj = text_lines[i-1]
+                                    prev_line = prev_line_obj['text'] if isinstance(prev_line_obj, dict) else prev_line_obj
+                                    if prev_line.endswith(ja_end_chars):
+                                        ja_pattern += "\n" + line
+                                    else:
+                                        ja_pattern += line
+                                        
+                            # 2. 英語・ロシア語等のアルファベット向けパターン（句読点がなければスペース有りで結合）
+                            en_pattern = ""
+                            for i, line_obj in enumerate(text_lines):
+                                line = line_obj['text'] if isinstance(line_obj, dict) else line_obj
+                                if i == 0:
+                                    en_pattern += line
+                                else:
+                                    prev_line_obj = text_lines[i-1]
+                                    prev_line = prev_line_obj['text'] if isinstance(prev_line_obj, dict) else prev_line_obj
+                                    if prev_line.endswith(en_end_chars):
+                                        en_pattern += "\n" + line
+                                    else:
+                                        en_pattern += " " + line
+                                        
+                            # 3. OCRの生の出力（全て改行結合）
+                            raw_pattern = "\n".join([l['text'] if isinstance(l, dict) else l for l in text_lines])
+                        
+                            # fasttextで評価し、最も適したものを選択
+                            candidates = list(set([ja_pattern, en_pattern, raw_pattern]))
+                            best_text = raw_pattern
+                            best_score = -1.0
+                            
+                            for cand in candidates:
+                                if len(cand) < 2: continue
+                                eval_text = cand.replace('\n', ' ')
+                                lang, score = detect_source_language(eval_text)
+                                
+                                # アジア系言語ならja_patternを優遇
+                                if lang in ['ja', 'zh', 'ko'] and cand == ja_pattern:
+                                    score += 0.05
+                                # アルファベット系言語ならen_patternを優遇
+                                elif lang in ['en', 'ru', 'fr', 'de', 'es', 'it', 'pt'] and cand == en_pattern:
+                                    score += 0.05
                                     
-                        # 3. OCRの生の出力（全て改行結合）
-                        raw_pattern = "\n".join(text_lines)
+                                if score > best_score:
+                                    best_score = score
+                                    best_text = cand
+                                    
+                            text_raw = best_text
                     
-                        # fasttextで評価し、最も適したものを選択
-                        candidates = list(set([ja_pattern, en_pattern, raw_pattern]))
-                        best_text = raw_pattern
-                        best_score = -1.0
-                        
-                        for cand in candidates:
-                            if len(cand) < 2: continue
-                            eval_text = cand.replace('\n', ' ')
-                            lang, score = detect_source_language(eval_text)
-                            
-                            # アジア系言語ならja_patternを優遇
-                            if lang in ['ja', 'zh', 'ko'] and cand == ja_pattern:
-                                score += 0.05
-                            # アルファベット系言語ならen_patternを優遇
-                            elif lang in ['en', 'ru', 'fr', 'de', 'es', 'it', 'pt'] and cand == en_pattern:
-                                score += 0.05
-                                
-                            if score > best_score:
-                                best_score = score
-                                best_text = cand
-                                
-                        text_raw = best_text
-                
-                    # --- 時間・数値主体のテキストは翻訳をスキップ ---
-                    if is_time_sensitive(text_raw):
-                        self.active_translations[cid] = True
-                        continue
-                    
-                    # --- 単語辞書フィルター: 1〜2語の短文でどの辞書にも存在しない場合は即破棄 ---
-                    # プレイヤー名 (danger00, amachi等) やUIゴミ (I I I I等) をAPIに送る前に弾く
-                    if _word_filter_discard(text_raw):
-                        target_lang_wf = self.config.get("target_language", "ja")
-                        cache_key_wf = f"{target_lang_wf}::{text_raw}"
-                        existing_wf = self.translation_cache.get(cache_key_wf, "")
-                        if existing_wf not in ("__IGNORE__", "__IGNORE_1__", "__IGNORE_2__"):
-                            _SOFT_IGNORE_MAP_WF = {"": "__IGNORE_1__", "__IGNORE_1__": "__IGNORE_2__", "__IGNORE_2__": "__IGNORE__"}
-                            strike_wf = _SOFT_IGNORE_MAP_WF.get(existing_wf, "__IGNORE__")
-                            self.translation_cache[cache_key_wf] = strike_wf
-                            self._cache_dirty = True
-                            # print(f"[WordFilter] 辞書外: '{text_raw[:30]}' → {strike_wf}")
-                        self.active_translations[cid] = True
-                        continue
-                    
-                    if text_raw in self.pending_texts:
-                        self.active_translations[cid] = True
-                        self.overlay.update_translation_position(cid, chunk['rect'])
-                        continue
-                    
-                    # キャッシュ検索 (1. 完全一致, 2. 正規化完全一致, 3. 曖昧一致)
-                    target_lang = self.config.get("target_language", "ja")
-                    cache_key = f"{target_lang}::{text_raw}"
-                    
-                    found_trans = self.translation_cache.get(cache_key)
-                        
-                    if not found_trans:
-                        norm_target = normalize_text(text_raw)
-                        if len(norm_target) > 2:
-                            best_ratio = 0.0
-                            best_cv = None
-                            for ck, cv in list(self.translation_cache.items()):
-                                if not ck.startswith(f"{target_lang}::"): continue
-                                ck_text = ck.split("::", 1)[1]
-                                norm_ck = normalize_text(ck_text)
-                                
-                                # --- 段階2: 正規化後の完全一致 (全長のテキストで許可) ---
-                                if norm_ck == norm_target:
-                                    found_trans = cv
-                                    break
-                                
-                                # --- 2秒間スキップガード（重複計算防止） ---
-                                # text_raw が確実に文字列であることを担保してハッシュ化
-                                t_hash = hashlib.md5(str(text_raw).encode('utf-8')).hexdigest()
-                                if time.time() < getattr(self, "_skip_2s_cache", {}).get(t_hash, 0):
-                                    break
-
-                                # 文字数が大幅に異なるものはスキップ（速度対策）
-                                len_ratio = len(norm_target) / max(len(norm_ck), 1)
-                                if not (0.5 <= len_ratio <= 2.0):
-                                    continue
-                                ratio = SequenceMatcher(None, norm_target, norm_ck).ratio()
-                                if ratio > best_ratio:
-                                    best_ratio = ratio
-                                    best_cv = cv
-                            
-                            # 段階3の結果: 曖昧検索をさらに厳格化（20文字以上の長文かつ99%以上のみ）
-                            if not found_trans and len(norm_target) >= 20 and best_ratio >= 0.99:
-                                found_trans = best_cv
-                                print(f"[Cache] Fuzzy match: ratio={best_ratio:.2f}, text='{text_raw[:30]}'...")
-                                # 2秒間はこのテキストのFuzzy判定をスキップ
-                                if not hasattr(self, "_skip_2s_cache"): self._skip_2s_cache = {}
-                                t_hash = hashlib.md5(str(text_raw).encode('utf-8')).hexdigest()
-                                self._skip_2s_cache[t_hash] = time.time() + 2.0
-
-                    if found_trans:
-                        # ソフトIGNOREはヒットとみなさずリトライ（Nストライク制）
-                        if found_trans in ("__IGNORE_1__", "__IGNORE_2__"):
-                            new_chunks.append(chunk)
-                            continue
-                        
-                        # --- 永久IGNOREのfastText再評価 ---
-                        # 毎フレーム判定すると重いため、前回の判定から一定時間空ける
-                        if found_trans == "__IGNORE__":
-                            cache_time_key = f"last_eval_{cache_key}"
-                            last_eval = getattr(self, "_last_eval_times", {}).get(cache_time_key, 0)
-                            
-                            if now - last_eval > 10.0:
-                                if not hasattr(self, "_last_eval_times"): self._last_eval_times = {}
-                                self._last_eval_times[cache_time_key] = now
-                                
-                                ocr_hint = chunk.get('lang', 'en').split('-')[0].lower()
-                                _, lang_conf = detect_source_language(text_raw, ocr_lang_hint=ocr_hint)
-                                if lang_conf >= 0.70:
-                                    # 明確に自然言語として高信頼(0.7以上)の場合のみ再試行を許可
-                                    if cache_key in self.translation_cache:
-                                        self.translation_cache[cache_key] = "__IGNORE_1__"
-                                        self._cache_dirty = True
-                                        print(f"[Cache] IGNORE→IGNORE_1 降格（fastText再評価 conf={lang_conf:.2f}）: '{text_raw[:30]}'")
-                                    new_chunks.append(chunk)
-                                    continue
-                            
-                            # 信頼度低（真のゴミテキスト）または待機時間中 → 永久IGNOREを維持
+                        # --- 時間・数値主体のテキストは翻訳をスキップ ---
+                        if is_time_sensitive(text_raw):
+                            # print(f"[Discard:TimeSensitive] {text_raw}")
                             self.active_translations[cid] = True
                             continue
                         
-                        # --- 既存翻訳の品質チェック (事後リフレッシュ) ---
-                        is_valid_cached = True
-                        _ref_reason = ""
-                        
-                        # 判定A: 要約チェック (原文 > 60文字 かつ 翻訳 < 25%)
-                        if len(text_raw) > 60:
-                            if len(found_trans) < len(text_raw) * 0.25:
-                                is_valid_cached = False
-                                _ref_reason = "要約の疑い"
-                        
-                        # 判定B: 前置き混入チェック
-                        if is_valid_cached:
-                            preambles = ["はい、", "もちろん、", "翻訳案", "翻訳結果"]
-                            if any(p in found_trans[:15] for p in preambles):
-                                is_valid_cached = False
-                                _ref_reason = "前置きの混入"
-                                
-                        if not is_valid_cached:
-                            print(f"[Cache] 既存キャッシュを破棄し再翻訳（{_ref_reason}）: '{text_raw[:30]}'")
-                            new_chunks.append(chunk)
+                        # --- 単語辞書フィルター: 1〜2語の短文でどの辞書にも存在しない場合は即破棄 ---
+                        # プレイヤー名 (danger00, amachi等) やUIゴミ (I I I I等) をAPIに送る前に弾く
+                        if _word_filter_discard(text_raw):
+                            print(f"[Discard:WordFilter] {text_raw}")
+                            target_lang_wf = self.config.get("target_language", "ja")
+                            cache_key_wf = f"{target_lang_wf}::{text_raw}"
+                            existing_wf = self.translation_cache.get(cache_key_wf, "")
+                            if existing_wf not in ("__IGNORE__", "__IGNORE_1__", "__IGNORE_2__"):
+                                _SOFT_IGNORE_MAP_WF = {"": "__IGNORE_1__", "__IGNORE_1__": "__IGNORE_2__", "__IGNORE_2__": "__IGNORE__"}
+                                strike_wf = _SOFT_IGNORE_MAP_WF.get(existing_wf, "__IGNORE__")
+                                self.translation_cache[cache_key_wf] = strike_wf
+                                self._cache_dirty = True
+                                # print(f"[WordFilter] 辞書外: '{text_raw[:30]}' → {strike_wf}")
+                            self.active_translations[cid] = True
                             continue
                         
-                        # キャッシュヒット時の順序更新
-                        if cache_key in self.translation_cache:
-                            self.translation_cache.move_to_end(cache_key)
+                        if text_raw in self.pending_texts:
+                            self.active_translations[cid] = True
+                            self.overlay.update_translation_position(cid, chunk['rect'])
+                            continue
                         
-                        self.active_translations[cid] = True
-                        self.overlay.show_translation(cid, chunk, found_trans, target_lang)
-                        self.overlay_state[cid] = {
-                            "text": found_trans,
-                            "raw_text": text_raw,
-                            "rect": chunk["rect"],
-                            "bg_color": chunk.get("bg_color", "rgba(0,0,0,1.0)"),
-                            "text_color": "#ffffff",
-                            "lines_count": chunk.get("lines_count", 1),
-                            "base_density": self.ocr.calculate_edge_density(image, chunk['rect'])
-                        }
-                    else:
-                        new_chunks.append(chunk)
-
-            # ──────────────────────────────────────────────────────
-            # 【ダブルチェック】翻訳送信直前の座標重複フィルター
-            # 現在 overlay_state に表示中の矩形と比較して
-            # 「重なっており、かつ自分が小さい」ならば翻訳に送らない。
-            # OCR→吸収チェック→フリッカーチェックをすり抜けたゴミの最終防衛ライン。
-            # ──────────────────────────────────────────────────────
-            final_new_chunks = []
-            for chunk in new_chunks:
-                r1 = chunk['rect']
-                area1 = max(1, r1['w'] * r1['h'])
-                is_shadowed = False
-                for state in self.overlay_state.values():
-                    r2 = state['rect']
-                    area2 = max(1, r2['w'] * r2['h'])
-                    # ① まず重なりを計算
-                    ix = max(0, min(r1['x'] + r1['w'], r2['x'] + r2['w']) - max(r1['x'], r2['x']))
-                    iy = max(0, min(r1['y'] + r1['h'], r2['y'] + r2['h']) - max(r1['y'], r2['y']))
-                    ioa = (ix * iy) / area1  # 自分の面積に対する重複率
-                    if ioa < 0.4:
-                        continue  # 重なっていなければ大きさ比較不要
-                    # ② 重なっている → 自分が小さい場合のみスキップ
-                    if area1 < area2 * 0.7:
-                        is_shadowed = True
-                        # ログの氾濫を防ぐためのスキップキャッシュ
-                        shadow_key = f"shadow_{chunk['text']}"
-                        if current_time - self._shadow_skip_cache.get(shadow_key, 0) > 2.0:
-                            self._shadow_skip_cache[shadow_key] = current_time
-                            print(f"[DblCheck] 表示中の大きな枠に重なり({ioa:.0%})かつ小さい({area1:.0f}<{area2:.0f})ため翻訳スキップ: '{chunk['text'][:30]}'")
-                        break
-                if not is_shadowed:
-                    final_new_chunks.append(chunk)
-            new_chunks = final_new_chunks
-
-
-            # ステータス情報の更新準備
-            translated_count = len(self.overlay.active_labels)
-            backlog = self.translator.backlog_count
-            latency = self.translator.avg_latency
-            
-            # ステータス表示の一括統合
-            self._update_status()
-
-            # 【ノイズフィルタ & 重複排除】
-            # ゴミデータを早期に捨て、同じ内容のテキストが複数回翻訳に回るのを防ぐ
-            filtered = []
-            seen_in_this_batch = set()
-            now = time.time()
-            
-            # 短寿命キャッシュ（2秒間）でループをブロック
-            if not hasattr(self, "_recent_texts"):
-                self._recent_texts = {}
-            # 古い履歴を掃除
-            self._recent_texts = {k: v for k, v in self._recent_texts.items() if now - v < 2.0}
-
-            for c in new_chunks:
-                text = c.get('text', '').strip()
-                if not text:
-                    continue
-                
-                # 1. ゴミ排除（1文字の記号のみ、または極小チャンク）
-                if len(text) == 1 and not text.isalnum():
-                    continue
-                if c['rect']['w'] < 8 or c['rect']['h'] < 8:
-                    continue
+                        # キャッシュ検索 (1. 完全一致, 2. 正規化完全一致, 3. 曖昧一致)
+                        target_lang = self.config.get("target_language", "ja")
+                        cache_key = f"{target_lang}::{text_raw}"
+                        
+                        found_trans = self.translation_cache.get(cache_key)
+                            
+                        if not found_trans:
+                            norm_target = normalize_text(text_raw)
+                            if len(norm_target) > 2:
+                                best_ratio = 0.0
+                                best_cv = None
+                                for ck, cv in list(self.translation_cache.items()):
+                                    if not ck.startswith(f"{target_lang}::"): continue
+                                    ck_text = ck.split("::", 1)[1]
+                                    norm_ck = normalize_text(ck_text)
+                                    
+                                    # --- 段階2: 正規化後の完全一致 (全長のテキストで許可) ---
+                                    if norm_ck == norm_target:
+                                        found_trans = cv
+                                        break
+                                    
+                                    # --- 2秒間スキップガード（重複計算防止） ---
+                                    # text_raw が確実に文字列であることを担保してハッシュ化
+                                    t_hash = hashlib.md5(str(text_raw).encode('utf-8')).hexdigest()
+                                    if time.time() < getattr(self, "_skip_2s_cache", {}).get(t_hash, 0):
+                                        break
+    
+                                    # 文字数が大幅に異なるものはスキップ（速度対策）
+                                    len_ratio = len(norm_target) / max(len(norm_ck), 1)
+                                    if not (0.5 <= len_ratio <= 2.0):
+                                        continue
+                                    ratio = SequenceMatcher(None, norm_target, norm_ck).ratio()
+                                    if ratio > best_ratio:
+                                        best_ratio = ratio
+                                        best_cv = cv
+                                
+                                # 段階3の結果: 曖昧検索をさらに厳格化（20文字以上の長文かつ99%以上のみ）
+                                if not found_trans and len(norm_target) >= 20 and best_ratio >= 0.99:
+                                    found_trans = best_cv
+                                    print(f"[Cache] Fuzzy match: ratio={best_ratio:.2f}, text='{text_raw[:30]}'...")
+                                    # 2秒間はこのテキストのFuzzy判定をスキップ
+                                    if not hasattr(self, "_skip_2s_cache"): self._skip_2s_cache = {}
+                                    t_hash = hashlib.md5(str(text_raw).encode('utf-8')).hexdigest()
+                                    self._skip_2s_cache[t_hash] = time.time() + 2.0
+    
+                        if found_trans:
+                            # ソフトIGNOREはヒットとみなさずリトライ（Nストライク制）
+                            if found_trans in ("__IGNORE_1__", "__IGNORE_2__"):
+                                new_chunks.append(chunk)
+                                continue
+                            
+                            # --- 永久IGNOREのfastText再評価 ---
+                            # 毎フレーム判定すると重いため、前回の判定から一定時間空ける
+                            if found_trans == "__IGNORE__":
+                                cache_time_key = f"last_eval_{cache_key}"
+                                last_eval = getattr(self, "_last_eval_times", {}).get(cache_time_key, 0)
+                                
+                                if now - last_eval > 10.0:
+                                    if not hasattr(self, "_last_eval_times"): self._last_eval_times = {}
+                                    self._last_eval_times[cache_time_key] = now
+                                    
+                                    ocr_hint = chunk.get('lang', 'en').split('-')[0].lower()
+                                    _, lang_conf = detect_source_language(text_raw, ocr_lang_hint=ocr_hint)
+                                    if lang_conf >= 0.70:
+                                        # 明確に自然言語として高信頼(0.7以上)の場合のみ再試行を許可
+                                        if cache_key in self.translation_cache:
+                                            self.translation_cache[cache_key] = "__IGNORE_1__"
+                                            self._cache_dirty = True
+                                            print(f"[Cache] IGNORE→IGNORE_1 降格（fastText再評価 conf={lang_conf:.2f}）: '{text_raw[:30]}'")
+                                        new_chunks.append(chunk)
+                                        continue
+                                
+                                # 信頼度低（真のゴミテキスト）または待機時間中 → 永久IGNOREを維持
+                                self.active_translations[cid] = True
+                                continue
+                            
+                            # --- 既存翻訳の品質チェック (事後リフレッシュ) ---
+                            is_valid_cached = True
+                            _ref_reason = ""
+                            
+                            # 判定A: 要約チェック (原文 > 60文字 かつ 翻訳 < 25%)
+                            if len(text_raw) > 60:
+                                if len(found_trans) < len(text_raw) * 0.25:
+                                    is_valid_cached = False
+                                    _ref_reason = "要約の疑い"
+                            
+                            # 判定B: 前置き混入チェック
+                            if is_valid_cached:
+                                preambles = ["はい、", "もちろん、", "翻訳案", "翻訳結果"]
+                                if any(p in found_trans[:15] for p in preambles):
+                                    is_valid_cached = False
+                                    _ref_reason = "前置きの混入"
+                                    
+                            if not is_valid_cached:
+                                print(f"[Cache] 既存キャッシュを破棄し再翻訳（{_ref_reason}）: '{text_raw[:30]}'")
+                                new_chunks.append(chunk)
+                                continue
+                            
+                            # キャッシュヒット時の順序更新
+                            if cache_key in self.translation_cache:
+                                self.translation_cache.move_to_end(cache_key)
+                            
+                            self.active_translations[cid] = True
+                            self.overlay.show_translation(cid, chunk, found_trans, target_lang)
+                            self.overlay_state[cid] = {
+                                "text": found_trans,
+                                "raw_text": text_raw,
+                                "rect": chunk["rect"],
+                                "bg_color": chunk.get("bg_color", "rgba(0,0,0,1.0)"),
+                                "text_color": "#ffffff",
+                                "lines_count": chunk.get("lines_count", 1),
+                                "base_density": self.ocr.calculate_edge_density(image, chunk['rect'])
+                            }
+                        else:
+                            new_chunks.append(chunk)
+    
+                # ──────────────────────────────────────────────────────
+                # 【ダブルチェック】翻訳送信直前の座標重複フィルター
+                # 現在 overlay_state に表示中の矩形と比較して
+                # 「重なっており、かつ自分が小さい」ならば翻訳に送らない。
+                # OCR→吸収チェック→フリッカーチェックをすり抜けたゴミの最終防衛ライン。
+                # ──────────────────────────────────────────────────────
+                final_new_chunks = []
+                for chunk in new_chunks:
+                    r1 = chunk['rect']
+                    area1 = max(1, r1['w'] * r1['h'])
+                    is_shadowed = False
+                    for state in self.overlay_state.values():
+                        r2 = state['rect']
+                        area2 = max(1, r2['w'] * r2['h'])
+                        # ① まず重なりを計算
+                        ix = max(0, min(r1['x'] + r1['w'], r2['x'] + r2['w']) - max(r1['x'], r2['x']))
+                        iy = max(0, min(r1['y'] + r1['h'], r2['y'] + r2['h']) - max(r1['y'], r2['y']))
+                        ioa = (ix * iy) / area1  # 自分の面積に対する重複率
+                        if ioa < 0.4:
+                            continue  # 重なっていなければ大きさ比較不要
+                        # ② 重なっている → 自分が小さい場合のみスキップ
+                        if area1 < area2 * 0.7:
+                            is_shadowed = True
+                            # ログの氾濫を防ぐためのスキップキャッシュ
+                            shadow_key = f"shadow_{chunk['text']}"
+                            if current_time - self._shadow_skip_cache.get(shadow_key, 0) > 2.0:
+                                self._shadow_skip_cache[shadow_key] = current_time
+                                print(f"[DblCheck] 表示中の大きな枠に重なり({ioa:.0%})かつ小さい({area1:.0f}<{area2:.0f})ため翻訳スキップ: '{chunk['text'][:30]}'")
+                            break
+                    if not is_shadowed:
+                        final_new_chunks.append(chunk)
+                # ステータス情報の更新準備
+                backlog = self.translator.backlog_count
+                latency = self.translator.avg_latency
+    
+                # シングルモード：新しく見つかったものをバックログに追加
+                if is_single and new_chunks:
+                    for c in new_chunks:
+                        # Translator が「有効なチャンク」と認識できるように登録
+                        self.active_translations[c['id']] = c
                     
-                # 2. バッチ内（今回のOCR結果）での重複排除
-                if text in seen_in_this_batch:
-                    continue
-                seen_in_this_batch.add(text)
+                    self._single_scan_backlog.extend(new_chunks)
+                    # 長文優先でソート
+                    self._single_scan_backlog.sort(key=lambda c: len(c.get('text', '')), reverse=True)
+                    print(f"[SingleMode] バックログに追加: {len(new_chunks)}件 (合計: {len(self._single_scan_backlog)}件)")
+                    new_chunks = []
                 
-                # 3. 翻訳待ち（pending）との重複排除
-                if text in self.pending_texts:
-                    continue
-                    
-                # 4. 直近2秒間に処理したテキストとの重複排除
-                if text in self._recent_texts:
-                    continue
-                    
-                # 生き残ったテキストを登録して追加
-                self._recent_texts[text] = now
-                filtered.append(c)
+                new_chunks = final_new_chunks if not is_single else []
+    
+    
+                # ステータス表示の一括統合
+                self._update_status()
+    
+                # 【ノイズフィルタ & 重複排除】
+                # ゴミデータを早期に捨て、同じ内容のテキストが複数回翻訳に回るのを防ぐ
+                filtered = []
+                seen_in_this_batch = set()
+                now = time.time()
                 
-            new_chunks = filtered
-
-            if not new_chunks:
-                return
-            
-            # 【チャンク数制限】多すぎる場合は上位30個（重要そうなもの）に絞る
-            if len(new_chunks) > 30:
-                print(f"[Queue] Too many chunks ({len(new_chunks)}), limiting to top 30.")
-                new_chunks.sort(key=lambda c: (len(c['text']), c['rect']['w']*c['rect']['h']), reverse=True)
-                new_chunks = new_chunks[:30]
-            
-            # 【優先順位付け】新しく発見された長文・大きなフォントを優先
-            new_chunks.sort(key=lambda c: (len(c['text']), c['rect']['h']), reverse=True)
-            
-            # 【動的スロットリング】バックログとLatencyに応じた送信制御
-            current_time = time.time()
-            
-            # 1. 緊急停止ロジック: キューが溜まりすぎている場合は新規送信を完全に止める
-            if backlog > 20:
-                self._update_status("高負荷：キューを消化中...")
-                return
-
-            # 2. Latencyに基づくグローバル送信間隔の計算 (2.0s〜Latencyの80%)
-            # 例: Latencyが4sなら3.2s、2.5sなら2.0s待機
-            global_interval = max(1.5, latency * 0.8)
-            
-            # 3. 前回のリクエストから十分な時間が経過しているか判定
-            if current_time - self.last_request_time < global_interval:
-                # まだ待機中。UIの位置更新などはパス1/2で完了しているので、ここでは何もしない
-                return
-
-            # ここまで来たら新規リクエストを送信可能
-            # 送信可能枠 (バックログが溜まっている時は1件ずつ慎重に送る)
-            if backlog > 10:
-                MAX_TO_SEND = 1
-            elif backlog > 3:
-                MAX_TO_SEND = 2
-            else:
-                MAX_TO_SEND = 3
-                
-            chunks_to_send_raw = new_chunks[:MAX_TO_SEND]
-        
-            # 【短文の流量制限】負荷時はさらに厳しく
-            chunks_to_send = []
-            for chunk in chunks_to_send_raw:
-                text = chunk['text'].strip()
-                is_short = len(text) <= 15 or len(text.split()) <= 2
-                if is_short:
-                    limit_sec = max(5.0, latency * 1.5) if backlog > 5 else 3.0
-                    if current_time - self.last_short_word_time < limit_sec:
+                # 短寿命キャッシュ（2秒間）でループをブロック
+                if not hasattr(self, "_recent_texts"):
+                    self._recent_texts = {}
+                # 古い履歴を掃除
+                self._recent_texts = {k: v for k, v in self._recent_texts.items() if now - v < 2.0}
+    
+                for c in new_chunks:
+                    text = c.get('text', '').strip()
+                    if not text:
                         continue
-                    else:
-                        self.last_short_word_time = current_time
-                chunks_to_send.append(chunk)
-
-            if not chunks_to_send:
-                return
-
-            # ステータス更新 & 翻訳依頼の送信
-            self._update_status(f"翻訳中... (新規: {len(chunks_to_send)}個)")
-            
-            self.last_request_time = time.time() # 送信時刻を更新
-            
-            for chunk in chunks_to_send:
-                self.active_translations[chunk['id']] = True
-                self.pending_texts.add(chunk['text'].strip())
-                
-                # fastText で発信元言語と信頼度を判定してチャンクに付与
-                ocr_hint = chunk.get('lang', 'en').split('-')[0].lower()
-                detected_lang, lang_conf = detect_source_language(
-                    chunk['text'],
-                    ocr_lang_hint=ocr_hint,
-                )
-                chunk['detected_source_lang'] = detected_lang
-                
-                # --- fastText 低信頼度チェック: OCRゴミを翻訳前に事前ストライク ---
-                if lang_conf < 0.35:
-                    # 2秒間のスキップガードに登録
-                    if not hasattr(self, "_skip_2s_cache"): self._skip_2s_cache = {}
-                    t_hash = hashlib.md5(str(chunk.get('text', '')).encode('utf-8')).hexdigest()
-                    self._skip_2s_cache[t_hash] = time.time() + 2.0
                     
-                    text_raw_ps = chunk['text'].strip()
-                    force_ignore = (lang_conf < 0.10)
-                    
-                    if not force_ignore:
-                        pass
-                    else:
-                        target_lang_ps = self.config.get("target_language", "ja")
-                        cache_key_ps = f"{target_lang_ps}::{text_raw_ps}"
-                        strike = "__IGNORE__"
-                        
-                        if self.translation_cache.get(cache_key_ps) != strike:
-                            self.translation_cache[cache_key_ps] = strike
-                            self._cache_dirty = True
-                            print(f"[Cache] Pre-strike (Junk/Low Conf={lang_conf:.2f}, lang={detected_lang}): '{text_raw_ps[:30]}' -> {strike}")
-                        
-                        if chunk['id'] in self.active_translations:
-                            del self.active_translations[chunk['id']]
-                        self.pending_texts.discard(text_raw_ps)
+                    # 1. ゴミ排除（1文字の記号のみ、または極小チャンク）
+                    if len(text) == 1 and not text.isalnum():
                         continue
+                    if c['rect']['w'] < 8 or c['rect']['h'] < 8:
+                        continue
+                        
+                    # 2. バッチ内（今回のOCR結果）での重複排除
+                    if text in seen_in_this_batch:
+                        continue
+                    seen_in_this_batch.add(text)
+                    
+                    # 3. 翻訳待ち（pending）との重複排除
+                    if text in self.pending_texts:
+                        continue
+                        
+                    # 4. 直近2秒間に処理したテキストとの重複排除
+                    if text in self._recent_texts:
+                        continue
+                        
+                    # 生き残ったテキストを登録して追加
+                    self._recent_texts[text] = now
+                    filtered.append(c)
+                    
+                new_chunks = filtered
+    
+                # チャンク数制限 (新規追加がある場合のみ)
+                if new_chunks and len(new_chunks) > 30:
+                    print(f"[Queue] Too many chunks ({len(new_chunks)}), limiting to top 30.")
+                    new_chunks.sort(key=lambda c: (len(c['text']), c['rect']['w']*c['rect']['h']), reverse=True)
+                    new_chunks = new_chunks[:30]
                 
-                check_active = lambda cid=chunk['id']: cid in getattr(self, "active_translations", {})
-                self.translator.translate_single_async(chunk, self._on_single_translation_done, is_active_check=check_active)
+                if new_chunks:
+                    # 【優先順位付け】新しく発見された長文・大きなフォントを優先
+                    new_chunks.sort(key=lambda c: (len(c['text']), c['rect']['h']), reverse=True)
+                    
+                    # 【動的スロットリング】バックログとLatencyに応じた送信制御
+                    current_time = time.time()
+                    
+                    # 1. 緊急停止ロジック: キューが溜まりすぎている場合は新規送信を完全に止める
+                    if not is_single and backlog > 20:
+                        self._update_status("高負荷：キューを消化中...")
+                        return
+    
+                    # 送信可能枠の計算
+                    if is_single:
+                        MAX_TO_SEND = 100
+                    elif backlog > 10:
+                        MAX_TO_SEND = 1
+                    elif backlog > 3:
+                        MAX_TO_SEND = 2
+                    else:
+                        MAX_TO_SEND = 3
+                        
+                    chunks_to_send_raw = new_chunks[:MAX_TO_SEND]
+                
+                    # 【短文の流量制限】負荷時はさらに厳しく
+                    chunks_to_send = []
+                    for chunk in chunks_to_send_raw:
+                        text = chunk['text'].strip()
+                        is_short = len(text) <= 15 or len(text.split()) <= 2
+                        if is_short:
+                            limit_sec = max(5.0, latency * 1.5) if backlog > 5 else 3.0
+                            if current_time - getattr(self, 'last_short_word_time', 0) < limit_sec:
+                                continue
+                            else:
+                                self.last_short_word_time = current_time
+                        chunks_to_send.append(chunk)
+    
+                    if chunks_to_send:
+                        # ステータス更新 & 翻訳依頼の送信
+                        self._update_status(f"翻訳中... (新規: {len(chunks_to_send)}個)")
+                        self.last_request_time = time.time()
+                        
+                        for chunk in chunks_to_send:
+                            self.active_translations[chunk['id']] = chunk
+                            self.pending_texts.add(chunk['text'].strip())
+                            
+                            ocr_hint = chunk.get('lang', 'en').split('-')[0].lower()
+                            detected_lang, lang_conf = detect_source_language(chunk['text'], ocr_lang_hint=ocr_hint)
+                            chunk['detected_source_lang'] = detected_lang
+                            
+                            # --- 低信頼度チェック ---
+                            if lang_conf < 0.35:
+                                # (略：キャッシュへの pre-strike 処理)
+                                pass
+                            
+                            check_active = lambda cid=chunk['id']: cid in getattr(self, "active_translations", {})
+                            self.translator.translate_single_async(chunk, self._on_single_translation_done, is_active_check=check_active)
 
         except Exception as e:
             print(f"[Queue Error] _poll_ocr_result failed: {e}")
             traceback.print_exc()
+
+        # ────── 以下、OCRの結果がなくても毎フレーム実行すべき補充と状態管理 ──────
+        is_single = self.config.get("single_mode", False)
+        if is_single and not getattr(self, "_single_scan_backlog", []):
+            if not getattr(self, "_ocr_busy", True) and getattr(self, "_last_ocr_exec_time", 0) > 0:
+                self._single_run_done_candidate = True
+
+        try:
+            if self.config.get("single_mode", False):
+                # 送信情報の再取得
+                backlog = self.translator.backlog_count
+                
+                # 補充が必要かチェック
+                if backlog < 3 and self._single_scan_backlog:
+                    # 長文優先でソート
+                    self._single_scan_backlog.sort(key=lambda c: len(c.get('text', '')), reverse=True)
+                    
+                    batch_size = 3 - backlog
+                    to_send = self._single_scan_backlog[:batch_size]
+                    self._single_scan_backlog = self._single_scan_backlog[batch_size:]
+                    
+                    print(f"[SingleMode] パイプライン補充: {len(to_send)}件 (現在実行中: {backlog + len(to_send)}件, 残り: {len(self._single_scan_backlog)}件)")
+                    
+                    for chunk in to_send:
+                        check_active = lambda cid=chunk['id']: cid in getattr(self, "active_translations", {})
+                        self.translator.translate_single_async(chunk, self._on_single_translation_done, is_active_check=check_active)
+                
+                elif not self._single_scan_backlog and backlog == 0 and getattr(self, "_single_run_done_candidate", False):
+                    if not self._single_run_done:
+                        self._single_run_done = True
+                        print("[SingleMode] 全件の翻訳が完了しました。")
+
+        except Exception as e:
+            print(f"[Queue Maintenance Error] {e}")
 
     def _on_single_translation_done(self, chunk, translated_text):
         # 処理が完了したのでpendingから削除
@@ -2234,9 +2283,11 @@ class TranslationController:
                         print(f"[Broadcast] ❌ スキップ: 消去されたばかりのテキストです: '{text_clean[:30]}'")
                         return
 
+                is_single = self.config.get("single_mode", False)
                 for active_cid in list(self.active_translations.keys()):
-                    # すでに画面から消えている（現在のフレームに存在しない）枠には絶対に描画しない（適当な位置にポップアップするのを防ぐ）
-                    if active_cid not in getattr(self, "current_ids", set()):
+                    # 通常モードでは、すでに画面から消えている（現在のフレームに存在しない）枠には描画しない
+                    # シングルモードでは、監視を止めているため current_ids 判定をスキップする
+                    if not is_single and active_cid not in getattr(self, "current_ids", set()):
                         if active_cid in self.active_translations:
                             print(f"[Broadcast] ❌ 破棄: 描画前に枠が消失しました ID={active_cid}")
                             del self.active_translations[active_cid]
@@ -2825,6 +2876,12 @@ class ControlPanel(QMainWindow):
         self.controller.update_config(self.config)
 
         is_single = self.config.get("single_mode", False)
+        
+        # キュー上限の調整 (シングルモードは全翻訳のため上限を100へ、通常は30)
+        if hasattr(self.controller, "translator") and self.controller.translator:
+            q_limit = 100 if is_single else 30
+            self.controller.translator.set_queue_limit(q_limit)
+
         if is_single:
             # シングルモード: すでに実行中なら「強制再読み取り」を実行（UIクリア含む）
             if self.controller.is_running:
