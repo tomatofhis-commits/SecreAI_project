@@ -619,6 +619,7 @@ class OCREngine:
     def extract_text(self, image: Image.Image, force: bool = False, window_title: str = "", target_lang: str = "ja", attach_image: bool = False, thread_limit_ratio: float = 1.0) -> tuple[list[dict], bool]:
         import os
         try:
+            t_start = time.time()
             results_by_lang = {}
             # CPU数に基づいた並列実行数の決定
             max_workers = max(1, int((os.cpu_count() or 1) * thread_limit_ratio))
@@ -633,6 +634,12 @@ class OCREngine:
                     refine_results = self._try_paddle_refine(image, b['rect'])
                     for text, r_rect, r_lines, r_conf in refine_results:
                         self._append_chunk(clean_chunks, image, text, r_rect, r_lines, "ja", target_lang, attach_image)
+                
+                # 統計ログ
+                total_chars = sum(len(c['text']) for c in clean_chunks)
+                total_words = sum(len(c['text'].split()) for c in clean_chunks)
+                elapsed = time.time() - t_start
+                print(f"[OCR_Exec] Done: {self.ocr_mode} | Found: {len(clean_chunks)} chunks ({total_chars} chars, {total_words} words) | Time: {elapsed:.2f}s")
                 return clean_chunks, True
 
             # --- 第1パス: 矩形群の獲得と統合 (Discovery OCR) ---
@@ -810,6 +817,11 @@ class OCREngine:
                     # ソース言語を推測して渡す
                     self._append_chunk(clean_chunks, image, p_text, p_rect, p_lines, src_lang, target_lang, attach_image, parent_rect=m_rect)
             
+            # 統計ログ
+            total_chars = sum(len(c['text']) for c in clean_chunks)
+            total_words = sum(len(c['text'].split()) for c in clean_chunks)
+            elapsed = time.time() - t_start
+            print(f"[OCR_Exec] Done: {self.ocr_mode} | Found: {len(clean_chunks)} chunks ({total_chars} chars, {total_words} words) | Time: {elapsed:.2f}s")
             return clean_chunks, True
 
             
