@@ -1,6 +1,6 @@
 {
-    "target_window_title": "sc.jpg",
-    "target_language": "en",
+    "target_window_title": "American Truck Simulator",
+    "target_language": "ja",
     "source_language": "auto",
     "ollama_model": "translategemma:4b",
     "ollama_url": "http://localhost:11434",
@@ -9,7 +9,7 @@
         "en-US",
         "ja-JP"
     ],
-    "paddle_language": "japan",
+    "paddle_language": "en",
     "paddle_gpu_index": 1,
     "paddle_gpu_mem_mb": 2048,
     "paddle_threshold": 0.9,
@@ -23,5 +23,5 @@
     "use_vision_translation": false,
     "eco_mode": false,
     "single_mode": true,
-    "capture_mode": "mss"
+    "capture_mode": "bitblt"
 }

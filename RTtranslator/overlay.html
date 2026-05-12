@@ -123,48 +123,36 @@
                     label.style.height = 'auto';
                     label.style.display = 'block';
 
+                    const fontSizeRatio = (data.config && data.config.font_size_ratio) ? data.config.font_size_ratio : 1.0;
+                    let currentFontSize = (item.font_size || 16) * fontSizeRatio;
+
+                    // 1行/多行に応じた基本設定
                     const linesCount = item.lines_count || 1;
                     if (linesCount === 1 && !item.text.includes('\n')) {
                         label.style.whiteSpace = 'nowrap';
-                        let currentFontSize = Math.max(10, Math.min(32, rect.h));
                         label.style.fontSize = `${currentFontSize}px`;
                         label.style.lineHeight = '1.0';
 
-                        // 幅が超える場合は縮小
+                        // 幅が超える場合は微調整
                         if (label.scrollWidth > labelW) {
                             const ratio = labelW / Math.max(1, label.scrollWidth);
-                            currentFontSize = Math.max(8, currentFontSize * ratio * 0.95);
+                            currentFontSize = Math.max(8, currentFontSize * ratio * 0.98);
                             label.style.fontSize = `${currentFontSize}px`;
                         }
                     } else {
                         label.style.whiteSpace = 'pre-wrap';
-                        let currentFontSize = Math.max(10, Math.min(32, rect.h / linesCount));
-                        
-                        // 先行縮小 (ui.pyのlen_ratio計算を模倣)
-                        const origTextLength = Math.max(1, (item.raw_text || "").replace(/\n/g, '').length);
-                        const translatedLength = item.text.replace(/\n/g, '').length;
-                        const lenRatio = translatedLength / origTextLength;
-                        
-                        if (lenRatio > 1.2) {
-                            currentFontSize = Math.max(10, currentFontSize * (1.0 / Math.sqrt(lenRatio)));
-                        }
-
                         let lineHPx = rect.h / linesCount;
                         let cssLineHeight = lineHPx / Math.max(1, currentFontSize);
-                        cssLineHeight = Math.max(0.85, Math.min(1.5, cssLineHeight));
+                        cssLineHeight = Math.max(0.85, Math.min(1.2, cssLineHeight));
                         
                         label.style.fontSize = `${currentFontSize}px`;
                         label.style.lineHeight = `${cssLineHeight}`;
                         
-                        // 高さ制限での強制縮小
+                        // 高さ制限での強制縮小（安全策）
                         let safetyCount = 0;
-                        while (label.scrollHeight > rect.h && currentFontSize > 8 && safetyCount < 20) {
-                            const baseShrink = rect.h / Math.max(1, label.scrollHeight);
-                            currentFontSize = Math.max(8, currentFontSize * baseShrink * 0.95);
-                            cssLineHeight = Math.max(0.7, cssLineHeight * 0.9);
-                            
+                        while (label.scrollHeight > rect.h && currentFontSize > 8 && safetyCount < 5) {
+                            currentFontSize *= 0.9;
                             label.style.fontSize = `${currentFontSize}px`;
-                            label.style.lineHeight = `${cssLineHeight}`;
                             safetyCount++;
                         }
                     }

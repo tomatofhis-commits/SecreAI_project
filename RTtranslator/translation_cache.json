@@ -1,9 +1,1 @@
-{
-  "en::このアーティファクトが戦場に出ちとき、あ\n枚を見る。「その中からクリーチャー・カー\nド最天2枚を公開し、あなたの手札に加え\nじッこのアーティファクトを生け贄に捧け\nる・宝物・トークン1つを生成する。": "When this artifact is put onto the battlefield, look at the top two cards of the library. You may put one of them into your hand and put this artifact on the battlefield as a creature token. Then, sacrifice any equipment, artifact, or token.",
-  "en::このトークンを生け贄に捧け\n1色のマナ1点を加": "Sacrifice this token to add 1 blue mana.",
-  "en::GISBERT": "__IGNORE_1__",
-  "en::ScjJPg": "__IGNORE_1__",
-  "en::トランプルを持つクリーチャーは、余剰の戦闘ダ\nメージをそれが攻撃しているプレイヤーかプレイン\nズウォーカーに写えることができます。": "Creatures with Trample can redirect excess combat damage to the player or planeswalker they are attacking.",
-  "en::あなたがマナ総量が4以上である呪文1\nつを唱えるたび、このクリーチやーは各\n対戦相手にそれぞれ1点のダメージを与\nえる。": "Each time you cast a spell that requires a mana cost of 4 or more, this creature deals 1 damage to each opponent.",
-  "en::5ć：このクリーチャーの上に\n+1/1カウンク": "5th: Place this creature on top of"
-}
+{}

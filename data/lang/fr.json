@@ -24,6 +24,8 @@
     "rtt_cascade": "Traducteur RT",
     "rtt_start": "Démarrer la traduction",
     "rtt_stop": "Arrêter la traduction",
+    "rtt_eco_mode": "Mode Éco",
+    "rtt_single_mode": "Mode de traduction à capture unique",
     "rtt_settings": "Ouvrir les paramètres RTT"
   },
   "gui": {
@@ -139,12 +141,13 @@
     "rtt_group_gpu": " Paramètres GPU / CPU ",
     "rtt_label_gpu": "GPU:",
     "rtt_label_vram": "Limite VRAM (Mo):",
-    "rtt_label_cpu": "Limite fils CPU:",
+    "rtt_label_cpu": "Limite CPU (%):",
     "rtt_label_paddle_lang": "Langue Paddle:",
     "rtt_group_perf": " Capture / Performance ",
     "rtt_label_capture_engine": "Moteur de capture:",
     "rtt_label_eco": "Mode Éco (suppression OCR 3s)",
-    "rtt_label_sens": "Sensibilité de réponse:"
+    "rtt_label_single": "Mode de traduction à capture unique (Scanner une fois)",
+    "rtt_label_sens": "Sensibilité de response:"
   },
   "log_messages": {
     "module_loaded": "Système: Module de mise à jour de la mémoire chargé.",

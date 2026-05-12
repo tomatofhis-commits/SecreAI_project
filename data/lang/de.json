@@ -24,6 +24,8 @@
     "rtt_cascade": "RT-Übersetzer",
     "rtt_start": "Übersetzung starten",
     "rtt_stop": "Übersetzung stoppen",
+    "rtt_eco_mode": "Eco-Modus",
+    "rtt_single_mode": "One-Shot-Übersetzungsmodus",
     "rtt_settings": "RTT-Einstellungen öffnen"
   },
   "gui": {
@@ -139,11 +141,12 @@
     "rtt_group_gpu": " GPU / CPU-Einstellungen ",
     "rtt_label_gpu": "GPU:",
     "rtt_label_vram": "VRAM-Limit (MB):",
-    "rtt_label_cpu": "CPU-Thread-Limit:",
+    "rtt_label_cpu": "CPU-Limit (%):",
     "rtt_label_paddle_lang": "Paddle-Sprache:",
     "rtt_group_perf": " Aufnahme / Leistung ",
     "rtt_label_capture_engine": "Capture-Engine:",
     "rtt_label_eco": "Eco-Modus (3s OCR-Unterdrückung)",
+    "rtt_label_single": "One-Shot-Übersetzungsmodus (Einmal scannen)",
     "rtt_label_sens": "Reaktions-Empfindlichkeit:"
   },
   "log_messages": {

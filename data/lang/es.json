@@ -24,6 +24,8 @@
     "rtt_cascade": "Traductor RT",
     "rtt_start": "Iniciar traducción",
     "rtt_stop": "Detener traducción",
+    "rtt_eco_mode": "Modo Eco",
+    "rtt_single_mode": "Modo de traducción de captura única",
     "rtt_settings": "Abrir configuración RTT"
   },
   "gui": {
@@ -139,11 +141,12 @@
     "rtt_group_gpu": " Configuración GPU / CPU ",
     "rtt_label_gpu": "GPU:",
     "rtt_label_vram": "Límite VRAM (MB):",
-    "rtt_label_cpu": "Límite de hilos CPU:",
+    "rtt_label_cpu": "Límite de CPU (%):",
     "rtt_label_paddle_lang": "Idioma de Paddle:",
     "rtt_group_perf": " Captura / Rendimiento ",
     "rtt_label_capture_engine": "Motor de captura:",
     "rtt_label_eco": "Modo Eco (supresión OCR 3s)",
+    "rtt_label_single": "Modo de traducción de captura única (Escanear una vez)",
     "rtt_label_sens": "Sensibilidad de respuesta:"
   },
   "log_messages": {
