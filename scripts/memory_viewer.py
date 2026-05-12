@@ -330,20 +330,50 @@ class MemoryViewer:
         
         def process():
             try:
-                import ollama
-                summary_model = self.config.get("MODEL_ID_SUMMARY", "gemma3:4b")
+                db_provider = self.config.get("DB_PROVIDER", "local").lower()
+                db_model_id = self.config.get("DB_MODEL_ID", "gemma3:4b")
                 
                 prompt = (
                     f"以下の記憶内容を、本質を損なわず300文字以内で簡潔に要約してください。\n"
                     f"300文字に収まりきらない場合は、重要な単語を箇条書き（- 単語）で抽出してください。\n"
                     f"内容: {content}"
                 )
-                
-                response = ollama.chat(
-                    model=summary_model,
-                    messages=[{'role': 'user', 'content': prompt}]
-                )
-                new_content = response['message']['content'].strip()
+
+                new_content = ""
+                if db_provider == "openai":
+                    from openai import OpenAI
+                    client_oa = OpenAI(api_key=self.config.get("OPENAI_API_KEY"))
+                    response = client_oa.chat.completions.create(
+                        model=db_model_id, 
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    new_content = response.choices[0].message.content.strip()
+                elif db_provider == "gemini":
+                    import google.genai as genai
+                    client_ge = genai.Client(api_key=self.config.get("GEMINI_API_KEY"))
+                    
+                    actual_model = db_model_id
+                    gemini_config_obj = {}
+                    if db_model_id == "gemini-3.1-flash-lite-preview（中）":
+                        actual_model = "gemini-3.1-flash-lite-preview"
+                        gemini_config_obj["thinking_config"] = {"thinking_level": "MEDIUM"}
+                    elif db_model_id == "gemini-3.1-flash-lite-preview":
+                        budget = self.config.get("THINKING_BUDGET", "MEDIUM")
+                        gemini_config_obj["thinking_config"] = {"thinking_level": budget.upper()}
+
+                    res = client_ge.models.generate_content(
+                        model=actual_model, 
+                        contents=prompt,
+                        config=gemini_config_obj if gemini_config_obj else None
+                    )
+                    new_content = res.text.strip()
+                else: # local (ollama)
+                    import ollama
+                    response = ollama.chat(
+                        model=db_model_id,
+                        messages=[{'role': 'user', 'content': prompt}]
+                    )
+                    new_content = response['message']['content'].strip()
                 
                 # 日付推測ロジック
                 def infer_date(eid, current_ts):
@@ -396,8 +426,9 @@ class MemoryViewer:
         
         def process():
             try:
-                import ollama
-                summary_model = self.config.get("MODEL_ID_SUMMARY", "gemma3:4b")
+                db_provider = self.config.get("DB_PROVIDER", "local").lower()
+                db_model_id = self.config.get("DB_MODEL_ID", "gemma3:4b")
+                
                 # 改善: 接続プールで3-5倍高速化
                 collection = get_chroma_collection(self.db_path)
                 
@@ -414,11 +445,41 @@ class MemoryViewer:
                         f"内容: {content}"
                     )
                     
-                    response = ollama.chat(
-                        model=summary_model,
-                        messages=[{'role': 'user', 'content': prompt}]
-                    )
-                    new_content = response['message']['content'].strip()
+                    new_content = ""
+                    if db_provider == "openai":
+                        from openai import OpenAI
+                        client_oa = OpenAI(api_key=self.config.get("OPENAI_API_KEY"))
+                        response = client_oa.chat.completions.create(
+                            model=db_model_id, 
+                            messages=[{"role": "user", "content": prompt}],
+                        )
+                        new_content = response.choices[0].message.content.strip()
+                    elif db_provider == "gemini":
+                        import google.genai as genai
+                        client_ge = genai.Client(api_key=self.config.get("GEMINI_API_KEY"))
+                        
+                        actual_model = db_model_id
+                        gemini_config_obj = {}
+                        if db_model_id == "gemini-3.1-flash-lite-preview（中）":
+                            actual_model = "gemini-3.1-flash-lite-preview"
+                            gemini_config_obj["thinking_config"] = {"thinking_level": "MEDIUM"}
+                        elif db_model_id == "gemini-3.1-flash-lite-preview":
+                            budget = self.config.get("THINKING_BUDGET", "MEDIUM")
+                            gemini_config_obj["thinking_config"] = {"thinking_level": budget.upper()}
+
+                        res = client_ge.models.generate_content(
+                            model=actual_model, 
+                            contents=prompt,
+                            config=gemini_config_obj if gemini_config_obj else None
+                        )
+                        new_content = res.text.strip()
+                    else: # local (ollama)
+                        import ollama
+                        response = ollama.chat(
+                            model=db_model_id,
+                            messages=[{'role': 'user', 'content': prompt}]
+                        )
+                        new_content = response['message']['content'].strip()
                     
                     # 日付推測ロジックを適用
                     final_ts = ts
