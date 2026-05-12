@@ -244,24 +244,25 @@ def main(base_path=None):
                     api_cache.set(prompt, ans, provider=db_provider, model=local_db_model_id)
                 return ans
 
-        # --- generate_text: キーワードタグ生成用（メインAIモデルを使用） ---
+        # --- generate_text: キーワードタグ生成用（DB用モデルを使用） ---
         def generate_text(prompt):
-            """タグ生成タスク用: メインAIモデルを使用（game_ai.pyと同じ設定）"""
-            if provider == "openai":
+            """タグ生成タスク用: settings_ui.pyで設定されたデータベース用モデルを使用"""
+            local_db_model_id = db_model_id
+            if db_provider == "openai":
                 client_oa = OpenAI(api_key=config.get("OPENAI_API_KEY"))
                 response = client_oa.chat.completions.create(
-                    model=model_id, 
+                    model=local_db_model_id, 
                     messages=[{"role": "user", "content": prompt}],
                 )
                 return response.choices[0].message.content.strip()
 
-            elif provider == "local":
+            elif db_provider == "local":
                 url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
                 try:
                     res = requests.post(
                         f"{url.rstrip('/')}/chat/completions",
                         json={
-                            "model": model_id,  # メインAIモデル
+                            "model": local_db_model_id,
                             "messages": [{"role": "user", "content": prompt}],
                             "options": {"num_ctx": 8192, "temperature": 0.3}
                         },
@@ -274,25 +275,31 @@ def main(base_path=None):
             else: # gemini
                 # キャッシュチェック
                 if api_cache:
-                    cached = api_cache.get(prompt, provider=provider, model=model_id)
+                    cached = api_cache.get(prompt, provider=db_provider, model=local_db_model_id)
                     if cached: return cached
 
                 client_ge = genai.Client(api_key=config.get("GEMINI_API_KEY"))
                 
                 gemini_config_obj = {}
-                thinking_budget = config.get("THINKING_BUDGET", "medium")
-                if model_id == "gemini-3.1-flash-lite-preview":
+                
+                db_thinking_budget = None
+                if local_db_model_id == "gemini-3.1-flash-lite-preview（中）":
+                    local_db_model_id = "gemini-3.1-flash-lite-preview"
+                    db_thinking_budget = "medium"
+                
+                thinking_budget = db_thinking_budget if db_thinking_budget is not None else config.get("THINKING_BUDGET", "medium")
+                if local_db_model_id == "gemini-3.1-flash-lite-preview":
                     gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}
 
                 res = client_ge.models.generate_content(
-                    model=model_id, 
+                    model=local_db_model_id, 
                     contents=prompt,
                     config=gemini_config_obj if gemini_config_obj else None
                 )
                 ans = res.text.strip()
 
                 if api_cache:
-                    api_cache.set(prompt, ans, provider=provider, model=model_id)
+                    api_cache.set(prompt, ans, provider=db_provider, model=local_db_model_id)
                 return ans
 
         # 要約の実行（軽量モデルを使用）
