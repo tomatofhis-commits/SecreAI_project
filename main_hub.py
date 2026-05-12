@@ -55,7 +55,7 @@ except ImportError:
 # ------------------------
 # 🔹 GLOBAL CONFIGURATION 🔹
 # ------------------------
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 CONFIG_VERSION = "2.0"
 APP_NAME = f"SecreAI - NextGen {VERSION}"
 
@@ -196,6 +196,36 @@ def remote_status():
             status_data["rtt_detail"] = "api_not_ready"
             
     return jsonify(status_data)
+
+@app.route('/api/rtt_start', methods=['GET', 'POST'])
+def rtt_start_api():
+    if main_gui:
+        main_gui.rtt_start()
+        return jsonify({"status": "ok", "action": "rtt_start"})
+    return jsonify({"status": "error", "message": "Main GUI not ready"}), 500
+
+@app.route('/api/rtt_stop', methods=['GET', 'POST'])
+def rtt_stop_api():
+    if main_gui:
+        main_gui.rtt_stop()
+        return jsonify({"status": "ok", "action": "rtt_stop"})
+    return jsonify({"status": "error", "message": "Main GUI not ready"}), 500
+
+@app.route('/api/rtt_status', methods=['GET'])
+def rtt_status_api():
+    try:
+        resp = requests.get("http://localhost:5001/api/status", timeout=2)
+        return jsonify(resp.json())
+    except:
+        return jsonify({"status": "ok", "is_running": False, "error": "RTT not connected"})
+
+@app.route('/api/rtt_retrans', methods=['GET', 'POST'])
+def rtt_retrans_api():
+    try:
+        resp = requests.post("http://localhost:5001/api/retrans", timeout=2)
+        return jsonify(resp.json())
+    except:
+        return jsonify({"status": "error", "message": "RTT not connected"}), 500
 
 @app.route('/api/ecomode', methods=['GET', 'POST'])
 def remote_rtt_ecomode():
@@ -543,6 +573,23 @@ class MainApp(ctk.CTk):
         )
         
         self._rtt_menu = rtt_menu  # 状態更新用に保持
+        self.update_rtt_menu_states()
+
+    def update_rtt_menu_states(self):
+        """メニュー項目の有効・無効状態を更新する"""
+        if not hasattr(self, '_rtt_menu'): return
+        
+        # エコモードがONならシングルモードを無効に
+        if self.rtt_eco_var.get():
+            self._rtt_menu.entryconfigure(4, state="disabled")
+        else:
+            self._rtt_menu.entryconfigure(4, state="normal")
+            
+        # シングルモードがONならエコモードを無効に
+        if self.rtt_single_var.get():
+            self._rtt_menu.entryconfigure(3, state="disabled")
+        else:
+            self._rtt_menu.entryconfigure(3, state="normal")
 
     def on_settings_saved(self, new_config):
         self.config_data = new_config
@@ -659,7 +706,12 @@ class MainApp(ctk.CTk):
         EXE が存在しない場合は Python スクリプトで代替起動する（開発・テスト用）。
         """
         if getattr(self, '_rtt_process', None) and self._rtt_process.poll() is None:
-            self.update_log_area("[RTT] 既に起動中です。")
+            # 既に起動している場合は、明示的に開始APIを投げる
+            try:
+                requests.post("http://localhost:5001/api/start", timeout=2)
+                self.update_log_area("[RTT] 翻訳開始をリクエストしました。")
+            except:
+                self.update_log_area("[RTT] 既に起動中ですが、命令の送信に失敗しました。", is_error=True)
             return
 
         # --- RTT 実行ファイルの探索 ---
@@ -738,14 +790,13 @@ class MainApp(ctk.CTk):
         
         def _sync():
             try:
-                import requests as _req
                 rtt_cfg = self._build_rtt_config()
                 # ポート 5001 の RTT API へ設定を送信
-                resp = _req.post("http://localhost:5001/api/update_config", json=rtt_cfg, timeout=3)
+                resp = requests.post("http://localhost:5001/api/update_config", json=rtt_cfg, timeout=3)
                 if resp.status_code == 200:
                     data = resp.json()
                     # RTT 側からの詳細なステータスチェックも兼ねる
-                    status_resp = _req.get("http://localhost:5001/api/status", timeout=2)
+                    status_resp = requests.get("http://localhost:5001/api/status", timeout=2)
                     if status_resp.status_code == 200:
                         s_data = status_resp.json()
                         err = s_data.get("error", "")
@@ -766,8 +817,7 @@ class MainApp(ctk.CTk):
             return  # 起動していない場合は何もしない
         try:
             # まず Flask API で停止を試みる（graceful shutdown）
-            import requests as _req
-            _req.post("http://localhost:5001/api/translate", timeout=2)
+            requests.post("http://localhost:5001/api/stop", timeout=2)
         except Exception:
             pass
         try:
@@ -789,28 +839,30 @@ class MainApp(ctk.CTk):
         if hasattr(self, 'rtt_eco_var'):
             self.rtt_eco_var.set(new_state)
             
-        # シングルモードとの排他制御
+        # ワンショット翻訳モードとの排他制御
         if new_state and self.config_data.get("rtt_single_mode", False):
             self.config_data["rtt_single_mode"] = False
             if hasattr(self, 'rtt_single_var'):
                 self.rtt_single_var.set(False)
         
-        # 設定保存
         self.quick_save()
-        
-        # RTTが起動中ならAPIで通知
         if hasattr(self, '_rtt_process') and self._rtt_process and self._rtt_process.poll() is None:
             try:
-                # build_rtt_config を使って最新設定を送る
+                # 設定更新
                 requests.post("http://127.0.0.1:5001/api/update_config", 
                              json=self._build_rtt_config(), timeout=1)
+                
+                # エコモードONにした場合、もし止まっていれば開始させる
+                if new_state:
+                    requests.post("http://127.0.0.1:5001/api/start", timeout=1)
             except: pass
         
         mode_str = "ON" if new_state else "OFF"
         self.update_log_area(f"[RTT] エコモードを {mode_str} にしました。")
+        self.update_rtt_menu_states()
 
     def toggle_rtt_single_mode(self):
-        """シングルモードのON/OFFを切り替え、RTTへ通知する"""
+        """ワンショット翻訳モードのON/OFFを切り替え、RTTへ通知する"""
         current = self.config_data.get("rtt_single_mode", False)
         new_state = not current
         self.config_data["rtt_single_mode"] = new_state
@@ -823,18 +875,23 @@ class MainApp(ctk.CTk):
             if hasattr(self, 'rtt_eco_var'):
                 self.rtt_eco_var.set(False)
         
-        # 設定保存
         self.quick_save()
-        
-        # RTTが起動中ならAPIで通知
         if hasattr(self, '_rtt_process') and self._rtt_process and self._rtt_process.poll() is None:
             try:
+                # 設定更新
                 requests.post("http://127.0.0.1:5001/api/update_config", 
                              json=self._build_rtt_config(), timeout=1)
+                
+                # ワンショットONなら開始、OFFなら停止を明示的に送る
+                if new_state:
+                    requests.post("http://127.0.0.1:5001/api/start", timeout=1)
+                else:
+                    requests.post("http://127.0.0.1:5001/api/stop", timeout=1)
             except: pass
         
         mode_str = "ON" if new_state else "OFF"
-        self.update_log_area(f"[RTT] シングルモードを {mode_str} にしました。")
+        self.update_log_area(f"[RTT] ワンショット翻訳モードを {mode_str} にしました。")
+        self.update_rtt_menu_states()
 
     def _build_rtt_config(self) -> dict:
         """SecreAI の config_data から RTT 用設定を抽出・生成する。"""
@@ -844,7 +901,7 @@ class MainApp(ctk.CTk):
             "target_language": self.config_data.get("rtt_target_language", "ja"),
             "ollama_url": self.config_data.get("OLLAMA_URL", "http://localhost:11434/v1"),
             "ollama_model": self.config_data.get("rtt_ollama_model", "translategemma:4b"),
-            "ocr_engine_mode": "dual_scout_hybrid"
+            "ocr_engine_mode": "hybrid"  # RTT側の有効なモード: "hybrid", "winrt", "paddle"
         }
         
         # 2. rtt_ プレフィックスの設定をマージ（キーは小文字化して統一）

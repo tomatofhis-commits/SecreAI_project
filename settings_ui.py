@@ -979,16 +979,44 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     rtt_engine_var = tk.StringVar(value=rtt_engine_map_rev.get(saved_engine, "BitBlt (推奨/高精細)"))
     tk.OptionMenu(rtt_perf_group, rtt_engine_var, *rtt_engine_map.keys()).grid(row=0, column=1, sticky="w", padx=8, pady=4)
 
+    # 相互排他制御の関数
+    def update_rtt_mode_states():
+        if rtt_eco_var.get():
+            cb_single.configure(state="disabled")
+        else:
+            cb_single.configure(state="normal")
+            
+        if rtt_single_var.get():
+            cb_eco.configure(state="disabled")
+        else:
+            cb_eco.configure(state="normal")
+
     # エコモード
     rtt_eco_var = tk.BooleanVar(value=config.get("rtt_eco_mode", False))
-    tk.Checkbutton(rtt_perf_group, text=l_set.get("rtt_label_eco", "エコモード (3秒間OCR抑制)"), variable=rtt_eco_var).grid(row=1, column=0, columnspan=2, sticky="w", padx=8, pady=4)
+    cb_eco = tk.Checkbutton(rtt_perf_group, text=l_set.get("rtt_label_eco", "エコモード (3秒間OCR抑制)"), 
+                            variable=rtt_eco_var, command=update_rtt_mode_states)
+    cb_eco.grid(row=1, column=0, sticky="w", padx=8, pady=4)
+
+    # ワンショット翻訳モード
+    rtt_single_var = tk.BooleanVar(value=config.get("rtt_single_mode", False))
+    cb_single = tk.Checkbutton(rtt_perf_group, text=l_set.get("rtt_label_single", "ワンショット翻訳モード (1回のみスキャン)"), 
+                               variable=rtt_single_var, command=update_rtt_mode_states)
+    cb_single.grid(row=1, column=1, sticky="w", padx=8, pady=4)
+
+    # 初期状態の反映
+    update_rtt_mode_states()
 
     # 処理の反応感度スライダー（直感的なラベル）
     tk.Label(rtt_perf_group, text=l_set.get("rtt_label_sens", "読取反応感度:"), anchor="w").grid(row=2, column=0, sticky="w", padx=8, pady=4)
     _SENS_LABELS = ["最低", "2", "3", "4", "5", "最大"]
-    _SENS_VALUES = [2400, 1200, 800, 600, 400, 200]   # 内部値（数値が小さいほど高感度）
+    _SENS_VALUES = [6000, 4800, 2400, 1200, 600, 400]   # 内部値（数値が大きいほど低感度/低負荷）
     saved_sens = config.get("rtt_ocr_skip_sensitivity", 2400)
-    saved_sens_idx = _SENS_VALUES.index(saved_sens) if saved_sens in _SENS_VALUES else 0
+    # 値がリストにない場合は最も近いインデックスを探す（またはデフォルト）
+    try:
+        saved_sens_idx = _SENS_VALUES.index(saved_sens)
+    except ValueError:
+        # 近似値を選択
+        saved_sens_idx = 2 # 2400
 
     rtt_sens_frame = tk.Frame(rtt_perf_group)
     rtt_sens_frame.grid(row=2, column=1, columnspan=2, sticky="w", padx=8)
@@ -1065,15 +1093,9 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["rtt_paddle_language"] = rtt_paddle_lang_map.get(rtt_paddle_lang_var.get(), "japan")
         config["rtt_capture_mode"] = rtt_engine_map.get(rtt_engine_var.get(), "bitblt")
         config["rtt_eco_mode"] = rtt_eco_var.get()
+        config["rtt_single_mode"] = rtt_single_var.get()
         config["rtt_ocr_skip_sensitivity"] = _SENS_VALUES[int(rtt_sens_slider.get())]
-        config["rtt_paddle_gpu_mem_mb"] = int(rtt_vram_var.get())
-        
-        # CPUスレッド制限: ％選択方式の値を保存
-        rtt_pct_val = int(rtt_cpu_pct_var.get().replace("%", ""))
-        config["rtt_ocr_thread_limit_percent"] = rtt_pct_val
-        config["rtt_cpu_threads"] = 0 # 判定強化ロジックにより、0なら％側が採用される
-        config["rtt_paddle_language"] = rtt_paddle_lang_map.get(rtt_paddle_lang_var.get(), "japan")
-        config["rtt_ocr_skip_sensitivity"] = _SENS_VALUES[rtt_sens_slider.get()]
+        config["rtt_cpu_threads"] = 0  # 判定強化ロジックにより、0なら％側が採用される
         
         val = alpha_var.get()
         config["WINDOW_ALPHA"] = val if val == "OFF" else float(val)

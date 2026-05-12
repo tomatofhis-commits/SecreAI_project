@@ -37,8 +37,9 @@ class TranslationOverlay(QMainWindow):
     - タスクバーに表示しない
     """
 
-    # スレッドセーフなシグナル (cid, chunk, translated_text, target_lang)
-    single_translation_received = pyqtSignal(str, dict, str, str)
+    # スレッドセーフなシグナル (cid, chunk, translated_text, target_lang, font_size)
+    single_translation_received = pyqtSignal(str, dict, str, str, object)
+    font_size_calculated = pyqtSignal(str, int)
     status_updated = pyqtSignal(str)
     clear_requested = pyqtSignal()
 
@@ -135,16 +136,11 @@ class TranslationOverlay(QMainWindow):
             if abs(cx - nx) > 3 or abs(cy - ny) > 3:
                 label.move(nx, ny)
 
-    @pyqtSlot(str, dict, str, str)
-    def _on_single_translation_received(self, cid: str, chunk: dict, translated: str, target_lang: str = "ja"):
+    @pyqtSlot(str, dict, str, str, object)
+    def _on_single_translation_received(self, cid: str, chunk: dict, translated: str, target_lang: str = "ja", font_size: int = None):
         """単一の翻訳結果を受け取り、画面に配置する"""
         if not translated:
             return
-            
-        # 翻訳中に画面から消えていたら描画しない（このチェックは遅延による不一致を防ぐためのものだが、
-        # cidが毎フレーム変動する場合にUIが一切描画されない原因になるため削除）
-        # if cid not in getattr(self, "valid_cids", set()):
-        #     return
             
         # すでに描画済みならスキップ
         rect = chunk["rect"]
@@ -208,6 +204,8 @@ class TranslationOverlay(QMainWindow):
         """)
         
         label_w = w
+        best_px = font_size # 保存されたサイズがあればそれを使う
+        
         if lines_count == 1 and '\n' not in translated:
             if ' ' not in translated.strip() and '　' not in translated.strip():
                 w += 2
@@ -217,18 +215,21 @@ class TranslationOverlay(QMainWindow):
             label.setWordWrap(False)
             text_to_render = translated.replace('\n', '').replace('\r', '')
             
-            lo, hi = font_min, 32
-            best_px = font_min
-            while lo <= hi:
-                mid = (lo + hi) // 2
-                html = f'<div style="font-size: {mid}px; font-weight: bold; font-family: {font_family}; white-space: nowrap; line-height: 1.0;"><nobr>{text_to_render}</nobr></div>'
-                label.setText(html)
-                label.adjustSize()
-                if label.width() <= label_w and label.height() <= h:
-                    best_px = mid
-                    lo = mid + 1
-                else:
-                    hi = mid - 1
+            if best_px is None:
+                lo, hi = font_min, 32
+                best_px = font_min
+                while lo <= hi:
+                    mid = (lo + hi) // 2
+                    html = f'<div style="font-size: {mid}px; font-weight: bold; font-family: {font_family}; white-space: nowrap; line-height: 1.0;"><nobr>{text_to_render}</nobr></div>'
+                    label.setText(html)
+                    label.adjustSize()
+                    if label.width() <= label_w and label.height() <= h:
+                        best_px = mid
+                        lo = mid + 1
+                    else:
+                        hi = mid - 1
+                # 計算結果を通知
+                self.font_size_calculated.emit(cid, best_px)
             
             margin_top = 0
             if best_px >= h * 0.8:
@@ -240,19 +241,22 @@ class TranslationOverlay(QMainWindow):
             label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         else:
             text_to_render = translated.replace('\n', '').replace('\r', '')
-            lo, hi = font_min, 32
-            best_px = font_min
-            while lo <= hi:
-                mid = (lo + hi) // 2
-                html = f'<div style="font-size: {mid}px; font-weight: bold; font-family: {font_family}; line-height: 1.0;">{text_to_render}</div>'
-                label.setText(html)
-                label.setFixedWidth(label_w)
-                label.adjustSize()
-                if label.height() <= h:
-                    best_px = mid
-                    lo = mid + 1
-                else:
-                    hi = mid - 1
+            if best_px is None:
+                lo, hi = font_min, 32
+                best_px = font_min
+                while lo <= hi:
+                    mid = (lo + hi) // 2
+                    html = f'<div style="font-size: {mid}px; font-weight: bold; font-family: {font_family}; line-height: 1.0;">{text_to_render}</div>'
+                    label.setText(html)
+                    label.setFixedWidth(label_w)
+                    label.adjustSize()
+                    if label.height() <= h:
+                        best_px = mid
+                        lo = mid + 1
+                    else:
+                        hi = mid - 1
+                # 計算結果を通知
+                self.font_size_calculated.emit(cid, best_px)
             
             final_html = f'<div style="font-size: {best_px}px; font-weight: bold; font-family: {font_family}; line-height: 1.0;">{text_to_render}</div>'
             label.setText(final_html)
@@ -297,9 +301,9 @@ class TranslationOverlay(QMainWindow):
         """一括更新用（将来的な拡張性のために定義）"""
         pass
 
-    def show_translation(self, cid: str, chunk: dict, translated: str, target_lang: str = "ja"):
+    def show_translation(self, cid: str, chunk: dict, translated: str, target_lang: str = "ja", font_size: int = None):
         """スレッドセーフに単一のUI更新コール"""
-        self.single_translation_received.emit(cid, chunk, translated, target_lang)
+        self.single_translation_received.emit(cid, chunk, translated, target_lang, font_size)
 
     def set_status(self, status: str):
         self.status_updated.emit(status)

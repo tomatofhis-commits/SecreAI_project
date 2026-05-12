@@ -24,6 +24,8 @@
     "rtt_cascade": "RTトランスレーター",
     "rtt_start": "翻訳を開始",
     "rtt_stop": "翻訳を停止",
+    "rtt_eco_mode": "エコモード",
+    "rtt_single_mode": "ワンショット翻訳モード",
     "rtt_settings": "RTT設定を開く"
   },
   "gui": {
@@ -151,11 +153,12 @@
     "rtt_group_gpu": " GPU / CPU 設定 ",
     "rtt_label_gpu": "使用GPU:",
     "rtt_label_vram": "VRAMリミット (MB):",
-    "rtt_label_cpu": "CPUスレッド制限:",
+    "rtt_label_cpu": "CPU使用制限 (パーセント):",
     "rtt_label_paddle_lang": "Paddle専門言語:",
     "rtt_group_perf": " キャプチャ / パフォーマンス ",
     "rtt_label_capture_engine": "キャプチャ方式:",
     "rtt_label_eco": "エコモード (3秒間OCR抑制)",
+    "rtt_label_single": "ワンショット翻訳モード (1回のみスキャン)",
     "rtt_label_sens": "読取反応感度:"
   },
   "log_messages": {

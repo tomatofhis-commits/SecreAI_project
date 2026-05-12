@@ -24,6 +24,8 @@
     "rtt_cascade": "实时翻译器",
     "rtt_start": "开始翻译",
     "rtt_stop": "停止翻译",
+    "rtt_eco_mode": "节能模式",
+    "rtt_single_mode": "单次捕捉翻译模式",
     "rtt_settings": "打开RTT设置"
   },
   "gui": {
@@ -139,11 +141,12 @@
     "rtt_group_gpu": " GPU / CPU 设置 ",
     "rtt_label_gpu": "使用GPU:",
     "rtt_label_vram": "VRAM限制 (MB):",
-    "rtt_label_cpu": "CPU线程限制:",
+    "rtt_label_cpu": "CPU 使用限制 (%):",
     "rtt_label_paddle_lang": "Paddle专业语言:",
     "rtt_group_perf": " 采集 / 性能 ",
     "rtt_label_capture_engine": "采集引擎:",
     "rtt_label_eco": "节能模式 (3秒OCR抑制)",
+    "rtt_label_single": "单次捕捉翻译模式 (仅扫描一次)",
     "rtt_label_sens": "响应灵敏度:"
   },
   "log_messages": {

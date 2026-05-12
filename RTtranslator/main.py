@@ -418,6 +418,7 @@ class TranslationController:
             bg_color=config.get("overlay_background_color", "#1a1a2e"),
             text_color=config.get("overlay_text_color", "#e0e0e0"),
         )
+        self.overlay.font_size_calculated.connect(self._on_font_size_calculated)
         
         # 状態管理：翻訳完了、または翻訳依頼中のチャンクID
         self.active_translations = {}
@@ -604,6 +605,7 @@ class TranslationController:
             self._current_frame_id += 10 
             self._last_clear_id = self._current_frame_id
             self._last_force_ocr_time = 0.0
+            self._last_ocr_exec_time = 0.0
             self._single_run_done = False
             self._single_run_done_candidate = False
             self._single_scan_backlog = [] # シングルモード用の未送信キュー
@@ -1435,8 +1437,11 @@ class TranslationController:
                         _all_ignores = {"__IGNORE__", "__IGNORE_1__", "__IGNORE_2__"}
                         if cached_trans not in _all_ignores:
                             # デスクトップ用オーバーレイ（PyQt）の更新
-                            self.overlay.show_translation(cid, chunk, cached_trans, target_lang)
+                            # 保存されたフォントサイズがあれば渡す
+                            stored_fs = self.overlay_state.get(cid, {}).get('font_size')
+                            self.overlay.show_translation(cid, chunk, cached_trans, target_lang, font_size=stored_fs)
                             # OBS API用ステートの更新（ブラウザ用）
+                            # font_size を引き継いで上書き消失を防ぐ
                             self.overlay_state[cid] = {
                                 "text": cached_trans,
                                 "text_raw": text_raw, # 類似度比較用に原文を保持
@@ -1446,7 +1451,8 @@ class TranslationController:
                                 "lines_count": chunk.get("lines_count", 1),
                                 "base_density": chunk.get("base_density", 0.0),
                                 "parent_rect": chunk.get("parent_rect"),
-                                "step3_crop": chunk.get("step3_crop")
+                                "step3_crop": chunk.get("step3_crop"),
+                                "font_size": stored_fs,
                             }
     
                 # 空間バケットを再構築
@@ -1894,7 +1900,10 @@ class TranslationController:
                                 self.translation_cache.move_to_end(cache_key)
                             
                             self.active_translations[cid] = True
-                            self.overlay.show_translation(cid, chunk, found_trans, target_lang)
+                            # 保存されたフォントサイズがあれば渡す
+                            stored_fs = self.overlay_state.get(cid, {}).get('font_size')
+                            self.overlay.show_translation(cid, chunk, found_trans, target_lang, font_size=stored_fs)
+                            # font_size を引き継いで上書き消失を防ぐ
                             self.overlay_state[cid] = {
                                 "text": found_trans,
                                 "raw_text": text_raw,
@@ -1902,7 +1911,8 @@ class TranslationController:
                                 "bg_color": chunk.get("bg_color", "rgba(0,0,0,1.0)"),
                                 "text_color": "#ffffff",
                                 "lines_count": chunk.get("lines_count", 1),
-                                "base_density": self.ocr.calculate_edge_density(image, chunk['rect'])
+                                "base_density": self.ocr.calculate_edge_density(image, chunk['rect']),
+                                "font_size": stored_fs,
                             }
                         else:
                             new_chunks.append(chunk)
@@ -1942,7 +1952,7 @@ class TranslationController:
                 backlog = self.translator.backlog_count
                 latency = self.translator.avg_latency
     
-                # シングルモード：新しく見つかったものをバックログに追加
+                # ワンショット翻訳モード：新しく見つかったものをバックログに追加
                 if is_single and new_chunks:
                     for c in new_chunks:
                         # Translator が「有効なチャンク」と認識できるように登録
@@ -1951,7 +1961,7 @@ class TranslationController:
                     self._single_scan_backlog.extend(new_chunks)
                     # 長文優先でソート
                     self._single_scan_backlog.sort(key=lambda c: len(c.get('text', '')), reverse=True)
-                    print(f"[SingleMode] バックログに追加: {len(new_chunks)}件 (合計: {len(self._single_scan_backlog)}件)")
+                    print(f"[OneShot] バックログに追加: {len(new_chunks)}件 (合計: {len(self._single_scan_backlog)}件)")
                     new_chunks = []
                 
                 new_chunks = final_new_chunks if not is_single else []
@@ -2090,7 +2100,7 @@ class TranslationController:
                     to_send = self._single_scan_backlog[:batch_size]
                     self._single_scan_backlog = self._single_scan_backlog[batch_size:]
                     
-                    print(f"[SingleMode] パイプライン補充: {len(to_send)}件 (現在実行中: {backlog + len(to_send)}件, 残り: {len(self._single_scan_backlog)}件)")
+                    print(f"[OneShot] パイプライン補充: {len(to_send)}件 (現在実行中: {backlog + len(to_send)}件, 残り: {len(self._single_scan_backlog)}件)")
                     
                     for chunk in to_send:
                         check_active = lambda cid=chunk['id']: cid in getattr(self, "active_translations", {})
@@ -2099,10 +2109,16 @@ class TranslationController:
                 elif not self._single_scan_backlog and backlog == 0 and getattr(self, "_single_run_done_candidate", False):
                     if not self._single_run_done:
                         self._single_run_done = True
-                        print("[SingleMode] 全件の翻訳が完了しました。")
+                        print("[OneShot] 全件の翻訳が完了しました。")
 
         except Exception as e:
             print(f"[Queue Maintenance Error] {e}")
+
+    def _on_font_size_calculated(self, cid, font_size):
+        """UI側で計算されたフォントサイズを保存する"""
+        with self._lock:
+            if cid in self.overlay_state:
+                self.overlay_state[cid]['font_size'] = font_size
 
     def _on_single_translation_done(self, chunk, translated_text):
         # 処理が完了したのでpendingから削除
@@ -2299,8 +2315,11 @@ class TranslationController:
                         if active_cid in self.overlay_state:
                             ac_chunk['rect'] = self.overlay_state[active_cid]['rect']
                             
-                        self.overlay.show_translation(active_cid, ac_chunk, final_translation, target_lang)
+                        # 保存されたフォントサイズがあれば渡す
+                        stored_fs = self.overlay_state.get(active_cid, {}).get('font_size')
+                        self.overlay.show_translation(active_cid, ac_chunk, final_translation, target_lang, font_size=stored_fs)
                         
+                        # font_size を引き継いで上書き消失を防ぐ
                         self.overlay_state[active_cid] = {
                             "text": final_translation,
                             "text_raw": text_clean,
@@ -2312,15 +2331,17 @@ class TranslationController:
                             "last_seen": time.time(),
                             "existence_history": [1, 1, 1, 1, 1, 1], # 生存履歴の初期化
                             "mismatch_strikes": 0,
-                            "change_strikes": 0
-                    }
+                            "change_strikes": 0,
+                            "font_size": stored_fs,
+                        }
 
 
 class ControlPanel(QMainWindow):
     """メインのコントロールパネル（設定画面）"""
     
-    # Flaskスレッドからの操作用シグナル
-    sig_toggle_translation = pyqtSignal()
+    # API 経由での制御用シグナル
+    sig_start_translation = pyqtSignal()
+    sig_stop_translation = pyqtSignal()
     sig_force_retranslate = pyqtSignal()
     
     def __init__(self, config_path: str):
@@ -2328,6 +2349,14 @@ class ControlPanel(QMainWindow):
         self.config_path = config_path
         self.config = load_config(config_path)
         self.controller = None
+        
+        self.init_ui()
+        self.controller = TranslationController(self.config)
+        
+        # APIシグナルの接続
+        self.sig_start_translation.connect(self._on_api_start)
+        self.sig_stop_translation.connect(self._on_api_stop)
+        self.sig_force_retranslate.connect(self._on_api_force)
         self._initializing = True  # UI構築中の重複イベントを抑制
         
         self.sig_toggle_translation.connect(self.toggle_translation)
@@ -2345,7 +2374,7 @@ class ControlPanel(QMainWindow):
 
         
     def _setup_window(self):
-        self.setWindowTitle("Real Time Translate - Control Panel v1.1.1")
+        self.setWindowTitle("Real Time Translate - Control Panel v1.1.3")
         self.setFixedSize(560, 640)
         
     def _setup_ui(self):
@@ -2661,14 +2690,14 @@ class ControlPanel(QMainWindow):
         mode_vbox.setSpacing(4)
 
         self.chk_eco    = QCheckBox("エコモード (3秒間隔)")
-        self.chk_single = QCheckBox("シングル（リード）モード")
+        self.chk_single = QCheckBox("ワンショット翻訳モード")
 
         for cb in (self.chk_eco, self.chk_single):
             cb.setFont(QFont("Yu Gothic UI", 9))
             cb.setStyleSheet("color: #cccccc;")
             mode_vbox.addWidget(cb)
 
-        mode_hint = QLabel("シングル: 開始ボタンで1回読み取り→停止まで表示を固定\n※エコとシングルは同時選択できません。")
+        mode_hint = QLabel("ワンショット: 開始ボタンで1回読み取り→停止まで表示を固定\n※エコとワンショットは同時選択できません。")
         mode_hint.setFont(QFont("Yu Gothic UI", 8))
         mode_hint.setStyleSheet("color: #888888; padding-left: 4px;")
         mode_vbox.addWidget(mode_hint)
@@ -2982,14 +3011,20 @@ class ControlPanel(QMainWindow):
 app_flask = Flask(__name__)
 global_panel_ref = None
 
-@app_flask.route('/api/translate', methods=['GET', 'POST'])
-def api_translate():
+@app_flask.route('/api/start', methods=['GET', 'POST'])
+def api_start():
     if global_panel_ref:
-        # ControlPanel または _HeadlessPanelProxy のシグナルを介して
-        # 必ずメインスレッド（UIスレッド）で start/stop を実行する
-        if hasattr(global_panel_ref, 'sig_toggle_translation'):
-            global_panel_ref.sig_toggle_translation.emit()
-        return jsonify({"status": "success", "action": "toggle_translation"})
+        if hasattr(global_panel_ref, 'sig_start_translation'):
+            global_panel_ref.sig_start_translation.emit()
+        return jsonify({"status": "success", "action": "start_translation"})
+    return jsonify({"status": "error", "message": "Panel not found"}), 500
+
+@app_flask.route('/api/stop', methods=['GET', 'POST'])
+def api_stop():
+    if global_panel_ref:
+        if hasattr(global_panel_ref, 'sig_stop_translation'):
+            global_panel_ref.sig_stop_translation.emit()
+        return jsonify({"status": "success", "action": "stop_translation"})
     return jsonify({"status": "error", "message": "Panel not found"}), 500
 
 @app_flask.route('/api/retrans', methods=['GET', 'POST'])
@@ -3051,7 +3086,10 @@ def api_overlay_data():
         }
         return jsonify({
             "window": ctrl.window_rect_data,
-            "translations": sanitized_state
+            "translations": sanitized_state,
+            "config": {
+                "font_size_ratio": ctrl.config.get("font_size_ratio", 1.0)
+            }
         })
     return jsonify({"translations": {}, "window": {"x":0,"y":0,"w":0,"h":0}})
 
@@ -3141,7 +3179,8 @@ def main():
 
         # Flask API から ctrl を参照できるようにするためのダミーパネルオブジェクトを設定
         class _HeadlessPanelProxy(QObject):
-            sig_toggle_translation = pyqtSignal()
+            sig_start_translation = pyqtSignal()
+            sig_stop_translation = pyqtSignal()
             sig_force_retranslate = pyqtSignal()
 
             def __init__(self, controller, cfg_path):
@@ -3150,14 +3189,17 @@ def main():
                 self.config_path = str(cfg_path)
                 
                 # シグナルをメインスレッド上のスロットに接続
-                self.sig_toggle_translation.connect(self._on_toggle)
+                self.sig_start_translation.connect(self._on_start)
+                self.sig_stop_translation.connect(self._on_stop)
                 self.sig_force_retranslate.connect(self._on_force)
                 
-            def _on_toggle(self):
+            def _on_start(self):
+                if not self.controller.is_running:
+                    self.controller.start()
+
+            def _on_stop(self):
                 if self.controller.is_running:
                     self.controller.stop()
-                else:
-                    self.controller.start()
                     
             def _on_force(self):
                 if self.controller.is_running:

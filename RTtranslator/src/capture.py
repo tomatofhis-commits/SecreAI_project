@@ -60,39 +60,7 @@ def list_windows() -> list[str]:
     return sorted(titles)
 
 
-def capture_bitblt(rect: tuple) -> Image.Image | None:
-    """
-    BitBltを使用してスクリーン領域をキャプチャする。
-    CAPTUREBLTフラグを使用しないため、レイヤードウィンドウ（翻訳オーバーレイ等）を除外できる。
-    """
-    left, top, w, h = rect
-    try:
-        hwnd = win32gui.GetDesktopWindow()
-        hwndDC = win32gui.GetWindowDC(hwnd)
-        mfcDC  = win32ui.CreateDCFromHandle(hwndDC)
-        saveDC = mfcDC.CreateCompatibleDC()
-        
-        saveBitMap = win32ui.CreateBitmap()
-        saveBitMap.CreateCompatibleBitmap(mfcDC, w, h)
-        saveDC.SelectObject(saveBitMap)
-        
-        # SRCCOPY (0x00CC0020) のみを使用し、CAPTUREBLT (0x40000000) を含めない
-        # これによりレイヤードウィンドウ（WS_EX_LAYERED）が無視される
-        saveDC.BitBlt((0, 0), (w, h), mfcDC, (left, top), win32con.SRCCOPY)
-        
-        bmpinfo = saveBitMap.GetInfo()
-        bmpstr = saveBitMap.GetBitmapBits(True)
-        img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
-        
-        # リソース解放
-        win32gui.DeleteObject(saveBitMap.GetHandle())
-        saveDC.DeleteDC()
-        mfcDC.DeleteDC()
-        win32gui.ReleaseDC(hwnd, hwndDC)
-        
-        return img
-    except Exception:
-        return None
+
 
 
 def get_dpi_scale(hwnd: int) -> float:
