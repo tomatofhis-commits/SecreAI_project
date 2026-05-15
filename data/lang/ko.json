@@ -143,7 +143,7 @@
     "rtt_label_paddle_lang": "Paddle 전용 언어:",
     "rtt_group_perf": " 캡처 / 성능 ",
     "rtt_label_capture_engine": "캡처 엔진:",
-    "rtt_label_eco": "에코 모드 (3초 OCR 억제)",
+    "rtt_label_eco": "에코 모드 (10초 OCR 억제)",
     "rtt_label_single": "원샷 번역 모드 (1회만 스캔)",
     "rtt_label_sens": "응답 감도:"
   },

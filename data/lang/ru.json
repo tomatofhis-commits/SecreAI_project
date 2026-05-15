@@ -145,7 +145,7 @@
     "rtt_label_paddle_lang": "Язык Paddle:",
     "rtt_group_perf": " Захват / Производительность ",
     "rtt_label_capture_engine": "Движок захвата:",
-    "rtt_label_eco": "Эко-режим (3с подавление OCR)",
+    "rtt_label_eco": "Эко-режим (10с подавление OCR)",
     "rtt_label_single": "Режим моментального перевода (сканировать один раз)",
     "rtt_label_sens": "Чувствительность отклика:"
   },

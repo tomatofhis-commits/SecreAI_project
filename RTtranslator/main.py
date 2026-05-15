@@ -1126,7 +1126,7 @@ class TranslationController:
             # エコモード判定
             is_eco = self.config.get("eco_mode", False)
             time_since_last_exec = current_time - self._last_ocr_exec_time
-            if is_eco and time_since_last_exec < 3.0:
+            if is_eco and time_since_last_exec < 10.0:
                 return
 
             # シングルモード判定
@@ -2694,7 +2694,7 @@ class ControlPanel(QMainWindow):
         mode_vbox = QVBoxLayout(mode_group)
         mode_vbox.setSpacing(4)
 
-        self.chk_eco    = QCheckBox("エコモード (3秒間隔)")
+        self.chk_eco    = QCheckBox("エコモード (10秒間隔)")
         self.chk_single = QCheckBox("ワンショット翻訳モード")
 
         for cb in (self.chk_eco, self.chk_single):

@@ -145,7 +145,7 @@
     "rtt_label_paddle_lang": "Paddle专业语言:",
     "rtt_group_perf": " 采集 / 性能 ",
     "rtt_label_capture_engine": "采集引擎:",
-    "rtt_label_eco": "节能模式 (3秒OCR抑制)",
+    "rtt_label_eco": "节能模式 (10秒OCR抑制)",
     "rtt_label_single": "单次捕捉翻译模式 (仅扫描一次)",
     "rtt_label_sens": "响应灵敏度:"
   },

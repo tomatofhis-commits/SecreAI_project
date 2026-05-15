@@ -172,7 +172,7 @@
     "rtt_label_paddle_lang": "Paddle Language:",
     "rtt_group_perf": " Capture / Performance ",
     "rtt_label_capture_engine": "Capture Engine:",
-    "rtt_label_eco": "Eco Mode (3s OCR Suppress)",
+    "rtt_label_eco": "Eco Mode (10s OCR Suppress)",
     "rtt_label_single": "One-shot Translation Mode (Scan once)",
     "rtt_label_sens": "Response Sensitivity:"
   },

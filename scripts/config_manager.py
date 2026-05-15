@@ -84,7 +84,7 @@ DEFAULT_CONFIG = {
     "rtt_overlay_bg_color": "#1a1a2e",
     "rtt_overlay_text_color": "#e0e0e0",
     "rtt_single_mode": False,         # ワンショット翻訳モード
-    "rtt_eco_mode": False             # エコモード（3秒間OCR抑制）
+    "rtt_eco_mode": False             # エコモード（10秒間OCR抑制）
 }
 
 def migrate_config(config):

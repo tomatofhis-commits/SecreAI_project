@@ -993,7 +993,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     # エコモード
     rtt_eco_var = tk.BooleanVar(value=config.get("rtt_eco_mode", False))
-    cb_eco = tk.Checkbutton(rtt_perf_group, text=l_set.get("rtt_label_eco", "エコモード (3秒間OCR抑制)"), 
+    cb_eco = tk.Checkbutton(rtt_perf_group, text=l_set.get("rtt_label_eco", "エコモード (10秒間OCR抑制)"), 
                             variable=rtt_eco_var, command=update_rtt_mode_states)
     cb_eco.grid(row=1, column=0, sticky="w", padx=8, pady=4)
 

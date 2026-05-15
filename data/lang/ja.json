@@ -157,7 +157,7 @@
     "rtt_label_paddle_lang": "Paddle専門言語:",
     "rtt_group_perf": " キャプチャ / パフォーマンス ",
     "rtt_label_capture_engine": "キャプチャ方式:",
-    "rtt_label_eco": "エコモード (3秒間OCR抑制)",
+    "rtt_label_eco": "エコモード (10秒間OCR抑制)",
     "rtt_label_single": "ワンショット翻訳モード (1回のみスキャン)",
     "rtt_label_sens": "読取反応感度:"
   },
