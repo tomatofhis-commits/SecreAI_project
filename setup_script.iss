@@ -1,17 +1,17 @@
 ; ============================================================
-;  SecreAI + RTtranslator 統合インストーラー (v1.1.3)
+;  SecreAI + RTtranslator 統合インストーラー (v1.1.4)
 ;  Inno Setup 6 スクリプト
 ; ============================================================
 
 #define MyAppName        "SecreAI"
-#define MyAppVersion     "1.1.3"
+#define MyAppVersion     "1.1.4"
 #define MyAppPublisher   "SecreAI Dev Team"
 #define MyAppExeName     "secreAI.exe"
 
 ; --- ユーザー指定のソースフォルダ定義 ---
-#define SecreAIDistDir   "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\SecreAI_ver1.1.3"
-#define RTTDistDir       "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\RTtranslator_ver1.1.3"
-#define RTTSourceDir     "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\RTtranslator_ver1.1.3"
+#define SecreAIDistDir   "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\SecreAI_ver1.1.4"
+#define RTTDistDir       "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\RTtranslator_ver1.1.4"
+#define RTTSourceDir     "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\RTtranslator_ver1.1.4"
 
 [Setup]
 AppId={{C12F4B7A-9E5C-4F3D-8A1B-2C3D4E5F6G7H}

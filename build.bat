@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo  SecreAI v1.1.3 - Nuitka Build Script
+echo  SecreAI v1.1.4 - Nuitka Build Script
 echo ========================================
 echo.
 echo Starting build... this may take a while.
