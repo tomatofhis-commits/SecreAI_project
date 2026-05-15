@@ -44,7 +44,7 @@ graph TD
 
 - **Gemini-2.5-flash-lite / Gemini-2.5-flash**: 安定した標準モデル。（※2026年夏に終了予定）
 - **Gemini-3-flash-preview**: 次世代の高速・大規模処理向けプレビュー版。
-- **Gemini-3.1-flash-lite-preview**: **[おすすめ]** 4段階の「思考レベル」を調整可能な最新モデル。
+- **Gemini-3.1-flash-lite**: **[おすすめ]** 4段階の「思考レベル」を調整可能な最新モデル。
 - **Gemini-3.1-pro-preview**: 最も強力な知能を持つフラグシッププレビューモデル。複雑な推論に。
 
 > [!IMPORTANT]

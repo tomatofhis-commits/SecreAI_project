@@ -354,10 +354,10 @@ class MemoryViewer:
                     
                     actual_model = db_model_id
                     gemini_config_obj = {}
-                    if db_model_id == "gemini-3.1-flash-lite-preview（中）":
-                        actual_model = "gemini-3.1-flash-lite-preview"
+                    if db_model_id == "gemini-3.1-flash-lite（中）":
+                        actual_model = "gemini-3.1-flash-lite"
                         gemini_config_obj["thinking_config"] = {"thinking_level": "MEDIUM"}
-                    elif db_model_id == "gemini-3.1-flash-lite-preview":
+                    elif db_model_id == "gemini-3.1-flash-lite":
                         budget = self.config.get("THINKING_BUDGET", "MEDIUM")
                         gemini_config_obj["thinking_config"] = {"thinking_level": budget.upper()}
 
@@ -460,10 +460,10 @@ class MemoryViewer:
                         
                         actual_model = db_model_id
                         gemini_config_obj = {}
-                        if db_model_id == "gemini-3.1-flash-lite-preview（中）":
-                            actual_model = "gemini-3.1-flash-lite-preview"
+                        if db_model_id == "gemini-3.1-flash-lite（中）":
+                            actual_model = "gemini-3.1-flash-lite"
                             gemini_config_obj["thinking_config"] = {"thinking_level": "MEDIUM"}
-                        elif db_model_id == "gemini-3.1-flash-lite-preview":
+                        elif db_model_id == "gemini-3.1-flash-lite":
                             budget = self.config.get("THINKING_BUDGET", "MEDIUM")
                             gemini_config_obj["thinking_config"] = {"thinking_level": budget.upper()}
 

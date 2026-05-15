@@ -134,7 +134,7 @@
     "search_opt_grounding_2_5": "gemini-2.5-flash-liteのgrounding",
     "search_opt_tavily": "tavilyで検索しollamaで要約",
     "search_opt_integrated": "grounding + tavily をollamaで統合要約",
-    "search_opt_grounding_3_1": "gemini-3.1-flash-lite-previewのgrounding (思考最小)",
+    "search_opt_grounding_3_1": "gemini-3.1-flash-liteのgrounding (思考最小)",
     "setting_group_gemini": " Gemini Settings ",
     "setting_group_openai": " OpenAI Settings ",
     "setting_group_llama": " Llama (Local Ollama) Settings ",

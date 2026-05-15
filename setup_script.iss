@@ -40,15 +40,14 @@ Name: "english";  MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; 1. SecreAI 本体
-Source: "{#SecreAIDistDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SecreAIDistDir}\*";               DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "config\config.json, data\config.json, data\rtt_config.json, data\chat_history.json, memory_db\*"
+; 1. SecreAI 本体（ビルド成果物一式をコピー。config系は除外）
+Source: "{#SecreAIDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "config\config.json, data\config.json, data\rtt_config.json, data\chat_history.json, memory_db\*"
 
-; 2. RTtranslator コア
-Source: "{#RTTDistDir}\RTtranslator_core.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#RTTDistDir}\*";                     DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "config.json, translation_cache.json, log.json"
+; 2. RTtranslator コア（ビルド成果物一式をコピー。キャッシュ系は除外）
+Source: "{#RTTDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "config.json, translation_cache.json, log.json, debug_rtt.log"
 
-; 3. RTtranslator 追加データファイル
+; 3. RTtranslator 追加データファイル（distに含まれていない場合のみ個別にコピーされるよう skipifsourcedoesntexist を維持）
+; ※通常はビルド成果物のフォルダ内に含まれているため、予備的な記述です。
 Source: "{#RTTSourceDir}\models\lid.176.ftz";              DestDir: "{app}\models"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#RTTSourceDir}\frozen_east_text_detection.pb";   DestDir: "{app}";        Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#RTTSourceDir}\overlay.html";                    DestDir: "{app}";        Flags: ignoreversion skipifsourcedoesntexist

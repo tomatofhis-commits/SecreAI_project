@@ -1147,8 +1147,13 @@ class TranslationController:
             edge_count = count_curr
             is_single = self.config.get("single_mode", False)
             if is_single:
-                # シングルモード：手動トリガー(0.0)のみを許可し、10秒の自動強制は無視する
+                # シングルモード：_last_force_ocr_time が 0.0（初期値）のときのみ実行を許可する。
+                # エッジ変化・ピクセル変化による自動スキャンは一切行わない。
                 is_forced = (self._last_force_ocr_time == 0.0)
+                if not is_forced:
+                    # 手動トリガー以外はすべてスキップ（シングルモードの安全ガード）
+                    self._prev_edge_count = edge_count
+                    return
             else:
                 is_forced = (time_since_force >= 10.0)
             
@@ -1156,7 +1161,7 @@ class TranslationController:
             # 1. 【最優先】強制実行（手動ボタン等）: 画面の状態に関わらず実行
             if is_forced:
                 pass
-            # 2. エッジ激変 (10%以上): 内容が変わったため実行
+            # 2. エッジ激変 (10%以上): 内容が変わったため実行（通常モードのみ）
             elif edge_diff_rate > 0.10:
                 pass 
             # 3. エッジ安定 (5%未満): 文字の形が変わっていないため、ピクセル変化を無視してスキップ

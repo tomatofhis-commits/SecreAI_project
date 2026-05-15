@@ -50,12 +50,12 @@ def get_ai_response(prompt, config):
             gen_config = {'response_mime_type': 'application/json'}
             
             db_thinking_budget = None
-            if model_id == "gemini-3.1-flash-lite-preview（中）":
-                model_id = "gemini-3.1-flash-lite-preview"
+            if model_id == "gemini-3.1-flash-lite（中）":
+                model_id = "gemini-3.1-flash-lite"
                 db_thinking_budget = "medium"
 
             thinking_budget = db_thinking_budget if db_thinking_budget is not None else config.get("THINKING_BUDGET", "medium")
-            if model_id == "gemini-3.1-flash-lite-preview":
+            if model_id == "gemini-3.1-flash-lite":
                 gen_config["thinking_config"] = {"thinking_level": thinking_budget.upper()}
 
             res = client.models.generate_content(
