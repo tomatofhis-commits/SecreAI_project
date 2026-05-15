@@ -241,11 +241,11 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     lbl_model_normal = add_label(gemini_frame, l_set.get("model_normal", "Normal Model:"), pady=(5,0))
     # すべての候補を維持
-    gemini_models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite-preview"]
+    gemini_models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite"]
     model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-2.5-flash"))
     tk.OptionMenu(gemini_frame, model_var, *gemini_models).pack(pady=2)
 
-    # 思考レベル (gemini-3.1-flash-lite-preview のみ)
+    # 思考レベル (gemini-3.1-flash-lite のみ)
     thinking_label = add_label(gemini_frame, l_set.get("thinking_level_label", "思考レベル (3.1-flash-lite のみ):"), pady=(5,0))
     THINKING_OPTIONS = {
         l_set.get("thinking_min", "最小"):     "minimal",
@@ -264,7 +264,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     thinking_menu.pack(pady=2)
 
     def update_thinking_state(*args):
-        if model_var.get() == "gemini-3.1-flash-lite-preview":
+        if model_var.get() == "gemini-3.1-flash-lite":
             thinking_menu.configure(state="normal")
             thinking_label.configure(fg="black")
         else:
@@ -598,7 +598,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         l_set.get("search_opt_grounding_2_5", "gemini-2.5-flash-liteのgrounding"):                        "grounding",
         l_set.get("search_opt_tavily", "tavilyで検索しollamaで要約"):                               "tavily",
         l_set.get("search_opt_integrated", "grounding + tavily をollamaで統合要約"):                    "integrated",
-        l_set.get("search_opt_grounding_3_1", "gemini-3.1-flash-lite-previewのgrounding (思考最小)"):     "grounding_3_1",
+        l_set.get("search_opt_grounding_3_1", "gemini-3.1-flash-liteのgrounding (思考最小)"):     "grounding_3_1",
     }
     _sp_reverse = {v: k for k, v in SEARCH_OPTIONS.items()}
     _initial_sp = _sp_reverse.get(config.get("SEARCH_PROVIDER", "tavily"), l_set.get("search_opt_tavily", "tavilyで検索しollamaで要約"))
@@ -687,7 +687,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         provider = db_provider_var.get()
         if provider == "gemini":
             # 最新の gemini-2.5-flash-lite を筆頭に配置
-            models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite-preview（中）"]
+            models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite（中）"]
         elif provider == "openai":
             # 2/13に終了する旧モデルを排除し、あなたが最適化した最新モデルのみを配置
             models = ["gpt-5.4-nano", "gpt-5.4-mini", "gpt-5", "gpt-5.4", "gpt-5.5-2026-04-23"]
@@ -1049,8 +1049,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["TAVILY_API_KEY"] = tavily_key_entry.get().strip()
         config["MODEL_ID_SUMMARY"] = summary_model_var.get()
         
-        # 思考レベル: gemini-3.1-flash-lite-preview 以外は "medium" 固定 (※API側での実質無効扱いは別途考慮するが、基本のフォールバック値)
-        if config["MODEL_ID"] == "gemini-3.1-flash-lite-preview":
+        # 思考レベル: gemini-3.1-flash-lite 以外は "medium" 固定 (※API側での実質無効扱いは別途考慮するが、基本のフォールバック値)
+        if config["MODEL_ID"] == "gemini-3.1-flash-lite":
             config["THINKING_BUDGET"] = THINKING_OPTIONS.get(thinking_var.get(), "medium")
         else:
             config["THINKING_BUDGET"] = "medium"

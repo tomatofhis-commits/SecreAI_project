@@ -26,9 +26,9 @@ DEFAULT_CONFIG = {
     #   "grounding"     - gemini-2.5-flash-lite の Grounding
     #   "tavily"        - Tavilyで検索しollamaで要約
     #   "integrated"    - grounding + tavily をollamaで統合要約
-    #   "grounding_3_1" - gemini-3.1-flash-lite-preview の Grounding（思考レベル最小）
+    #   "grounding_3_1" - gemini-3.1-flash-lite の Grounding（思考レベル最小）
     "THINKING_BUDGET": "medium",
-    # THINKING_BUDGET: gemini-3.1-flash-lite-preview 選択時のみ有効
+    # THINKING_BUDGET: gemini-3.1-flash-lite 選択時のみ有効
     # minimal = 最小 (ほぼ無効・高速)
     # low     = 低
     # medium  = 中
@@ -82,7 +82,9 @@ DEFAULT_CONFIG = {
     "rtt_font_size": 16,
     "rtt_overlay_opacity": 0.85,
     "rtt_overlay_bg_color": "#1a1a2e",
-    "rtt_overlay_text_color": "#e0e0e0"
+    "rtt_overlay_text_color": "#e0e0e0",
+    "rtt_single_mode": False,         # ワンショット翻訳モード
+    "rtt_eco_mode": False             # エコモード（3秒間OCR抑制）
 }
 
 def migrate_config(config):

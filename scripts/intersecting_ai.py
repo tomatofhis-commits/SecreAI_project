@@ -41,7 +41,7 @@ def call_gemini_sync(query, image_obj, system_instr, config):
 
         gemini_config_obj = {"system_instruction": system_instr}
         thinking_budget = config.get("THINKING_BUDGET", "medium")
-        if model_id == "gemini-3.1-flash-lite-preview":
+        if model_id == "gemini-3.1-flash-lite":
             gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}
 
         response = client.models.generate_content(

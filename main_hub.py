@@ -153,10 +153,18 @@ def trigger_overlay_api():
 
 @app.route('/api/translate', methods=['GET', 'POST'])
 def remote_rtt_control():
-    """StreamDeck等から Hub (5000) 経由で RTT をトグル制御する"""
+    """StreamDeck等から Hub (5000) 経由で RTT の翻訳セッションをトグル制御する。
+    新アーキテクチャでは RTT プロセスは常時起動しており、
+    セッションの開始/停止は API 経由で行う。"""
     if main_gui:
-        proc = getattr(main_gui, '_rtt_process', None)
-        if proc and proc.poll() is None:
+        try:
+            # 現在の RTT 内部状態を確認
+            resp = requests.get("http://127.0.0.1:5001/api/status", timeout=1)
+            is_running = resp.json().get("is_running", False) if resp.status_code == 200 else False
+        except:
+            is_running = False
+
+        if is_running:
             main_gui.rtt_stop()
             return jsonify({"status": "ok", "action": "stop"})
         else:
@@ -473,6 +481,10 @@ class MainApp(ctk.CTk):
         self.create_menu_bar()
         self.create_tray_icon()
 
+        # RTT コアを Hub 起動時にバックグラウンドで常駐起動する
+        # 翻訳セッション自体は開始しない（待機状態で立ち上げる）
+        self.after(1500, self._rtt_autostart)
+
     def update_ui_text(self):
         g = self.lang.get("gui", {})
         self.label_log_header.configure(text="AI Transcript & System Log")
@@ -528,6 +540,26 @@ class MainApp(ctk.CTk):
                         self.cached_ollama_models = models
                         self.config_data["CACHED_OLLAMA_MODELS"] = models
             except: pass
+
+    def _rtt_autostart(self):
+        """Hub 起動時に RTT コアをバックグラウンドで常駐起動する（翻訳セッションは開始しない）。"""
+        def _task():
+            self._rtt_launch_process()
+            # 起動後に設定を同期（リトライつき）
+            for _ in range(10):
+                time.sleep(1)
+                try:
+                    resp = requests.get("http://127.0.0.1:5001/api/status", timeout=1)
+                    if resp.status_code == 200:
+                        # RTT が起動したら最新設定を送信して同期
+                        rtt_cfg = self._build_rtt_config()
+                        requests.post("http://127.0.0.1:5001/api/update_config", json=rtt_cfg, timeout=2)
+                        self.update_log_area("[RTT] コアの起動と設定同期が完了しました。")
+                        return
+                except:
+                    pass
+            self.update_log_area("[RTT] コアの起動確認がタイムアウトしました。", is_error=True)
+        threading.Thread(target=_task, daemon=True).start()
 
     def create_menu_bar(self):
         self.menubar = tk.Menu(self)
@@ -690,8 +722,8 @@ class MainApp(ctk.CTk):
     def quit_app(self):
         try:
             stop_ai()
-            # RTTを確実に停止（API経由 + taskkill）
-            self.rtt_stop()
+            # RTT コアプロセスを完全終了する
+            self.rtt_kill_process()
             if hasattr(self, 'tray_icon'): self.tray_icon.stop()
             
             # 親プロセス（自身）と子プロセスをすべて確実にキル
@@ -701,24 +733,17 @@ class MainApp(ctk.CTk):
         finally: os._exit(0)
 
     # --- RTtranslator プロセス管理 ---
-    def rtt_start(self):
-        """RTtranslator_core.exe をヘッドレスモードで起動する。
+
+    def _rtt_launch_process(self):
+        """RTtranslator コアプロセスを起動して待機状態にする（翻訳セッションは開始しない）。
+        プロセスが既に起動していれば何もしない。
         EXE が存在しない場合は Python スクリプトで代替起動する（開発・テスト用）。
         """
         if getattr(self, '_rtt_process', None) and self._rtt_process.poll() is None:
-            # 既に起動している場合は、明示的に開始APIを投げる
-            try:
-                requests.post("http://localhost:5001/api/start", timeout=2)
-                self.update_log_area("[RTT] 翻訳開始をリクエストしました。")
-            except:
-                self.update_log_area("[RTT] 既に起動中ですが、命令の送信に失敗しました。", is_error=True)
-            return
+            return  # 既に起動中
 
         # --- RTT 実行ファイルの探索 ---
-        # 1. 同一ディレクトリ (製品版レイアウト)
         rtt_exe = os.path.join(base_dir, "RTtranslator_core.exe")
-        
-        # 2. 開発環境用の追加探索 (ビルド済み RTT が別フォルダにある場合など)
         if not os.path.exists(rtt_exe):
             potential_exe_paths = [
                 os.path.join(os.path.dirname(base_dir), "Real_Time_Translate", "main.dist", "RTtranslator_core.exe"),
@@ -730,7 +755,6 @@ class MainApp(ctk.CTk):
                     rtt_exe = p
                     break
 
-        # --- フォールバック: EXE がなければ Python スクリプトで起動 (開発用) ---
         rtt_script = None
         rtt_script_dir = None
         if not os.path.exists(rtt_exe):
@@ -745,17 +769,17 @@ class MainApp(ctk.CTk):
                     rtt_script = p
                     rtt_script_dir = d
                     break
-            
+
             if rtt_script:
                 self.update_log_area("[RTT] EXEが見つかりません。Pythonスクリプトで代替起動します（開発モード）。")
-                rtt_exe = None  # フォールバック実行フラグ
+                rtt_exe = None
             else:
                 self.update_log_area(
                     f"[RTT] 実行ファイルが見つかりません: {os.path.join(base_dir, 'RTtranslator_core.exe')}\n"
                     f"[RTT] 開発用スクリプトも見つかりませんでした。", is_error=True)
                 return
 
-        # SecreAI の config を rtt_ キーを除去した形で RTT 用設定ファイルに書き出す
+        # 設定ファイルを書き出す
         rtt_config_path = os.path.join(base_dir, "data", "rtt_config.json")
         rtt_cfg = self._build_rtt_config()
         try:
@@ -768,10 +792,8 @@ class MainApp(ctk.CTk):
 
         try:
             if rtt_exe:
-                # 通常: ビルド済み EXE を起動
                 cmd = [rtt_exe, "--headless", "--config", rtt_config_path]
             else:
-                # フォールバック: Python スクリプトを直接起動
                 cmd = [sys.executable, rtt_script, "--headless", "--config", rtt_config_path]
 
             self._rtt_process = subprocess.Popen(
@@ -779,9 +801,46 @@ class MainApp(ctk.CTk):
                 creationflags=0x08000000,  # CREATE_NO_WINDOW
                 cwd=rtt_script_dir if not rtt_exe else base_dir
             )
-            self.update_log_area("[RTT] リアルタイム翻訳を開始しました。")
+            self.update_log_area("[RTT] コアプロセスを起動しました（待機中）。")
         except Exception as e:
-            self.update_log_area(f"[RTT] 起動に失敗しました: {e}", is_error=True)
+            self.update_log_area(f"[RTT] コアプロセスの起動に失敗しました: {e}", is_error=True)
+
+    def rtt_start(self):
+        """翻訳セッションを開始する。
+        コアプロセスが起動していなければ先に起動してから API で翻訳開始を命令する。
+        """
+        # コアプロセスが落ちていれば再起動
+        if not getattr(self, '_rtt_process', None) or self._rtt_process.poll() is not None:
+            self._rtt_launch_process()
+            # プロセスが立ち上がるまでバックグラウンドで待機してから開始する
+            def _wait_and_start():
+                for _ in range(15):
+                    time.sleep(1)
+                    try:
+                        resp = requests.get("http://127.0.0.1:5001/api/status", timeout=1)
+                        if resp.status_code == 200:
+                            # 最新設定を送ってから翻訳開始
+                            rtt_cfg = self._build_rtt_config()
+                            requests.post("http://127.0.0.1:5001/api/update_config", json=rtt_cfg, timeout=2)
+                            requests.post("http://127.0.0.1:5001/api/start", timeout=2)
+                            self.update_log_area("[RTT] 翻訳を開始しました。")
+                            return
+                    except:
+                        pass
+                self.update_log_area("[RTT] 翻訳開始のタイムアウト。コアが応答しません。", is_error=True)
+            threading.Thread(target=_wait_and_start, daemon=True).start()
+            return
+
+        # コアプロセスが既に起動中 → 最新設定を送ってから API で開始
+        def _sync_and_start():
+            try:
+                rtt_cfg = self._build_rtt_config()
+                requests.post("http://127.0.0.1:5001/api/update_config", json=rtt_cfg, timeout=2)
+                requests.post("http://127.0.0.1:5001/api/start", timeout=2)
+                self.update_log_area("[RTT] 翻訳を開始しました。")
+            except Exception as e:
+                self.update_log_area(f"[RTT] 翻訳開始命令の送信に失敗しました: {e}", is_error=True)
+        threading.Thread(target=_sync_and_start, daemon=True).start()
 
     def sync_rtt_settings(self):
         """起動中の RTtranslator に対し、最新の設定を API 経由で送信して同期する。"""
@@ -811,13 +870,22 @@ class MainApp(ctk.CTk):
         threading.Thread(target=_sync, daemon=True).start()
 
     def rtt_stop(self):
-        """起動中の RTtranslator プロセスを停止する。"""
+        """翻訳セッションを停止する（コアプロセスは維持する）。"""
+        def _do_stop():
+            try:
+                requests.post("http://127.0.0.1:5001/api/stop", timeout=2)
+                self.update_log_area("[RTT] 翻訳を停止しました。")
+            except Exception as e:
+                self.update_log_area(f"[RTT] 翻訳停止命令の送信に失敗しました: {e}", is_error=True)
+        threading.Thread(target=_do_stop, daemon=True).start()
+
+    def rtt_kill_process(self):
+        """RTT コアプロセスを完全に終了させる（Hub 終了時に呼び出す）。"""
         proc = getattr(self, '_rtt_process', None)
         if proc is None or proc.poll() is not None:
-            return  # 起動していない場合は何もしない
+            return
         try:
-            # まず Flask API で停止を試みる（graceful shutdown）
-            requests.post("http://localhost:5001/api/stop", timeout=2)
+            requests.post("http://127.0.0.1:5001/api/stop", timeout=2)
         except Exception:
             pass
         try:
@@ -829,7 +897,7 @@ class MainApp(ctk.CTk):
             except Exception:
                 pass
         self._rtt_process = None
-        self.update_log_area("[RTT] リアルタイム翻訳を停止しました。")
+        self.update_log_area("[RTT] コアプロセスを終了しました。")
 
     def toggle_rtt_eco_mode(self):
         """エコモードのON/OFFを切り替え、RTTへ通知する"""
@@ -895,24 +963,24 @@ class MainApp(ctk.CTk):
 
     def _build_rtt_config(self) -> dict:
         """SecreAI の config_data から RTT 用設定を抽出・生成する。"""
-        # 1. デフォルト値のセット
+        # 1. デフォルト値のセット（RTT が期待するキー名で定義）
         rtt_cfg = {
             "target_window_title": self.config_data.get("TARGET_GAME_TITLE", ""),
             "target_language": self.config_data.get("rtt_target_language", "ja"),
             "ollama_url": self.config_data.get("OLLAMA_URL", "http://localhost:11434/v1"),
             "ollama_model": self.config_data.get("rtt_ollama_model", "translategemma:4b"),
-            "ocr_engine_mode": "hybrid"  # RTT側の有効なモード: "hybrid", "winrt", "paddle"
+            # RTT 内部での推奨モード（dual_scout_hybrid = WinRT + PaddleOCR 両用）
+            "ocr_engine_mode": "dual_scout_hybrid",
         }
         
-        # 2. rtt_ プレフィックスの設定をマージ（キーは小文字化して統一）
+        # 2. rtt_ プレフィックスの設定をマージ（プレフィックスを除去してRTTキーに変換）
         for k, v in self.config_data.items():
             if k.startswith("rtt_"):
                 key = k[4:].lower()
                 rtt_cfg[key] = v
         
         # 3. OLLAMA_URL は全般設定の値を強制的に優先させる（不整合防止）
-        ollama_url = self.config_data.get("OLLAMA_URL", "http://localhost:11434/v1")
-        rtt_cfg["ollama_url"] = ollama_url
+        rtt_cfg["ollama_url"] = self.config_data.get("OLLAMA_URL", "http://localhost:11434/v1")
         
         return rtt_cfg
 

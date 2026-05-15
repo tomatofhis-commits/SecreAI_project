@@ -225,12 +225,12 @@ def main(base_path=None):
                 gemini_config_obj = {}
                 
                 db_thinking_budget = None
-                if local_db_model_id == "gemini-3.1-flash-lite-preview（中）":
-                    local_db_model_id = "gemini-3.1-flash-lite-preview"
+                if local_db_model_id == "gemini-3.1-flash-lite（中）":
+                    local_db_model_id = "gemini-3.1-flash-lite"
                     db_thinking_budget = "medium"
                 
                 thinking_budget = db_thinking_budget if db_thinking_budget is not None else config.get("THINKING_BUDGET", "medium")
-                if local_db_model_id == "gemini-3.1-flash-lite-preview":
+                if local_db_model_id == "gemini-3.1-flash-lite":
                     gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}
 
                 res = client_ge.models.generate_content(
@@ -283,12 +283,12 @@ def main(base_path=None):
                 gemini_config_obj = {}
                 
                 db_thinking_budget = None
-                if local_db_model_id == "gemini-3.1-flash-lite-preview（中）":
-                    local_db_model_id = "gemini-3.1-flash-lite-preview"
+                if local_db_model_id == "gemini-3.1-flash-lite（中）":
+                    local_db_model_id = "gemini-3.1-flash-lite"
                     db_thinking_budget = "medium"
                 
                 thinking_budget = db_thinking_budget if db_thinking_budget is not None else config.get("THINKING_BUDGET", "medium")
-                if local_db_model_id == "gemini-3.1-flash-lite-preview":
+                if local_db_model_id == "gemini-3.1-flash-lite":
                     gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}
 
                 res = client_ge.models.generate_content(

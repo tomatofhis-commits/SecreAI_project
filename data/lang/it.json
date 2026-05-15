@@ -122,7 +122,7 @@
     "search_opt_grounding_2_5": "gemini-2.5-flash-lite grounding",
     "search_opt_tavily": "Cerca con tavily, riassumi con ollama",
     "search_opt_integrated": "Riassunto integrato (grounding + tavily) con ollama",
-    "search_opt_grounding_3_1": "gemini-3.1-flash-lite-preview grounding (Pensiero minimo)",
+    "search_opt_grounding_3_1": "gemini-3.1-flash-lite grounding (Pensiero minimo)",
     "setting_group_gemini": " Impostazioni Gemini ",
     "setting_group_openai": " Impostazioni OpenAI ",
     "setting_group_llama": " Impostazioni Llama (Ollama Locale) ",

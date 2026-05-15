@@ -129,7 +129,7 @@ def generate_ai_text(prompt, config, system_instr=None, is_json=False):
             gen_config["response_mime_type"] = "application/json"
             
         thinking_budget = config.get("THINKING_BUDGET", "medium")
-        if model_id == "gemini-3.1-flash-lite-preview":
+        if model_id == "gemini-3.1-flash-lite":
             gen_config["thinking_config"] = {"thinking_level": thinking_budget.upper()}
 
         res = client.models.generate_content(
