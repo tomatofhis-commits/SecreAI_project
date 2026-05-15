@@ -145,7 +145,7 @@
     "rtt_label_paddle_lang": "Paddle-Sprache:",
     "rtt_group_perf": " Aufnahme / Leistung ",
     "rtt_label_capture_engine": "Capture-Engine:",
-    "rtt_label_eco": "Eco-Modus (3s OCR-Unterdrückung)",
+    "rtt_label_eco": "Eco-Modus (10s OCR-Unterdrückung)",
     "rtt_label_single": "One-Shot-Übersetzungsmodus (Einmal scannen)",
     "rtt_label_sens": "Reaktions-Empfindlichkeit:"
   },

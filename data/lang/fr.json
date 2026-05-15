@@ -145,7 +145,7 @@
     "rtt_label_paddle_lang": "Langue Paddle:",
     "rtt_group_perf": " Capture / Performance ",
     "rtt_label_capture_engine": "Moteur de capture:",
-    "rtt_label_eco": "Mode Éco (suppression OCR 3s)",
+    "rtt_label_eco": "Mode Éco (suppression OCR 10s)",
     "rtt_label_single": "Mode de traduction à capture unique (Scanner une fois)",
     "rtt_label_sens": "Sensibilité de response:"
   },
