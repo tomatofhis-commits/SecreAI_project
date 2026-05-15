@@ -1038,13 +1038,18 @@ class TranslationController:
                         
                         if consecutive_miss or ratio_miss:
                             evict_reason = "3回連続不在" if consecutive_miss else "6回中4回不在"
-                            print(f"[Evict] ID={cid} | Reason: {evict_reason} (is_missed: {is_missed}, density_diff: {density_diff:.2f})")
+                            # 表示系キャッシュ（ID、翻訳、位置情報）のみを削除
                             if hasattr(self.overlay, 'active_labels') and cid in self.overlay.active_labels:
                                 self.overlay.active_labels[cid].deleteLater()
                                 del self.overlay.active_labels[cid]
-                            del self.overlay_state[cid]
+                            
+                            if cid in self.overlay_state: del self.overlay_state[cid]
                             if cid in self.active_translations: del self.active_translations[cid]
                             if cid in self.history_chunks: del self.history_chunks[cid]
+                            
+                            # スキップ用バッファからもこのIDのデータ（位置・翻訳情報の元）を削除
+                            if hasattr(self, '_last_raw_chunks') and self._last_raw_chunks:
+                                self._last_raw_chunks = [c for c in self._last_raw_chunks if c.get('id') != cid]
                         else:
                             # 生存継続：テンプレートマッチが成功し、位置更新は追従時に実施済み
                             pass
@@ -1103,12 +1108,17 @@ class TranslationController:
                 self._last_scene_clear_time = now_time
                 self._last_clear_id = current_id
                 print(f"[Queue] Scene change detected: Invalidating pending OCR tasks (FID <= {current_id})")
-                # UIとステートを即座にクリアしてゴーストを防ぐ
+                
+                # 「ID・翻訳・位置情報」に関連する表示系の一時キャッシュのみをクリア
                 self.overlay_state.clear()
                 if hasattr(self, 'overlay') and self.overlay:
                     self.overlay.clear_labels()
                 self.active_translations.clear()
                 self.history_chunks.clear()
+                self.pending_texts.clear()
+                self._last_raw_chunks = []
+                self._history_grid.clear()
+                self.overlay.sync_active_ids(set())
 
             # 内部状態更新 (判定後に実施)
             self._prev_gray = curr_gray_full
@@ -1291,14 +1301,17 @@ class TranslationController:
                         continue
 
                     if res[0] in ["CLEAR", "CLEAR_PIXEL"]:
+                        # 「ID・翻訳・位置情報」に関連する表示系の一時キャッシュのみをクリア
                         if hasattr(self, 'overlay'):
                             self.overlay.clear_labels()
                         self.overlay_state.clear()
                         self.active_translations.clear()
                         self.history_chunks.clear()
+                        self.pending_texts.clear()
+                        self._last_raw_chunks = []
+                        self._history_grid.clear()
                         self._shadow_skip_cache.clear()
-                        reason = "PixelDiff" if res[0] == "CLEAR_PIXEL" else "Standard"
-                        # print(f"[Queue] Scene change detected ({reason}): Cleared all states.")
+                        self.overlay.sync_active_ids(set())
                         continue
 
                     raw_chunks, rect, scale_x, scale_y, _ = res
@@ -2379,7 +2392,7 @@ class ControlPanel(QMainWindow):
 
         
     def _setup_window(self):
-        self.setWindowTitle("Real Time Translate - Control Panel v1.1.3")
+        self.setWindowTitle("Real Time Translate - Control Panel v1.1.4")
         self.setFixedSize(560, 640)
         
     def _setup_ui(self):
