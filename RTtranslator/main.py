@@ -605,7 +605,9 @@ class TranslationController:
         """
         # 1. UIラベルを削除
         if hasattr(self.overlay, 'active_labels') and cid in self.overlay.active_labels:
-            self.overlay.active_labels[cid].deleteLater()
+            label = self.overlay.active_labels[cid]
+            if hasattr(label, 'deleteLater'):
+                label.deleteLater()
             del self.overlay.active_labels[cid]
         
         # 2. 各状態辞書から削除
@@ -1738,7 +1740,9 @@ class TranslationController:
     
                                     if active_cid in self.overlay_state:
                                         if hasattr(self.overlay, 'active_labels') and active_cid in self.overlay.active_labels:
-                                            self.overlay.active_labels[active_cid].deleteLater()
+                                            lbl = self.overlay.active_labels[active_cid]
+                                            if hasattr(lbl, 'deleteLater'):
+                                                lbl.deleteLater()
                                             del self.overlay.active_labels[active_cid]
                                         del self.overlay_state[active_cid]
                                     if active_cid in self.active_translations:
