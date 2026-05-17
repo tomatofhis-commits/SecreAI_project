@@ -4,6 +4,11 @@ UIモジュール
 """
 
 import sys
+import os
+import subprocess
+import time
+import threading
+import requests
 import ctypes
 import ctypes.wintypes
 from PyQt6.QtWidgets import (
@@ -61,10 +66,68 @@ class TranslationOverlay(QMainWindow):
         self.active_labels = {}
         self.valid_cids = set()
 
+        # --- C# WPF Overlay 管理属性 ---
+        self.use_csharp = False
+        self.cs_api_url = "http://127.0.0.1:5002"
+        self.cs_process = None
+        self._init_csharp_overlay()
+
         self._setup_window()
         self._setup_ui()
         self._apply_click_through()
         self._connect_signals()
+
+    def _init_csharp_overlay(self):
+        """C# WPF Overlayの検出およびバックグラウンド起動を試みる"""
+        # C# 実行ファイルの探索パス
+        rtt_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # D:\SecreAI_Build\RTtranslator 相当
+        base_dir = os.path.dirname(rtt_dir) # D:\SecreAI_Build 相当
+        
+        potential_paths = [
+            os.path.join(base_dir, "WPF", "RTtranslator_CS_Overlay.exe"),
+            os.path.join(rtt_dir, "RTtranslator_CS_Overlay.exe"),
+            os.path.join(os.path.abspath("."), "RTtranslator_CS_Overlay.exe"),
+        ]
+        
+        cs_exe = None
+        for p in potential_paths:
+            if os.path.exists(p):
+                cs_exe = p
+                break
+                
+        if not cs_exe:
+            print("[C# Overlay] 実行ファイルが見つかりません。PyQtモードで起動します。")
+            return
+
+        # 既にポート5002で起動中か確認
+        try:
+            resp = requests.get(f"{self.cs_api_url}/api/status", timeout=0.3)
+            if resp.status_code == 200:
+                print("[C# Overlay] 既存のC#プロセスが既に起動しています。")
+                self.use_csharp = True
+                return
+        except:
+            pass
+
+        # 起動していない場合は新規起動
+        try:
+            print(f"[C# Overlay] 新規プロセスを起動します: {cs_exe}")
+            # creationflags=0x08000000 (CREATE_NO_WINDOW) で余計なコンソール窓を出さない
+            self.cs_process = subprocess.Popen([cs_exe], creationflags=0x08000000)
+            
+            # 起動応答待ち (最大2.0秒)
+            for _ in range(10):
+                time.sleep(0.2)
+                try:
+                    resp = requests.get(f"{self.cs_api_url}/api/status", timeout=0.2)
+                    if resp.status_code == 200:
+                        print("[C# Overlay] C# プロセスとのローカル通信接続に成功しました！(Port 5002)")
+                        self.use_csharp = True
+                        break
+                except:
+                    pass
+        except Exception as e:
+            print(f"[C# Overlay] 起動に失敗しました: {e}")
 
     def _setup_window(self):
         """ウィンドウの基本プロパティを設定する。"""
@@ -94,6 +157,10 @@ class TranslationOverlay(QMainWindow):
         self.setGeometry(left, top, width, height)
         # ステータスバーをターゲットの幅に合わせる
         self.status_label.setFixedWidth(width)
+        
+        # C#側へも座標追従をプッシュ更新する
+        if self.use_csharp and self.active_labels:
+            self._push_csharp_update()
 
     def _setup_ui(self):
         """完全透過のキャンバスとステータス表示のみ用意する。"""
@@ -117,24 +184,41 @@ class TranslationOverlay(QMainWindow):
     def sync_active_ids(self, active_ids: set):
         """画面から消えたID（active_idsに含まれないもの）のラベルを破棄する"""
         self.valid_cids = active_ids
-        for cid in list(self.active_labels.keys()):
-            if cid not in active_ids:
-                self.active_labels[cid].deleteLater()
-                del self.active_labels[cid]
+        
+        if self.use_csharp:
+            for cid in list(self.active_labels.keys()):
+                if cid not in active_ids:
+                    del self.active_labels[cid]
+            self._push_csharp_update()
+        else:
+            for cid in list(self.active_labels.keys()):
+                if cid not in active_ids:
+                    self.active_labels[cid].deleteLater()
+                    del self.active_labels[cid]
 
     def update_translation_position(self, cid: str, rect: dict):
         """既に表示されているラベルがあるなら、最新の座標に合わせて移動させる"""
         if cid in self.active_labels:
-            label = self.active_labels[cid]
-            # 座標を更新（新規生成時と同じ x-3, y に合わせる）
-            nx = int(rect["x"]) - 3
-            ny = int(rect["y"])
-            
-            # OCRの微小な揺れ（3ピクセル以内）によるUIのプルプル震えを防止
-            cx = label.x()
-            cy = label.y()
-            if abs(cx - nx) > 3 or abs(cy - ny) > 3:
-                label.move(nx, ny)
+            if self.use_csharp:
+                # C#座標のリアルタイム同期更新
+                item = self.active_labels[cid]
+                nx = self.x() + int(rect["x"]) - 3
+                ny = self.y() + int(rect["y"])
+                if abs(item["x"] - nx) > 3 or abs(item["y"] - ny) > 3:
+                    item["x"] = nx
+                    item["y"] = ny
+                    self._push_csharp_update()
+            else:
+                label = self.active_labels[cid]
+                # 座標を更新（新規生成時と同じ x-3, y に合わせる）
+                nx = int(rect["x"]) - 3
+                ny = int(rect["y"])
+                
+                # OCRの微小な揺れ（3ピクセル以内）によるUIのプルプル震えを防止
+                cx = label.x()
+                cy = label.y()
+                if abs(cx - nx) > 3 or abs(cy - ny) > 3:
+                    label.move(nx, ny)
 
     @pyqtSlot(str, dict, str, str, object)
     def _on_single_translation_received(self, cid: str, chunk: dict, translated: str, target_lang: str = "ja", font_size: int = None):
@@ -142,23 +226,47 @@ class TranslationOverlay(QMainWindow):
         if not translated:
             return
             
-        # すでに描画済みならスキップ
         rect = chunk["rect"]
         nx, ny = int(rect["x"]), int(rect["y"])
         nw, nh = int(rect["w"]), int(rect["h"])
 
+        # --- C# WPF オーバーレイ描画ルート ---
+        if self.use_csharp:
+            abs_x = self.x() + nx - 3
+            abs_y = self.y() + ny
+
+            bg_color = chunk.get("bg_color", "rgba(0, 0, 0, 0.63)")
+            text_color = chunk.get("text_color", "#ffffff")
+
+            lines_count = chunk.get("lines_count", 1)
+            if font_size is None:
+                line_height_px = nh / max(1, lines_count)
+                font_size = max(10, min(32, int(line_height_px) + 2))
+
+            item = {
+                "id": cid,
+                "text": translated,
+                "x": abs_x,
+                "y": abs_y,
+                "width": nw,
+                "height": nh,
+                "font_size": font_size,
+                "font_color": text_color,
+                "bg_color": bg_color
+            }
+            self.active_labels[cid] = item
+            self._push_csharp_update()
+            return
+
+        # --- PyQt 描画ルート (フォールバック) ---
         # すでに表示中のラベルがある場合のガードと高速更新
         if cid in self.active_labels:
             label = self.active_labels[cid]
             # 1. テキスト内容が同じなら位置・サイズの更新のみ（再描画スキップ）
             if getattr(label, '_last_text', '') == translated:
-                # わずかな座標変化でも追従を優先して move() を実行
                 label.move(nx, ny)
                 label.setFixedSize(nw, nh)
                 return
-            
-            # 2. テキスト内容が変わった場合は、以下で再描画（既存のラベルを再利用）
-            pass
         else:
             # 新規作成
             label = QLabel(self.central)
@@ -166,7 +274,6 @@ class TranslationOverlay(QMainWindow):
             label.setTextFormat(Qt.TextFormat.RichText)
             self.active_labels[cid] = label
 
-        # --- 以下、新規作成またはテキスト変更時のみ実行される重い処理 ---
         label._last_text = translated
         
         lines_count = chunk.get("lines_count", 1)
@@ -270,6 +377,37 @@ class TranslationOverlay(QMainWindow):
         self._sort_labels_z_order()
         self.raise_()
 
+    def _push_csharp_update(self):
+        """C# WPF Overlayプロセスへ同期リクエストを送信する"""
+        if not self.use_csharp:
+            return
+        
+        # C#側の形式にデータを整形
+        overlays_list = []
+        # PyQt座標追従の geometry をベースに絶対座標を再計算
+        target_x = self.x()
+        target_y = self.y()
+
+        for cid, item in list(self.active_labels.items()):
+            # 常に最新のウィンドウ座標をオフセットとして適用する
+            # item内のx, yはローカル座標からの計算なので、self.x()/self.y()を最新にする
+            # 注: show_translation時点で item["x"] に self.x() を加算してあるが、ドラッグやリサイズで窓が動いた場合に対応
+            overlays_list.append(item)
+
+        payload = {"overlays": overlays_list}
+        
+        def _task():
+            try:
+                resp = requests.post(f"{self.cs_api_url}/api/update", json=payload, timeout=0.5)
+                if resp.status_code != 200:
+                    raise Exception("Status error")
+            except Exception as e:
+                print(f"[C# Overlay Error] 同期に失敗しました: {e} | PyQtモードへフォールバックします")
+                self.use_csharp = False
+                
+        # ネットワークI/Oでメインスレッドをブロックしないよう非同期実行
+        threading.Thread(target=_task, daemon=True).start()
+
     def _sort_labels_z_order(self):
         """小さなラベル（内側の要素）が大きなラベル（外側の背景）に隠れないように、
         面積の大きいものから順に下になるようにZオーダーを並べ替える。"""
@@ -287,11 +425,19 @@ class TranslationOverlay(QMainWindow):
     @pyqtSlot()
     def _on_clear_requested(self):
         """スレッドセーフにすべてのラベルを消去する"""
-        for label in self.active_labels.values():
-            label.deleteLater()
-        self.active_labels.clear()
-        self.valid_cids.clear()
-        self.update()
+        if self.use_csharp:
+            self.active_labels.clear()
+            self.valid_cids.clear()
+            try:
+                requests.post(f"{self.cs_api_url}/api/clear", timeout=0.5)
+            except:
+                pass
+        else:
+            for label in self.active_labels.values():
+                label.deleteLater()
+            self.active_labels.clear()
+            self.valid_cids.clear()
+            self.update()
 
     def clear_labels(self):
         """外部スレッドから消去を依頼する"""
@@ -329,6 +475,15 @@ class TranslationOverlay(QMainWindow):
         # 少し遅延をかけてからWin32属性を適用（ウィンドウ生成完了を待つ）
         QTimer.singleShot(100, self._apply_click_through)
 
+    def closeEvent(self, event):
+        """終了時にC# Overlayプロセスも安全にキルする"""
+        if self.use_csharp:
+            try:
+                requests.post(f"{self.cs_api_url}/api/stop", timeout=0.5)
+            except:
+                pass
+        super().closeEvent(event)
+
     def mousePressEvent(self, event):
         """クリック透過でない場合のドラッグ移動対応。"""
         if not self._click_through and event.button() == Qt.MouseButton.LeftButton:
@@ -340,3 +495,4 @@ class TranslationOverlay(QMainWindow):
         if not self._click_through and hasattr(self, '_drag_pos'):
             self.move(event.globalPosition().toPoint() - self._drag_pos)
             event.accept()
+
