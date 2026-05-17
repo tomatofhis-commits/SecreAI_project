@@ -249,7 +249,10 @@ def capture_csharp(window_title: str, rect: tuple = None, mode: str = "bitblt", 
             rel_x = left - c_left
             rel_y = top - c_top
         else:
-            left, top, w, h = get_client_rect_on_screen(window_title)
+            client_rect = get_client_rect_on_screen(window_title)
+            if not client_rect:
+                return None
+            left, top, w, h = client_rect
             rel_x = 0
             rel_y = 0
             
@@ -261,7 +264,9 @@ def capture_csharp(window_title: str, rect: tuple = None, mode: str = "bitblt", 
         
         resp = requests.post(f"{api_url}/api/capture", json=payload, timeout=0.8)
         if resp.status_code == 200 and resp.content:
-            return Image.open(io.BytesIO(resp.content))
+            img = Image.open(io.BytesIO(resp.content))
+            img.load()  # Force load image bytes to memory to prevent lazy I/O on closed stream exception
+            return img
     except Exception as e:
         print(f"[Capture] C# キャプチャ委託失敗 (従来のキャプチャへフォールバックします): {e}")
     return None
