@@ -11,7 +11,23 @@ import win32gui
 import win32con
 import win32ui
 import win32api
+import dxcam
+import numpy as np
 
+
+
+# DXCAM カメラのグローバルインスタンス (シングルトン)
+_dxcam_camera = None
+
+def get_dxcam():
+    global _dxcam_camera
+    if _dxcam_camera is None:
+        try:
+            _dxcam_camera = dxcam.create(output_color="RGB", max_buffer_len=1)
+        except Exception as e:
+            print(f"[Capture] dxcam.create 失敗: {e}")
+            return None
+    return _dxcam_camera
 
 def get_client_rect_on_screen(window_title: str) -> tuple[int, int, int, int] | None:
     """
@@ -173,6 +189,44 @@ def capture_printwindow(window_title: str, rect: tuple) -> Image.Image | None:
         return None
 
 
+def capture_dxcam(rect: tuple, window_title: str) -> Image.Image | None:
+    """
+    DXCAM (DXGI) を使用して高速キャプチャする。
+    """
+    camera = get_dxcam()
+    if not camera:
+        return None
+
+    try:
+        # rect = (left, top, w, h) in logical screen coordinates
+        # DXCAM は物理座標を期待するため、DPIスケールを考慮する
+        hwnd = win32gui.FindWindow(None, window_title)
+        scale = get_dpi_scale(hwnd) if hwnd else 1.0
+        
+        left, top, w, h = rect
+        p_left = int(round(left * scale))
+        p_top = int(round(top * scale))
+        p_right = int(round((left + w) * scale))
+        p_bottom = int(round((top + h) * scale))
+
+        # DXCAM用のクリッピング（画面外やマイナス座標を補正）
+        p_left = max(0, min(p_left, camera.width - 2))
+        p_top = max(0, min(p_top, camera.height - 2))
+        p_right = max(p_left + 2, min(p_right, camera.width))
+        p_bottom = max(p_top + 2, min(p_bottom, camera.height))
+
+        region = (p_left, p_top, p_right, p_bottom)
+        
+        # camera.grab は numpy 配列 (RGB) を返す
+        frame = camera.grab(region=region)
+        if frame is not None:
+            return Image.fromarray(frame)
+        return None
+    except Exception as e:
+        print(f"[Capture] DXCAM エラー: {e}")
+        return None
+
+
 def capture_window(window_title: str, rect: tuple = None, mode: str = "bitblt") -> Image.Image | None:
     """
     指定されたタイトルのウィンドウ領域をキャプチャし、PIL Imageとして返す。
@@ -203,5 +257,12 @@ def capture_window(window_title: str, rect: tuple = None, mode: str = "bitblt") 
                 return Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
         except Exception:
             return None
+
+    elif mode == "wgc" or mode == "dxcam":
+        img = capture_dxcam(rect, window_title)
+        if img:
+            return img
+        # DXCAM が失敗した場合はフォールバック
+        return capture_bitblt(rect, window_title)
 
     return None

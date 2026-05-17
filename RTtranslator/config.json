@@ -1,5 +1,5 @@
 {
-    "target_window_title": "American Truck Simulator",
+    "target_window_title": "Steam",
     "target_language": "ja",
     "source_language": "auto",
     "ollama_model": "translategemma:4b",
@@ -22,6 +22,8 @@
     "overlay_text_color": "#e0e0e0",
     "use_vision_translation": false,
     "eco_mode": false,
-    "single_mode": true,
-    "capture_mode": "bitblt"
+    "single_mode": false,
+    "capture_mode": "wgc",
+    "use_tensorrt": false,
+    "use_gpu_preprocess": false
 }

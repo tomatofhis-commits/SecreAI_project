@@ -61,6 +61,8 @@ class PaddleOCREngine:
         lang: str = "japan",
         enabled: bool = True,
         cpu_threads: int = 0,
+        use_tensorrt: bool = False,
+        use_gpu_preprocess: bool = False,
     ):
         """
         Args:
@@ -74,6 +76,8 @@ class PaddleOCREngine:
         self.lang = lang
         self.enabled = enabled
         self.cpu_threads = cpu_threads
+        self.use_tensorrt = use_tensorrt
+        self.use_gpu_preprocess = use_gpu_preprocess
 
         self._ocr = None           # PaddleOCR インスタンス
         self._lock = threading.Lock()
@@ -142,7 +146,8 @@ class PaddleOCREngine:
             return "PaddleOCR 初期化中... (バックグラウンド)"
         if self._ocr:
             mode = "GPU" if self.gpu_index >= 0 else "CPU"
-            return f"[OK] PaddleOCR 有効 ({mode}, {self.gpu_mem_mb}MB)"
+            trt_str = " + TensorRT" if self.use_tensorrt else ""
+            return f"[OK] PaddleOCR 有効 ({mode}{trt_str}, {self.gpu_mem_mb}MB)"
         return "PaddleOCR 準備完了 (開始時に起動)"
 
     # ------------------------------------------------------------------
@@ -169,7 +174,7 @@ class PaddleOCREngine:
                 use_gpu=use_gpu,
                 gpu_id=gpu_id,
                 gpu_mem=self.gpu_mem_mb,
-                det_limit_side_len=3000,
+                det_limit_side_len=1280, # 3000から1280に縮小して高速化
                 det_limit_type="max",
                 det_db_unclip_ratio=1.6,
                 det_model_dir=None,
@@ -177,6 +182,7 @@ class PaddleOCREngine:
                 structure_version="PP-StructureV2",
                 enable_mkldnn=not use_gpu,
                 cpu_threads=self.cpu_threads if self.cpu_threads > 0 else 10,
+                use_tensorrt=self.use_tensorrt if use_gpu else False,
                 show_log=False,
             )
             
@@ -205,7 +211,31 @@ class PaddleOCREngine:
         """実際の認識処理を行い、正規化された結果リストを返す。"""
         try:
             import numpy as np
-            img_array = np.array(image.convert("RGB"))
+            
+            # GPU 前処理の適用
+            if self.use_gpu_preprocess:
+                try:
+                    import cupy as cp
+                    # PIL -> Numpy -> Cupy
+                    img_np = np.array(image.convert("RGB"))
+                    gpu_img = cp.asarray(img_np)
+                    
+                    # 1. グレースケール化 (GPU)
+                    gray_gpu = (0.299 * gpu_img[:,:,0] + 0.587 * gpu_img[:,:,1] + 0.114 * gpu_img[:,:,2]).astype(cp.uint8)
+                    
+                    # 2. コントラスト強調 (Linear Stretch)
+                    min_val = cp.min(gray_gpu)
+                    max_val = cp.max(gray_gpu)
+                    if max_val > min_val:
+                        gray_gpu = ((gray_gpu - min_val) * (255.0 / (max_val - min_val))).astype(cp.uint8)
+                    
+                    # 3. PaddleOCR用にRGB(3ch)に戻してホストメモリへ
+                    img_array = cp.asnumpy(cp.stack([gray_gpu]*3, axis=-1))
+                except Exception as e:
+                    print(f"[PaddleEngine] GPU 前処理失敗: {e}")
+                    img_array = np.array(image.convert("RGB"))
+            else:
+                img_array = np.array(image.convert("RGB"))
 
             # rec=False の場合は検出のみ。rec=True(デフォルト)は認識まで行う。
             result = self._ocr.ocr(img_array, cls=True, rec=rec)
