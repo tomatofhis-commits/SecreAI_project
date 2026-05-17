@@ -40,6 +40,7 @@ from difflib import SequenceMatcher
 from collections import OrderedDict
 import numpy as np
 import cv2
+from rapidfuzz import distance, fuzz
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
@@ -238,7 +239,9 @@ DEFAULT_CONFIG = {
     "use_vision_translation": False,
     "eco_mode": False,
     "single_mode": False,
-    "capture_mode": "bitblt"
+    "capture_mode": "wgc",
+    "use_tensorrt": False,
+    "use_gpu_preprocess": False
 }
 
 def load_config(config_path: str = "config.json") -> dict:
@@ -363,6 +366,8 @@ class TranslationController:
         paddle_gpu_mem = config.get("paddle_gpu_mem_mb", 1500)
         paddle_threshold = config.get("paddle_threshold", 0.90)
         target_lang_code = config.get("target_language", "ja")
+        use_tensorrt = config.get("use_tensorrt", False)
+        use_gpu_preprocess = config.get("use_gpu_preprocess", False)
 
         # PaddleOCRの言語モデルは全言語同時読み込みができないため、
         # 日本語と英語を両方高精度に読める 'japan' をデフォルトとする。
@@ -394,6 +399,8 @@ class TranslationController:
             lang=paddle_lang,
             enabled=paddle_enabled,
             cpu_threads=limit_count, # Paddle側にも明示的に制限を伝える
+            use_tensorrt=use_tensorrt,
+            use_gpu_preprocess=use_gpu_preprocess,
         ) if paddle_enabled else None
 
         self.ocr = OCREngine(
@@ -568,6 +575,10 @@ class TranslationController:
                     if self.ocr.paddle_engine.lang != new_p_lang:
                         self.ocr.paddle_engine.reinit_with_lang(new_p_lang)
             
+            if self.ocr.paddle_engine:
+                self.ocr.paddle_engine.use_tensorrt = new_config.get("use_tensorrt", False)
+                self.ocr.paddle_engine.use_gpu_preprocess = new_config.get("use_gpu_preprocess", False)
+            
             # モデルとURLを更新
             new_model = new_config.get("ollama_model", "translategemma:4b")
             new_url = new_config.get("ollama_url", "http://localhost:11434")
@@ -587,8 +598,36 @@ class TranslationController:
             
             print(f"[RTtranslator] 設定を更新しました: Model={self.translator.model}, CPU_Limit={self.config.get('ocr_thread_limit_percent')}%")
 
+    def _purge_cid(self, cid: str):
+        """
+        1つのIDに関するすべてのメモリ（UI・状態・履歴・空間バケット）を完全に削除する。
+        ゴースト防止のための統一パージ関数。
+        """
+        # 1. UIラベルを削除
+        if hasattr(self.overlay, 'active_labels') and cid in self.overlay.active_labels:
+            self.overlay.active_labels[cid].deleteLater()
+            del self.overlay.active_labels[cid]
+        
+        # 2. 各状態辞書から削除
+        self.overlay_state.pop(cid, None)
+        self.active_translations.pop(cid, None)
+        self.history_chunks.pop(cid, None)
+        
+        # 3. 空間バケット (_history_grid) から該当CIDを除去
+        for key, cids in list(self._history_grid.items()):
+            if cid in cids:
+                cids.remove(cid)
+                if not cids:
+                    del self._history_grid[key]
+                break
+        
+        # 4. スキップ用バッファからも削除
+        if hasattr(self, '_last_raw_chunks') and self._last_raw_chunks:
+            self._last_raw_chunks = [c for c in self._last_raw_chunks if c.get('id') != cid]
+
     def force_retranslate(self):
         """現在画面上の表示と追跡状態をリセットし、再スキャンを強制する（翻訳済みキャッシュは保持する）"""
+        print("[Controller] force_retranslate called: Resetting UI and tracking states.")
         
         # 1. UIと状態の完全クリア
         self.overlay.clear_labels()
@@ -613,7 +652,7 @@ class TranslationController:
             
             # 【重要】画像比較・スキップ判定用の基準値をすべてリセット
             self._last_ocr_image_hash = None
-            self._prev_gray = np.zeros((72, 128), dtype=np.uint8) # 128x72の監視用バッファ
+            self._prev_gray = None # 次のフレームで再取得させるために None にする
             self._prev_edge_count = 0
             self._last_raw_chunks = [] # 前回のOCR結果をクリア
             
@@ -781,13 +820,16 @@ class TranslationController:
             if self.config.get("eco_mode", False) and time_since_last < 3.0:
                 return True
 
-            if time_since_last >= 20.0: skip_thresh = 1.0
-            elif time_since_last >= 10.0: skip_thresh = 0.9
-            else: skip_thresh = 0.8
+            # 時間経過による強制緩和
+            # 3秒以上経過していれば、少しの変化でも読みに行くようにしきい値を下げる
+            if time_since_last >= 3.0:
+                skip_thresh = 0.6
+            elif time_since_last >= 1.0:
+                skip_thresh = 0.8
+            else:
+                skip_thresh = 0.95
                 
-            if match_ratio >= skip_thresh: return True
-            dynamic_thresh = min(1.0, 0.4 * time_since_last)
-            return match_ratio >= dynamic_thresh
+            return match_ratio >= skip_thresh
         except Exception:
             return False
 
@@ -961,8 +1003,8 @@ class TranslationController:
                             h, w = step3_crop.shape
                             px, py = int(parent_rect['x']), int(parent_rect['y'])
                             
-                            # 探索範囲 (±20px)
-                            search_margin = 20
+                            # 探索範囲 (±50px): テキストがスクロール・移動するゲームに対応
+                            search_margin = 50
                             sx = max(0, px - search_margin)
                             sy = max(0, py - search_margin)
                             ex = min(current_image_np.shape[1], px + w + search_margin)
@@ -999,13 +1041,11 @@ class TranslationController:
                                     if dx != 0 or dy != 0:
                                         self._position_queue.put((cid, old_r.copy()))
                         
-                        # --- エッジ密度による生存確認 ---
-                        # 親枠（または詳細枠）の位置でエッジ密度を計算
+                        # --- WGCフレームを使った消失判定 ---
+                        # calculate_edge_density は現フレーム(image)から直接クロップして Canny 処理する。
+                        # 「前フレームとの相対変化量」ではなく、
+                        # 「OCR時に確認したbase_densityと比べて今の密度が何割残っているか」で判定する。
                         check_rect = parent_rect if parent_rect else old_r
-                        
-                        # 【重要】物理画像(image)に対して論理座標(check_rect)をそのまま使うと、
-                        # DPIスケーリング環境で座標がズレて判定に失敗(Evict)します。
-                        # ここで物理座標にスケールアップして計算します。
                         phys_rect = {
                             'x': check_rect['x'] * scale_x,
                             'y': check_rect['y'] * scale_y,
@@ -1013,20 +1053,33 @@ class TranslationController:
                             'h': check_rect['h'] * scale_y
                         }
                         density = self.ocr.calculate_edge_density(image, phys_rect)
-                        base_density = state.get('base_density', density)
-                        density_diff = abs(density - base_density) / max(0.01, base_density)
+                        base_density = state.get('base_density', 0.0)
                         
-                        # テンプレートマッチが失敗しても、エッジ密度が安定していれば生存とみなす
-                        # 【緩和】0.1 -> 0.25: 16%程度の変化（ノイズ等）では消えないようにする
-                        if is_missed and density_diff < 0.25 and density > 0.01:
-                            is_missed = False # 密度が比較的安定しているので生存とみなす
+                        force_evict = False  # スライディングウィンドウをバイパスする即時削除フラグ
                         
-                        # 強制消去条件
-                        # 【緩和】0.3 -> 0.5: シーンチェンジ級の劇的な変化(50%以上)がない限り、強制的には消さない
-                        if density_diff > 0.5 or density < 0.005:
-                            is_missed = True
+                        if base_density > 0.005:
+                            # OCR時のエッジ密度が残存しているかを絶対値で判定
+                            retention_ratio = density / base_density
+                            
+                            # 密度が15%未満に激減 → テキストが確実に消えた（即時削除）
+                            if retention_ratio < 0.15:
+                                is_missed = True
+                                force_evict = True  # スライディングウィンドウを待たず即パージ
+                            # テンプレートマッチが成功した場合：密度が15%以上残っていれば生存
+                            elif not is_missed and retention_ratio >= 0.15:
+                                pass  # 生存確定
+                            # テンプレートマッチが失敗した場合：密度が35%以上残っていれば生存とみなす
+                            elif is_missed and retention_ratio >= 0.35:
+                                is_missed = False  # まだエッジが十分残っている → テキスト存在の可能性
+                        else:
+                            # base_density が未設定の場合は従来の絶対しきい値で判定
+                            if density < 0.005:
+                                is_missed = True
+                                force_evict = True
+                            elif is_missed and density > 0.01:
+                                is_missed = False  # 密度がゼロではないので生存とみなす
                         
-                        # --- 【v1.1.2 強化】スライディングウィンドウによる生存判定 (3回連続 or 6回中4回) ---
+                        # --- スライディングウィンドウによる生存判定 (3回連続 or 6回中4回) ---
                         history = state.get('existence_history', [1, 1, 1, 1, 1, 1]) # 1=生存, 0=不在
                         history.pop(0)
                         history.append(0 if is_missed else 1)
@@ -1036,31 +1089,55 @@ class TranslationController:
                         consecutive_miss = all(h == 0 for h in history[-3:])
                         ratio_miss = (history.count(0) >= 4)
                         
-                        if consecutive_miss or ratio_miss:
-                            evict_reason = "3回連続不在" if consecutive_miss else "6回中4回不在"
-                            # 表示系キャッシュ（ID、翻訳、位置情報）のみを削除
-                            if hasattr(self.overlay, 'active_labels') and cid in self.overlay.active_labels:
-                                self.overlay.active_labels[cid].deleteLater()
-                                del self.overlay.active_labels[cid]
-                            
-                            if cid in self.overlay_state: del self.overlay_state[cid]
-                            if cid in self.active_translations: del self.active_translations[cid]
-                            if cid in self.history_chunks: del self.history_chunks[cid]
-                            
-                            # スキップ用バッファからもこのIDのデータ（位置・翻訳情報の元）を削除
-                            if hasattr(self, '_last_raw_chunks') and self._last_raw_chunks:
-                                self._last_raw_chunks = [c for c in self._last_raw_chunks if c.get('id') != cid]
+                        # force_evict: 密度が激減した場合はウィンドウを待たず即パージ
+                        if force_evict or consecutive_miss or ratio_miss:
+                            evict_reason = "密度激減(即時)" if force_evict else ("3回連続不在" if consecutive_miss else "6回中4回不在")
+                            self._purge_cid(cid)
                         else:
-                            # 生存継続：テンプレートマッチが成功し、位置更新は追従時に実施済み
-                            pass
+                            # 生存継続: last_seen を更新して長期カウンターをリセット
+                            state['last_seen'] = time.time()
+                            
+                            # --- 【長期ゴースト対策】15秒以上表示中の翻訳をOCRで再検証 ---
+                            # テンプレートマッチ・密度判定をすり抜けた「幽霊」を定期的に排除する
+                            now_ts = time.time()
+                            disp_time = now_ts - state.get('_display_start', now_ts)
+                            last_deep = state.get('_last_deep_verify', 0)
+                            
+                            if disp_time > 15.0 and (now_ts - last_deep) > 15.0:
+                                # PaddleOCR の検出のみ (rec=False) でその領域を高速チェック
+                                if self.ocr.paddle_engine and self.ocr.paddle_engine._initialized:
+                                    try:
+                                        cr_x = max(0, int(phys_rect['x']))
+                                        cr_y = max(0, int(phys_rect['y']))
+                                        cr_w = max(1, int(phys_rect['w']))
+                                        cr_h = max(1, int(phys_rect['h']))
+                                        crop_img = image.crop((cr_x, cr_y, cr_x + cr_w, cr_y + cr_h))
+                                        detections = self.ocr.paddle_engine.recognize(crop_img, rec=False)
+                                        state['_last_deep_verify'] = now_ts
+                                        
+                                        if not detections:
+                                            # テキストが検出されなかった → ゴースト確定、即時パージ
+                                            print(f"[DeepVerify] {disp_time:.0f}秒超の表示を再検証: テキスト未検出 → パージ ID={cid}")
+                                            self._purge_cid(cid)
+                                        else:
+                                            # テキスト存在確認 → カウンターをリセットして継続表示
+                                            state['_display_start'] = now_ts
+                                            print(f"[DeepVerify] {disp_time:.0f}秒超の表示を再検証: テキスト存在確認 ID={cid}")
+                                    except Exception as e:
+                                        state['_last_deep_verify'] = now_ts  # エラーでも次回まで待つ
                 except Exception as e:
                     print(f"[Monitor Error] {e}")
 
-            # --- B. 画面変化の解析 (Pre-check) ---
             # 128x72 に統一して判定 (ピクセルとエッジ両用)
             curr_gray_full = np.array(image.resize((128, 72)).convert("L"))
+            
             if self._prev_gray is None:
-                self._prev_gray = curr_gray_full
+                self._prev_gray = curr_gray_full.copy()
+                return # 初回は比較対象がないためスキップ
+            
+            # --- 比較用のベースラインをバックアップし、即座に更新 (スキップ時も安全なように) ---
+            prev_gray_baseline = self._prev_gray.copy()
+            self._prev_gray = curr_gray_full.copy()
 
             # 【重要】現在のオーバーレイ状態に基づいたマスクを作成
             logical_w, logical_h = rect[2], rect[3]
@@ -1084,23 +1161,29 @@ class TranslationController:
 
             # 同一マスクを適用して比較 (マスク面積の変化による影響を相殺)
             curr_masked = curr_gray_full * mask_arr
-            prev_masked = self._prev_gray * mask_arr
-            
-            # 1. ピクセル差分 (L1ノルム)
-            pixel_diff = np.sum(np.abs(curr_masked.astype(np.int16) - prev_masked.astype(np.int16)))
-            
-            # 2. エッジ変化率
+            prev_masked = prev_gray_baseline * mask_arr
+
+            # --- スキップ判定用のエッジ計算 (マスクあり) ---
             edges_curr = cv2.Canny(curr_masked, 50, 150)
             edges_prev = cv2.Canny(prev_masked, 50, 150)
-            
             count_curr = np.count_nonzero(edges_curr)
             count_prev = np.count_nonzero(edges_prev)
-            
             edge_diff_rate = abs(count_curr - count_prev) / max(1, count_prev)
+
+            # 1. ピクセル差分 (L1ノルム)
+            pixel_diff = np.sum(np.abs(curr_masked.astype(np.int16) - prev_masked.astype(np.int16)))
+
+            # --- シーンチェンジ判定用のエッジ計算 (マスクなしの生画像を使用) ---
+            edges_curr_raw = cv2.Canny(curr_gray_full, 50, 150)
+            edges_prev_raw = cv2.Canny(prev_gray_baseline, 50, 150)
+            count_curr_raw = np.count_nonzero(edges_curr_raw)
+            count_prev_raw = np.count_nonzero(edges_prev_raw)
             
-            # 【重要】シーンチェンジ検知 (エッジ50%変化、かつピクセルが閾値の20倍以上変化)
-            # 判定閾値を引き上げ、かつ1秒間のインターバルを設けてループを防止
-            is_huge_change = (edge_diff_rate > 0.50 and pixel_diff > (self.config.get("ocr_skip_sensitivity", 2400) * 20))
+            raw_pixel_diff = np.sum(np.abs(curr_gray_full.astype(np.int16) - prev_gray_baseline.astype(np.int16)))
+            raw_edge_diff_rate = abs(count_curr_raw - count_prev_raw) / max(1, count_prev_raw)
+            
+            # 【重要】シーンチェンジ検知 (エッジ50%変化、かつピクセルが閾値の30倍以上変化)
+            is_huge_change = (raw_edge_diff_rate > 0.50 and raw_pixel_diff > (self.config.get("ocr_skip_sensitivity", 2400) * 30))
             last_clear_time = getattr(self, '_last_scene_clear_time', 0.0)
             now_time = time.time()
             
@@ -1120,8 +1203,7 @@ class TranslationController:
                 self._history_grid.clear()
                 self.overlay.sync_active_ids(set())
 
-            # 内部状態更新 (判定後に実施)
-            self._prev_gray = curr_gray_full
+            # 内部状態更新 (冒頭で実施済み)
 
             # 感度設定 (128x72=9216ピクセル。2400は全ピクセルの平均0.26変化に相当)
             # 安全装置: 閾値が低すぎると無限ループするため、最低 1000 以上を保証する
@@ -1150,6 +1232,7 @@ class TranslationController:
             # 【重要】実行頻度の制限 (最低 0.3秒 は空ける)
             if current_time - self._last_ocr_exec_time < 0.3:
                 # 頻度制限中はステータス更新をスキップ（負荷軽減）
+                # ただし状態は更新済みなので安全
                 return
 
             # --- C. スキップ判定 (第2フィルタ) ---
@@ -1166,6 +1249,8 @@ class TranslationController:
                     return
             else:
                 is_forced = (time_since_force >= 10.0)
+            
+            prev_edge_for_log = self._prev_edge_count
             
             # 判定フロー：
             # 1. 【最優先】強制実行（手動ボタン等）: 画面の状態に関わらず実行
@@ -1223,7 +1308,9 @@ class TranslationController:
             elif edge_diff_rate > 0.10: trigger_reason = f"エッジ激変({edge_diff_rate:.1%})"
             else: trigger_reason = f"ピクセル変化(diff={pixel_diff} > threshold={diff_threshold}, edges={edge_diff_rate:.1%})"
             
-            print(f"[OCR_Trigger] {trigger_reason} | Edges: {edge_count} (prev: {self._prev_edge_count})")
+            print(f"[OCR_Trigger] {trigger_reason} | Edges: {edge_count} (prev: {prev_edge_for_log})")
+            
+            self._prev_edge_count = edge_count
 
             if self._ocr_busy:
                 try:
@@ -1279,12 +1366,7 @@ class TranslationController:
                                     if other_cid == cid:
                                         continue
                                     if other_state.get('text', '') == cur_txt:
-                                        if hasattr(self.overlay, 'active_labels') and other_cid in self.overlay.active_labels:
-                                            self.overlay.active_labels[other_cid].deleteLater()
-                                            del self.overlay.active_labels[other_cid]
-                                        del self.overlay_state[other_cid]
-                                        if other_cid in self.active_translations:
-                                            del self.active_translations[other_cid]
+                                        self._purge_cid(other_cid)
                 except queue.Empty:
                     break
                 except Exception as e:
@@ -1423,11 +1505,7 @@ class TranslationController:
                         old_rect = self.overlay_state[old_cid]['rect']
                         # 新しい枠と古い枠が50%以上重なっているなら、古い方は「残骸」とみなす
                         if calculate_iou(chunk['rect'], old_rect) > 0.5:
-                            if hasattr(self.overlay, 'active_labels') and old_cid in self.overlay.active_labels:
-                                self.overlay.active_labels[old_cid].deleteLater()
-                                del self.overlay.active_labels[old_cid]
-                            if old_cid in self.overlay_state: del self.overlay_state[old_cid]
-                            if old_cid in self.active_translations: del self.active_translations[old_cid]
+                            self._purge_cid(old_cid)
     
                     new_history[cid] = chunk
                     chunks.append(chunk)
@@ -1462,7 +1540,7 @@ class TranslationController:
                             # font_size を引き継いで上書き消失を防ぐ
                             self.overlay_state[cid] = {
                                 "text": cached_trans,
-                                "text_raw": text_raw, # 類似度比較用に原文を保持
+                                "text_raw": text_raw,
                                 "rect": chunk["rect"],
                                 "bg_color": chunk.get("bg_color", "rgba(0,0,0,1.0)"),
                                 "text_color": chunk.get("text_color", "#eeeeee"),
@@ -1471,6 +1549,8 @@ class TranslationController:
                                 "parent_rect": chunk.get("parent_rect"),
                                 "step3_crop": chunk.get("step3_crop"),
                                 "font_size": stored_fs,
+                                # 初回表示時刻: 既に表示中なら引き継ぐ（長期ゴースト検証用）
+                                "_display_start": self.overlay_state.get(cid, {}).get("_display_start", time.time()),
                             }
     
                 # 空間バケットを再構築
@@ -1569,11 +1649,8 @@ class TranslationController:
                             if calculate_iou(chunk['rect'], state['rect']) > 0.3:
                                 old_raw = state.get('text_raw', state['text'])
                                 if _score_ocr_text(chunk['text']) > _score_ocr_text(old_raw) + 0.4:
-                                    print(f"[Evict] ID={active_cid} | Reason: 高品質な上書き(Score:{_score_ocr_text(chunk['text']):.2f} > {_score_ocr_text(old_raw):.2f})")
-                                    if active_cid in self.overlay_state:
-                                        del self.overlay_state[active_cid]
-                                    if active_cid in self.active_translations:
-                                        del self.active_translations[active_cid]
+                                    print(f"[Evict] ID={active_cid} | Reason: 高品質な上書き")
+                                    self._purge_cid(active_cid)
                         continue
                         
                     # ディクショナリ変更エラーを避けるため list() でラップ
@@ -1619,8 +1696,7 @@ class TranslationController:
                                 elif area2 < area1 * 0.7:
                                     # 古い方が明らかに小さい残骸ならパージ
                                     print(f"[Evict] ID={active_cid} | Reason: サイズ不一致(残骸排除)")
-                                    if active_cid in self.overlay_state: del self.overlay_state[active_cid]
-                                    if active_cid in self.active_translations: del self.active_translations[active_cid]
+                                    self._purge_cid(active_cid)
                                     continue
     
                             # --- ケースB: 内容が変化している場合 (不一致判定) ---
@@ -1661,8 +1737,6 @@ class TranslationController:
                                         self._recent_cleared_texts.popitem(last=False)
     
                                     if active_cid in self.overlay_state:
-                                        # 古いデカい枠をパージして、新しい(細分化された)枠への道を空ける
-                                        # print(f"[Queue] 重複パージ(内容変化): ID={active_cid} vs NewText='{new_text[:15].replace('\n', ' ')}'")
                                         if hasattr(self.overlay, 'active_labels') and active_cid in self.overlay.active_labels:
                                             self.overlay.active_labels[active_cid].deleteLater()
                                             del self.overlay.active_labels[active_cid]
@@ -1681,10 +1755,7 @@ class TranslationController:
     
                             # 新しい方が明らかに高品質な文章なら、古い方を削除(細分化・改善のケース)
                             if _score_ocr_text(new_text) > _score_ocr_text(old_text) + 0.4:
-                                if active_cid in self.overlay_state:
-                                    del self.overlay_state[active_cid]
-                                if active_cid in self.active_translations:
-                                    del self.active_translations[active_cid]
+                                self._purge_cid(active_cid)
                                 # 新しい方を表示させるため continue
                                 continue
                             
@@ -2078,7 +2149,32 @@ class TranslationController:
                         self._update_status(f"翻訳中... (新規: {len(chunks_to_send)}個)")
                         self.last_request_time = time.time()
                         
+                        # --- スマート・テキスト・フィルター (v1.1.4) ---
+                        final_chunks_to_send = []
                         for chunk in chunks_to_send:
+                            cid = chunk['id']
+                            text_raw = chunk['text'].strip()
+                            
+                            # すでに表示中のテキスト（原文）と比較
+                            if cid in self.overlay_state:
+                                old_text_raw = self.overlay_state[cid].get('text_raw', '')
+                                if old_text_raw:
+                                    # 類似度計算（0.0 〜 1.0）
+                                    sim = fuzz.ratio(text_raw, old_text_raw) / 100.0
+                                    
+                                    # 判定しきい値（短い文は厳しめに）
+                                    threshold = 0.95 if len(text_raw) < 10 else 0.90
+                                    
+                                    if sim >= threshold:
+                                        # 類似度が高い場合は翻訳リクエストをスキップ
+                                        # ただしID追跡のために active_translations には残しておく
+                                        # print(f"[SmartFilter] Skip: '{text_raw[:20]}...' (Sim: {sim:.2f} >= {threshold})")
+                                        self.active_translations[cid] = chunk
+                                        continue
+                            
+                            final_chunks_to_send.append(chunk)
+                        
+                        for chunk in final_chunks_to_send:
                             self.active_translations[chunk['id']] = chunk
                             self.pending_texts.add(chunk['text'].strip())
                             
@@ -2329,15 +2425,24 @@ class TranslationController:
                         
                     ac_chunk = self.history_chunks.get(active_cid)
                     if ac_chunk and ac_chunk['text'].strip() == text_clean:
-                        # 【改善】翻訳中の座標移動に対応：最新の追従座標があるならそれに差し替える
+                        # 【位置の解決】翻訳リクエスト後に追従した最新座標を優先して使う
+                        # 優先順位: overlay_state（テンプレート追従）> history_chunks（最終OCR）> ac_chunk（リクエスト時点）
+                        latest_rect = None
                         if active_cid in self.overlay_state:
-                            ac_chunk['rect'] = self.overlay_state[active_cid]['rect']
-                            
+                            latest_rect = self.overlay_state[active_cid].get('rect')
+                        if latest_rect is None and active_cid in self.history_chunks:
+                            latest_rect = self.history_chunks[active_cid].get('rect')
+                        if latest_rect is not None:
+                            ac_chunk = dict(ac_chunk)  # 元のchunkを書き換えないようにコピー
+                            ac_chunk['rect'] = latest_rect
+                        
                         # 保存されたフォントサイズがあれば渡す
                         stored_fs = self.overlay_state.get(active_cid, {}).get('font_size')
                         self.overlay.show_translation(active_cid, ac_chunk, final_translation, target_lang, font_size=stored_fs)
                         
-                        # font_size を引き継いで上書き消失を防ぐ
+                        # font_size・追従テンプレートを引き継いで上書き消失を防ぐ
+                        # step3_crop と parent_rect を必ず保持することで、翻訳後もテンプレートマッチ追従が機能する
+                        existing_state = self.overlay_state.get(active_cid, {})
                         self.overlay_state[active_cid] = {
                             "text": final_translation,
                             "text_raw": text_clean,
@@ -2345,12 +2450,17 @@ class TranslationController:
                             "bg_color": ac_chunk.get("bg_color", "rgba(0,0,0,1.0)"),
                             "text_color": ac_chunk.get("text_color", "#eeeeee"),
                             "lines_count": ac_chunk.get("lines_count", 1),
-                            "base_density": ac_chunk.get("base_density", 0.0), # OCR時のエッジ密度を固定
+                            "base_density": ac_chunk.get("base_density", 0.0),
                             "last_seen": time.time(),
-                            "existence_history": [1, 1, 1, 1, 1, 1], # 生存履歴の初期化
+                            "existence_history": [1, 1, 1, 1, 1, 1],
                             "mismatch_strikes": 0,
                             "change_strikes": 0,
                             "font_size": stored_fs,
+                            # 追従用テンプレート: チャンクから取得し、なければ既存ステートから引き継ぐ
+                            "step3_crop": ac_chunk.get("step3_crop") or existing_state.get("step3_crop"),
+                            "parent_rect": ac_chunk.get("parent_rect") or existing_state.get("parent_rect"),
+                            # 初回表示時刻: 既に表示中なら引き継ぐ（長期ゴースト検証用）
+                            "_display_start": existing_state.get("_display_start", time.time()),
                         }
 
 
@@ -2361,6 +2471,7 @@ class ControlPanel(QMainWindow):
     sig_start_translation = pyqtSignal()
     sig_stop_translation = pyqtSignal()
     sig_force_retranslate = pyqtSignal()
+    sig_toggle_translation = pyqtSignal()
     
     def __init__(self, config_path: str):
         super().__init__()
@@ -2368,18 +2479,15 @@ class ControlPanel(QMainWindow):
         self.config = load_config(config_path)
         self.controller = None
         
-        self.init_ui()
-        self.controller = TranslationController(self.config)
+        # self.init_ui()  # <- これがエラーの原因だったので削除
         
         # APIシグナルの接続
-        self.sig_start_translation.connect(self._on_api_start)
-        self.sig_stop_translation.connect(self._on_api_stop)
-        self.sig_force_retranslate.connect(self._on_api_force)
-        self._initializing = True  # UI構築中の重複イベントを抑制
-        
-        self.sig_toggle_translation.connect(self.toggle_translation)
+        self.sig_start_translation.connect(self.start_translation)
+        self.sig_stop_translation.connect(self.stop_translation)
         self.sig_force_retranslate.connect(self.force_retranslate)
+        self.sig_toggle_translation.connect(self.toggle_translation)
         
+        self._initializing = True  # UI構築中の重複イベントを抑制
         self._setup_window()
         self._setup_ui()
         self._init_controller()
@@ -2541,6 +2649,28 @@ class ControlPanel(QMainWindow):
         self.lbl_paddle_status.setFont(QFont("Yu Gothic UI", 8))
         self.lbl_paddle_status.setStyleSheet("color: #aaaaaa;")
         paddle_layout.addWidget(self.lbl_paddle_status)
+
+        # TensorRT 有効化設定
+        self.chk_tensorrt = QCheckBox("NVIDIA TensorRT を有効にする (高速化)")
+        self.chk_tensorrt.setFont(QFont("Yu Gothic UI", 9))
+        self.chk_tensorrt.setStyleSheet("color: #00ffcc;")
+        self.chk_tensorrt.setChecked(self.config.get("use_tensorrt", False))
+        def on_trt_changed(state):
+            self.config["use_tensorrt"] = (state == 2)
+            save_config(self.config, self.config_path)
+        self.chk_tensorrt.stateChanged.connect(on_trt_changed)
+        paddle_layout.addWidget(self.chk_tensorrt)
+
+        # GPU 前処理設定
+        self.chk_gpu_pre = QCheckBox("GPU 前処理を有効にする (Cupyが必要)")
+        self.chk_gpu_pre.setFont(QFont("Yu Gothic UI", 9))
+        self.chk_gpu_pre.setStyleSheet("color: #00ffcc;")
+        self.chk_gpu_pre.setChecked(self.config.get("use_gpu_preprocess", False))
+        def on_gpu_pre_changed(state):
+            self.config["use_gpu_preprocess"] = (state == 2)
+            save_config(self.config, self.config_path)
+        self.chk_gpu_pre.stateChanged.connect(on_gpu_pre_changed)
+        paddle_layout.addWidget(self.chk_gpu_pre)
 
         layout.addWidget(paddle_group)
 
@@ -2763,6 +2893,7 @@ class ControlPanel(QMainWindow):
         self.capture_combo.addItem("レイヤードウィンドウ除外 (BitBlt)", "bitblt")
         self.capture_combo.addItem("レイヤードウィンドウ除外 (PrintWindow)", "printwindow")
         self.capture_combo.addItem("互換モード (mss)", "mss")
+        self.capture_combo.addItem("高速キャプチャ (WGC / DXCAM)", "wgc")
         
         # 保存設定を反映
         saved_mode = self.config.get("capture_mode", "bitblt")
@@ -3224,7 +3355,8 @@ def main():
                     self.controller.force_retranslate()
 
         global_panel_ref = _HeadlessPanelProxy(ctrl, config_path)
-        ctrl.start()
+        # 起動直後に翻訳を開始せず、API経由の開始指示を待機する (待機状態で起動)
+        # ctrl.start() を削除
     else:
         # ===== 通常モード（設定画面あり）=====
         app.setQuitOnLastWindowClosed(True)
