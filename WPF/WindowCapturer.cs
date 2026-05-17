@@ -85,6 +85,14 @@ namespace RTtranslator_CS_Overlay
                 if (dpi > 0) return dpi / 96.0;
             }
             catch { }
+            try
+            {
+                using (Graphics g = Graphics.FromHwnd(IntPtr.Zero))
+                {
+                    return g.DpiX / 96.0;
+                }
+            }
+            catch { }
             return 1.0;
         }
 
@@ -161,27 +169,31 @@ namespace RTtranslator_CS_Overlay
             IntPtr saveBitMap = CreateCompatibleBitmap(hwndDC, pW, pH);
             IntPtr oldBmp = SelectObject(saveDC, saveBitMap);
 
-            bool success = BitBlt(saveDC, 0, 0, pW, pH, hwndDC, pLeft, pTop, SRCCOPY);
-
-            byte[] bytes = null;
-            if (success)
+            try
             {
-                using (Bitmap bmp = Bitmap.FromHbitmap(saveBitMap))
+                bool success = BitBlt(saveDC, 0, 0, pW, pH, hwndDC, pLeft, pTop, SRCCOPY);
+
+                byte[] bytes = null;
+                if (success)
                 {
-                    using (MemoryStream ms = new MemoryStream())
+                    using (Bitmap bmp = Bitmap.FromHbitmap(saveBitMap))
                     {
-                        bmp.Save(ms, ImageFormat.Png);
-                        bytes = ms.ToArray();
+                        using (MemoryStream ms = new MemoryStream())
+                        {
+                            bmp.Save(ms, ImageFormat.Png);
+                            bytes = ms.ToArray();
+                        }
                     }
                 }
+                return bytes;
             }
-
-            SelectObject(saveDC, oldBmp);
-            DeleteObject(saveBitMap);
-            DeleteDC(saveDC);
-            ReleaseDC(hwndDesktop, hwndDC);
-
-            return bytes;
+            finally
+            {
+                SelectObject(saveDC, oldBmp);
+                DeleteObject(saveBitMap);
+                DeleteDC(saveDC);
+                ReleaseDC(hwndDesktop, hwndDC);
+            }
         }
 
         private static byte[] CapturePrintWindow(IntPtr hwnd, int pW, int pH)
@@ -191,28 +203,32 @@ namespace RTtranslator_CS_Overlay
             IntPtr saveBitMap = CreateCompatibleBitmap(hwndDC, pW, pH);
             IntPtr oldBmp = SelectObject(saveDC, saveBitMap);
 
-            // Flags: 1 = PW_CLIENTONLY
-            bool success = PrintWindow(hwnd, saveDC, 1);
-
-            byte[] bytes = null;
-            if (success)
+            try
             {
-                using (Bitmap bmp = Bitmap.FromHbitmap(saveBitMap))
+                // Flags: 1 = PW_CLIENTONLY
+                bool success = PrintWindow(hwnd, saveDC, 1);
+
+                byte[] bytes = null;
+                if (success)
                 {
-                    using (MemoryStream ms = new MemoryStream())
+                    using (Bitmap bmp = Bitmap.FromHbitmap(saveBitMap))
                     {
-                        bmp.Save(ms, ImageFormat.Png);
-                        bytes = ms.ToArray();
+                        using (MemoryStream ms = new MemoryStream())
+                        {
+                            bmp.Save(ms, ImageFormat.Png);
+                            bytes = ms.ToArray();
+                        }
                     }
                 }
+                return bytes;
             }
-
-            SelectObject(saveDC, oldBmp);
-            DeleteObject(saveBitMap);
-            DeleteDC(saveDC);
-            ReleaseDC(hwnd, hwndDC);
-
-            return bytes;
+            finally
+            {
+                SelectObject(saveDC, oldBmp);
+                DeleteObject(saveBitMap);
+                DeleteDC(saveDC);
+                ReleaseDC(hwnd, hwndDC);
+            }
         }
 
         private static byte[] CaptureScreen(int pLeft, int pTop, int pW, int pH)
