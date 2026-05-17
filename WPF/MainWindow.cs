@@ -63,6 +63,13 @@ namespace RTtranslator_CS_Overlay
 
             this.Loaded += Window_Loaded;
             this.Closed += Window_Closed;
+
+            // Start checking parent process lifetime if a PID is passed
+            var args = Environment.GetCommandLineArgs();
+            if (args.Length > 1 && int.TryParse(args[1], out int parentPid))
+            {
+                StartParentProcessMonitor(parentPid);
+            }
         }
 
         protected override void OnSourceInitialized(EventArgs e)
@@ -84,6 +91,35 @@ namespace RTtranslator_CS_Overlay
         private void Window_Closed(object sender, EventArgs e)
         {
             StopHttpServer();
+        }
+
+        private void StartParentProcessMonitor(int parentPid)
+        {
+            var thread = new Thread(() =>
+            {
+                while (true)
+                {
+                    try
+                    {
+                        var parent = System.Diagnostics.Process.GetProcessById(parentPid);
+                        if (parent == null || parent.HasExited)
+                        {
+                            Dispatcher.Invoke(() => this.Close());
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                        Dispatcher.Invoke(() => this.Close());
+                        break;
+                    }
+                    Thread.Sleep(1500);
+                }
+            })
+            {
+                IsBackground = true
+            };
+            thread.Start();
         }
 
         // --- HTTP API Server Implementation ---

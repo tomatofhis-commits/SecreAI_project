@@ -117,7 +117,7 @@ class TranslationOverlay(QMainWindow):
         try:
             print(f"[C# Overlay] 新規プロセスを起動します: {cs_exe}")
             # creationflags=0x08000000 (CREATE_NO_WINDOW) で余計なコンソール窓を出さない
-            self.cs_process = subprocess.Popen([cs_exe], creationflags=0x08000000)
+            self.cs_process = subprocess.Popen([cs_exe, str(os.getpid())], creationflags=0x08000000)
             
             # 起動応答待ち (最大2.0秒)
             for _ in range(10):
