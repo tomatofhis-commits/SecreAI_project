@@ -187,6 +187,36 @@ namespace RTtranslator_CS_Overlay
                     Dispatcher.Invoke(() => ClearAllOverlays());
                     SendJsonResponse(resp, new { status = "ok" });
                 }
+                else if (path == "/api/capture" && req.HttpMethod == "POST")
+                {
+                    using (var reader = new StreamReader(req.InputStream, Encoding.UTF8))
+                    {
+                        string body = reader.ReadToEnd();
+                        var serializer = new JavaScriptSerializer();
+                        var payload = serializer.Deserialize<CaptureRequestPayload>(body);
+
+                        if (payload != null && !string.IsNullOrEmpty(payload.window_title))
+                        {
+                            byte[] imgBytes = WindowCapturer.Capture(payload.window_title, payload.mode ?? "bitblt", payload.rect);
+                            if (imgBytes != null && imgBytes.Length > 0)
+                            {
+                                resp.ContentType = "image/png";
+                                resp.ContentLength64 = imgBytes.Length;
+                                resp.StatusCode = (int)HttpStatusCode.OK;
+                                resp.OutputStream.Write(imgBytes, 0, imgBytes.Length);
+                                resp.Close();
+                            }
+                            else
+                            {
+                                SendErrorResponse(resp, HttpStatusCode.InternalServerError, "Failed to capture window");
+                            }
+                        }
+                        else
+                        {
+                            SendErrorResponse(resp, HttpStatusCode.BadRequest, "Invalid capture payload");
+                        }
+                    }
+                }
                 else if (path == "/api/stop" && req.HttpMethod == "POST")
                 {
                     SendJsonResponse(resp, new { status = "ok", message = "Stopping application" });
@@ -364,5 +394,12 @@ namespace RTtranslator_CS_Overlay
         public double font_size { get; set; }
         public string font_color { get; set; }
         public string bg_color { get; set; }
+    }
+
+    public class CaptureRequestPayload
+    {
+        public string window_title { get; set; }
+        public string mode { get; set; }
+        public int[] rect { get; set; }
     }
 }
