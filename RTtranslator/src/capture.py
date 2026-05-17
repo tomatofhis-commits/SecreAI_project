@@ -227,7 +227,53 @@ def capture_dxcam(rect: tuple, window_title: str) -> Image.Image | None:
         return None
 
 
-def capture_window(window_title: str, rect: tuple = None, mode: str = "bitblt") -> Image.Image | None:
+def capture_csharp(window_title: str, rect: tuple = None, mode: str = "bitblt", api_url: str = "http://127.0.0.1:5002") -> Image.Image | None:
+    """
+    C#側へHTTP経由でキャプチャを委託する。
+    rect: (left, top, w, h) - スクリーン論理座標
+    """
+    try:
+        import requests
+        import io
+        
+        hwnd = win32gui.FindWindow(None, window_title)
+        if hwnd == 0:
+            return None
+            
+        # クライアントのスクリーン左上を取得して相対化する
+        p = win32gui.ClientToScreen(hwnd, (0, 0))
+        c_left, c_top = p[0], p[1]
+        
+        if rect:
+            left, top, w, h = rect
+            rel_x = left - c_left
+            rel_y = top - c_top
+        else:
+            left, top, w, h = get_client_rect_on_screen(window_title)
+            rel_x = 0
+            rel_y = 0
+            
+        payload = {
+            "window_title": window_title,
+            "mode": mode,
+            "rect": [int(rel_x), int(rel_y), int(w), int(h)]
+        }
+        
+        resp = requests.post(f"{api_url}/api/capture", json=payload, timeout=0.8)
+        if resp.status_code == 200 and resp.content:
+            return Image.open(io.BytesIO(resp.content))
+    except Exception as e:
+        print(f"[Capture] C# キャプチャ委託失敗 (従来のキャプチャへフォールバックします): {e}")
+    return None
+
+
+def capture_window(
+    window_title: str,
+    rect: tuple = None,
+    mode: str = "bitblt",
+    use_csharp: bool = False,
+    cs_api_url: str = "http://127.0.0.1:5002"
+) -> Image.Image | None:
     """
     指定されたタイトルのウィンドウ領域をキャプチャし、PIL Imageとして返す。
     """
@@ -235,6 +281,13 @@ def capture_window(window_title: str, rect: tuple = None, mode: str = "bitblt") 
         rect = get_client_rect_on_screen(window_title)
     if rect is None:
         return None
+
+    # C#ハイブリッドキャプチャ委託の試行
+    if use_csharp:
+        img = capture_csharp(window_title, rect=rect, mode=mode, api_url=cs_api_url)
+        if img:
+            return img
+        # C#キャプチャが失敗した、または取得できなかった場合は自動フォールバック
 
     if mode == "bitblt":
         img = capture_bitblt(rect, window_title)

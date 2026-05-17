@@ -946,7 +946,15 @@ class TranslationController:
 
             # 1. 画面キャプチャ（1回のループで1回のみ）
             capture_mode = self.config.get("capture_mode", "bitblt")
-            image = capture_window(self.window_title, rect=rect, mode=capture_mode)
+            use_cs_cap = self.config.get("use_csharp_overlay", True) and getattr(self.overlay, "use_csharp", False)
+            cs_api_url = getattr(self.overlay, "cs_api_url", "http://127.0.0.1:5002")
+            image = capture_window(
+                self.window_title,
+                rect=rect,
+                mode=capture_mode,
+                use_csharp=use_cs_cap,
+                cs_api_url=cs_api_url
+            )
 
             # 2. キューからの結果取得とUI反映
             self._poll_ocr_result(image)
