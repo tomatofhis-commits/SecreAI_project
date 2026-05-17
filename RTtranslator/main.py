@@ -241,7 +241,8 @@ DEFAULT_CONFIG = {
     "single_mode": False,
     "capture_mode": "wgc",
     "use_tensorrt": False,
-    "use_gpu_preprocess": False
+    "use_gpu_preprocess": False,
+    "use_csharp_overlay": True
 }
 
 def load_config(config_path: str = "config.json") -> dict:
@@ -424,6 +425,7 @@ class TranslationController:
             opacity=config.get("overlay_opacity", 0.85),
             bg_color=config.get("overlay_background_color", "#1a1a2e"),
             text_color=config.get("overlay_text_color", "#e0e0e0"),
+            use_csharp=config.get("use_csharp_overlay", True),
         )
         self.overlay.font_size_calculated.connect(self._on_font_size_calculated)
         

@@ -54,6 +54,7 @@ class TranslationOverlay(QMainWindow):
         opacity: float = 0.85,
         bg_color: str = "#1a1a2e",
         text_color: str = "#e0e0e0",
+        use_csharp: bool = True,
     ):
         super().__init__()
         self.font_size = font_size
@@ -70,15 +71,18 @@ class TranslationOverlay(QMainWindow):
         self.use_csharp = False
         self.cs_api_url = "http://127.0.0.1:5002"
         self.cs_process = None
-        self._init_csharp_overlay()
+        self._init_csharp_overlay(use_csharp)
 
         self._setup_window()
         self._setup_ui()
         self._apply_click_through()
         self._connect_signals()
 
-    def _init_csharp_overlay(self):
+    def _init_csharp_overlay(self, force_enabled: bool):
         """C# WPF Overlayの検出およびバックグラウンド起動を試みる"""
+        if not force_enabled:
+            print("[C# Overlay] 設定によりC#外部オーバーレイ描画エンジンは無効化されています。")
+            return
         # C# 実行ファイルの探索パス
         rtt_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # D:\SecreAI_Build\RTtranslator 相当
         base_dir = os.path.dirname(rtt_dir) # D:\SecreAI_Build 相当
