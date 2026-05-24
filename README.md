@@ -33,6 +33,48 @@ graph TD
     Hub --> LocalAPI[Flask API: Remote Control]
 ```
 
+## 📁 リポジトリ・ファイル構成説明
+
+リポジトリ内の各ディレクトリおよびファイルは、以下の役割を担っています。
+
+### 1. 🖥 WPF (C#) フロントエンド・ハブ (`WPF/` ディレクトリ)
+WPF(C#)で構築された高性能なGUI操作画面およびオーバーレイUIです。
+- **[SecreAI_Hub_Window.cs](file:///D:/SecreAI_Build/WPF/SecreAI_Hub_Window.cs)**: アプリ全体のメインGUI操作ハブ画面。インジケーターランプの制御や、各種Pythonスクリプトの別プロセス安全起動、APIキーなどの管理を担当します。
+- **[SecreAI_Hub_Overlay.cs](file:///D:/SecreAI_Build/WPF/SecreAI_Hub_Overlay.cs)**: AIの返答を表示する透過オーバーレイウィンドウ。ディスプレイサイズ（タスクバー除く）の縦幅100%に自動的にフィットし、文字数とアバター画像の有無に合わせてフォントサイズを自動測定して綺麗に収める（スクロールさせない）動的スケールロジックを持ちます。
+- **[SecreAI_Hub_Server.cs](file:///D:/SecreAI_Build/WPF/SecreAI_Hub_Server.cs)**: Pythonエンジン（`game_ai.py`など）や外部アプリ（Stream Deck等）からのAPI要求（ログ転送、オーバーレイ表示、状態変更等）を受け付けるローカルFlask代替HTTPサーバー。
+- **[MainWindow.cs](file:///D:/SecreAI_Build/WPF/MainWindow.cs) / [WindowCapturer.cs](file:///D:/SecreAI_Build/WPF/WindowCapturer.cs)**: RTT（リアルタイム翻訳）で画面の一部をキャプチャし、半透明のオーバーレイに描画するためのC#側ロジック。
+- **[SecreAI_Hub.csproj](file:///D:/SecreAI_Build/WPF/SecreAI_Hub.csproj)**: ハブアプリケーションをコンパイルするためのC#プロジェクト定義ファイル。
+
+### 2. 🐍 Python スクリプト群 (`scripts/` ディレクトリ)
+AIのロジック、データベース処理、バックグラウンド並列処理などを担当する Python スクリプト群です。
+- **[game_ai.py](file:///D:/SecreAI_Build/scripts/game_ai.py)**: AI対話の中核エンジン。音声認識(STT)、画像認識(Vision)、文字チャットの入力を処理し、GeminiやOpenAIのAPIに問い合わせます。プログラム終了時にはスレッドプールを安全にシャットダウンし、ゾンビ化を防ぎます。
+- **[intersecting_ai.py](file:///D:/SecreAI_Build/scripts/intersecting_ai.py)**: ユーザーの質問に対し、Google Grounding検索とTavily検索を並行非同期（`asyncio.gather`）で実行し、事実確認を高度化させる複合AIモデル。
+- **[update_memory.py](file:///D:/SecreAI_Build/scripts/update_memory.py)**: 過去の対話履歴から重要な要点・事実のみを抽出し、ChromaDBベクターデータベースに書き込むバックグラウンド記憶最適化スクリプト。
+- **[memory_viewer.py](file:///D:/SecreAI_Build/scripts/memory_viewer.py)**: ベクターデータベース（ChromaDB）内の長期記憶を検索・閲覧・削除したり、各モデルの統計グラフを表示するダッシュボード画面。
+- **[chromadb_pool.py](file:///D:/SecreAI_Build/scripts/chromadb_pool.py)**: ChromaDB接続をプール（キャッシュ）し、記憶のベクトル検索や読み込み速度を3〜5倍に高速化するモジュール。
+- **[api_cache_system.py](file:///D:/SecreAI_Build/scripts/api_cache_system.py)**: 同一の質問や画像付き要求に対し、Gemini/OpenAI等のレスポンスをローカルに一時キャッシュ（TTL指定）することで、応答速度を爆速化（0.1s）しAPI費用を節約するキャッシュ。
+- **[config_manager.py](file:///D:/SecreAI_Build/scripts/config_manager.py)**: `data/config.json` 等の設定を破損せずに安全に排他ロード・セーブする共通ユーティリティ。
+- **[clear_history.py](file:///D:/SecreAI_Build/scripts/clear_history.py)**: 長期記憶データベースと同期しながらチャットログ履歴を初期化するスクリプト。
+- **[stop_ai.py](file:///D:/SecreAI_Build/scripts/stop_ai.py)**: 稼働中のAIのAPI呼び出しやVOICEVOX/Edge-TTSによる音声読み上げを、シグナルを介して即座に強制停止させる制御用スクリプト。
+
+### 3. 🔍 リアルタイム翻訳エンジン (`RTtranslator/` ディレクトリ)
+画面内の文字を認識（OCR）して自動翻訳し、画面上に透過レイヤーで重ね合わせるエンジンです。
+- **[main.py](file:///D:/SecreAI_Build/RTtranslator/main.py)**: リアルタイム翻訳プロセスの起動・制御を行うメインエントリー。
+- **[src/capture.py](file:///D:/SecreAI_Build/RTtranslator/src/capture.py)**: `dxcam` や `mss` ライブラリを使用して、ゲーム画面を超低遅延でキャプチャするモジュール。
+- **[src/ocr.py](file:///D:/SecreAI_Build/RTtranslator/src/ocr.py)**: Windows 10/11内蔵の高速OCR（WinRT経由）またはPaddleOCRを使用して、キャプチャされた画像から高精度にテキスト領域を検出するモジュール。
+- **[src/translator.py](file:///D:/SecreAI_Build/RTtranslator/src/translator.py)**: 検出されたテキストを、ローカルOllama（Gemma/Llama等）やWeb APIを通じて指定言語に翻訳するモジュール。
+- **[src/ui.py](file:///D:/SecreAI_Build/RTtranslator/src/ui.py)**: 翻訳されたテキストをゲーム画面上にぴったりと透過オーバーレイ表示するUI制御モジュール。
+
+### 4. 🛠 ビルド・パッケージ自動化スクリプト (ルートディレクトリ)
+アプリのビルド、最適化、配布パッケージの作成を全自動で行うスクリプト群です。
+- **[build.bat](file:///D:/SecreAI_Build/build.bat)**: C#コードのビルド、ポータブルPythonランタイムの構築、Inno Setupコンパイルを一括して全自動で行う統合ビルドバッチ。
+- **[build_wpf.bat](file:///D:/SecreAI_Build/build_wpf.bat)**: MSBuildを適切なプラットフォーム・フレームワーク設定で呼び出し、C#フロントエンド（Hub & Overlay）をクリーンビルドするスクリプト。
+- **[build_python_runtime.py](file:///D:/SecreAI_Build/build_python_runtime.py)**: ユーザー環境にPythonが無くても動作するよう、軽量ポータブルPython（embeddable）を自動ダウンロードし、TavilyやPyAudio等の必須ライブラリを組み込んで最適構築するスクリプト。
+- **[setup_script.iss](file:///D:/SecreAI_Build/setup_script.iss)**: Inno Setupによるインストーラーの定義ファイル。不要なキャッシュや個人APIキー・個人DB等の機密データを確実に除外してクリーンな配布パッケージ（Setup.exe）を作るクレンジングルールが記述されています。
+- **[kill_zombies.bat](file:///D:/SecreAI_Build/kill_zombies.bat)**: 開発時や異常終了時にバックグラウンドに残存した `RTtranslator_core.exe` や `SecreAI_Hub.exe` などの全プロセスを安全に一括強制終了するデバッグ用ツール。
+- **[update_lang.py](file:///D:/SecreAI_Build/update_lang.py)**: 新機能追加で更新された日本語設定（`ja.json`）のキーを検出し、他9カ国語（英語、韓国語、中国語等）の設定ファイルへ自動的にGemini APIで高品質翻訳して同期・追加するドキュメントローカライズ支援スクリプト。
+- **[overlay.html](file:///D:/SecreAI_Build/overlay.html)**: OBS Studio等の配信ソフトに、翻訳字幕などを直接流し込むための透過背景ウェブオーバーレイファイル。
+
 ---
 
 ## � AIモデルの特徴とコストについて (2026年2月現在)
