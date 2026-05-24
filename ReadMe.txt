@@ -8,13 +8,40 @@
 https://github.com/tomatofhis-commits/SecreAI_project
 
 1. 同梱内容の確認
-インストーラーによって以下の構成で配置されます（デフォルト：%LOCALAPPDATA%\SecreAI）。
-・secreAI.exe          : 操作用のメインパネル（ハブ）です。
-・RTtranslator_core.exe : リアルタイム翻訳エンジンです。
-・scripts/              : AIの各機能（会話、記憶整理、検索最適化）を司るプログラム群です。
-・data/                 : 設定ファイル（config.json, rtt_config.json）、言語ファイル、会話履歴、キャッシュデータが保存されます。
-・memory_db/            : ChromaDBによる長期記憶データベースです。
-・models/               : 翻訳機能用の言語判定モデルが入っています。
+本プロジェクトおよびインストールフォルダは以下の主要なディレクトリとファイルで構成されています。
+
+【1. ハブ・オーバーレイ (C# WPF)】
+・secreAI.exe          : WPFで構築された統合操作パネル（ハブUI）です。
+・RTtranslator_CS_Overlay.exe : 翻訳字幕およびAI応答テキストを透過描画するオーバーレイUIです。
+・WPF/                 : フロントエンド（WPF C#）のソースコード一式です。
+  - SecreAI_Hub_Window.cs : ハブUIの中核画面ロジック。
+  - SecreAI_Hub_Overlay.cs : 縦幅100%・動的フォントスケール対応の応答オーバーレイ。
+  - SecreAI_Hub_Server.cs : Python側と通信するための Flask 代替 HTTP サーバ。
+
+【2. AIコアエンジン (Python scripts/)】
+・scripts/              : AI対話や記憶、検索最適化を行うプログラム群です。
+  - game_ai.py          : 音声認識/画像認識/会話を司るメインエンジン（スレッドプール自動制御）。
+  - intersecting_ai.py  : Google Grounding と Tavily 検索を並列で行うハイブリッド検索AI。
+  - update_memory.py    : 会話の要点を抽出し ChromaDB へ保存するバックグラウンド記憶定着タスク。
+  - memory_viewer.py    : 長期記憶の検索・削除および統計ダッシュボード画面。
+  - chromadb_pool.py    : ChromaDB接続をプールし、記憶のベクトル検索を高速化するモジュール。
+  - api_cache_system.py : 同一の質問の再計算を防ぎ、応答速度を上げAPI費を節約するキャッシュ機構。
+
+【3. リアルタイム翻訳エンジン (RTtranslator/)】
+・RTtranslator_core.exe : 画面OCRおよび翻訳エンジン本体（PythonよりNuitkaビルド）。
+・RTtranslator/        : リアルタイム翻訳機能のソースコード一式です。
+  - capture.py          : ゲーム画面の超低遅延・高速画面キャプチャ。
+  - ocr.py              : Windows内蔵OCR / PaddleOCRによる高精度文字検出。
+  - translator.py       : Ollamaや翻訳APIを用いた多言語翻訳。
+
+【4. アセット・設定・ビルドスクリプト】
+・data/                 : 設定ファイル（config.json, rtt_config.json）、言語データ、対話履歴、一時音声wavが格納されます。
+・memory_db/            : ChromaDB（ベクトルデータベース）による長期記憶の実データです。
+・models/               : 翻訳エンジンの言語判定用AIモデルデータです。
+・build.bat            : ハブのコンパイルからインストーラー作成までを自動実行するビルドスクリプト。
+・build_wpf.bat        : MSBuildを呼び出し、C#フロントエンドをリリースビルドするスクリプト。
+・build_python_runtime.py : 配布用ポータブルPythonを自動ダウンロード・最適構築するスクリプト。
+・kill_zombies.bat     : バックグラウンドに残存したRTTコアやHubプロセスを一括強制終了するツール。
 
 2. 事前準備
 本システムを最大限活用するために、以下の準備を推奨します。
