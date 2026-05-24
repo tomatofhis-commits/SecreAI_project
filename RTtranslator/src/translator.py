@@ -204,6 +204,20 @@ class Translator:
             except Exception as e:
                 print(f"[Queue Worker Crash] {e}")
 
+    def clear_queue(self):
+        """翻訳キューに入っている未処理のリクエストをすべて破棄する"""
+        try:
+            # PriorityQueue の中身を空にする
+            while not self._pqueue.empty():
+                try:
+                    self._pqueue.get_nowait()
+                    self._pqueue.task_done()
+                except queue.Empty:
+                    break
+            print("[Translator] 翻訳キューの未処理リクエストをすべてクリア（パージ）しました。")
+        except Exception as e:
+            print(f"[Translator] キューのクリア中にエラー: {e}")
+
     def set_queue_limit(self, limit: int):
         """キューの上限を動的に変更する"""
         self._pqueue_maxsize = limit

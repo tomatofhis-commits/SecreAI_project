@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <!-- スケーリングを抑制し、1:1のピクセル表示を維持するためのメタタグ -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Real-Time Translate OBS Overlay (Pixel Perfect)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            background-color: transparent;
+            overflow: hidden;
+            font-family: "Yu Gothic UI", "Meiryo", sans-serif;
+        }
+        #container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            overflow: hidden;
+            /* 
+               強制スケーリング補正:
+               transform-origin を左上に固定し、JSで拡大率を打ち消します。
+            */
+            transform-origin: 0 0;
+            /* ガイド枠を少し内側に寄せて確実に見えるようにする */
+            pointer-events: none;
+        }
+        .translation-label {
+            position: absolute;
+            border-radius: 3px;
+            padding: 1px 3px;
+            font-weight: bold;
+            word-wrap: break-word;
+            overflow: hidden;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            line-height: 1.0;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+
+    <script>
+        const container = document.getElementById('container');
+        let activeLabels = {};
+
+        // OS/ブラウザの拡大率を検出し、1.0倍（等倍）になるように逆補正をかける
+        function adjustScaling() {
+            const ratio = window.devicePixelRatio || 1;
+            if (ratio !== 1) {
+                // 例: 1.25倍に拡大されているなら、1/1.25 = 0.8倍に縮小して等倍に戻す
+                container.style.transform = `scale(${1 / ratio})`;
+            } else {
+                container.style.transform = `scale(1)`;
+            }
+        }
+
+        async function updateOverlay() {
+            try {
+                adjustScaling(); // 毎フレーム拡大率をチェック
+
+                const response = await fetch('/api/overlay_data');
+                const data = await response.json();
+                
+                const { window: win, translations } = data;
+
+                // ゲームの論理サイズを適用
+                const targetW = win.w || 1600;
+                const targetH = win.h || 900;
+                
+                container.style.width = `${targetW}px`;
+                container.style.height = `${targetH}px`;
+
+                const currentIds = new Set(Object.keys(translations));
+
+                // 不要なラベルを削除
+                for (const id in activeLabels) {
+                    if (!currentIds.has(id)) {
+                        activeLabels[id].remove();
+                        delete activeLabels[id];
+                    }
+                }
+
+                for (const id in translations) {
+                    const item = translations[id];
+                    const rect = item.rect;
+
+                    let label = activeLabels[id];
+                    if (!label) {
+                        label = document.createElement('div');
+                        label.className = 'translation-label';
+                        container.appendChild(label);
+                        activeLabels[id] = label;
+                    }
+
+                    const htmlText = item.text.replace(/\n/g, '<br>');
+                    if (label.innerHTML !== htmlText) {
+                        label.innerHTML = htmlText;
+                    }
+
+                    // 基本スタイル
+                    label.style.backgroundColor = item.bg_color;
+                    label.style.color = item.text_color;
+                    label.style.left = `${rect.x - 3}px`;
+                    label.style.top = `${rect.y}px`;
+                    label.style.lineHeight = '1.05';
+                    label.style.overflow = 'hidden';
+                    label.style.padding = '0px 2px'; // さらにパディングを詰める
+
+                    // ui.pyと同じ厳密な幅と高さの計算を適用
+                    const labelW = rect.w + 4;
+                    label.style.width = `${labelW}px`;
+                    label.style.height = 'auto';
+                    label.style.display = 'block';
+
+                    const fontSizeRatio = (data.config && data.config.font_size_ratio) ? data.config.font_size_ratio : 1.0;
+                    let currentFontSize = (item.font_size || 16) * fontSizeRatio;
+
+                    // 1行/多行に応じた基本設定
+                    const linesCount = item.lines_count || 1;
+                    if (linesCount === 1 && !item.text.includes('\n')) {
+                        label.style.whiteSpace = 'nowrap';
+                        label.style.fontSize = `${currentFontSize}px`;
+                        label.style.lineHeight = '1.0';
+
+                        // 幅が超える場合は微調整
+                        if (label.scrollWidth > labelW) {
+                            const ratio = labelW / Math.max(1, label.scrollWidth);
+                            currentFontSize = Math.max(8, currentFontSize * ratio * 0.98);
+                            label.style.fontSize = `${currentFontSize}px`;
+                        }
+                    } else {
+                        label.style.whiteSpace = 'pre-wrap';
+                        let lineHPx = rect.h / linesCount;
+                        let cssLineHeight = lineHPx / Math.max(1, currentFontSize);
+                        cssLineHeight = Math.max(0.85, Math.min(1.2, cssLineHeight));
+                        
+                        label.style.fontSize = `${currentFontSize}px`;
+                        label.style.lineHeight = `${cssLineHeight}`;
+                        
+                        // 高さ制限での強制縮小（安全策）
+                        let safetyCount = 0;
+                        while (label.scrollHeight > rect.h && currentFontSize > 8 && safetyCount < 5) {
+                            currentFontSize *= 0.9;
+                            label.style.fontSize = `${currentFontSize}px`;
+                            safetyCount++;
+                        }
+                    }
+                    
+                    label.style.maxWidth = 'none'; // 解除
+                    label.style.height = `${rect.h}px`;
+
+                    if (linesCount === 1) {
+                        label.style.display = 'flex';
+                        label.style.alignItems = 'center';
+                    }
+                }
+            } catch (error) {
+                // 無視
+            }
+        }
+
+        setInterval(updateOverlay, 200);
+    </script>
+</body>
+</html>

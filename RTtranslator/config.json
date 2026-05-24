@@ -10,7 +10,7 @@
         "ja-JP"
     ],
     "paddle_language": "en",
-    "paddle_gpu_index": 1,
+    "paddle_gpu_index": 0,
     "paddle_gpu_mem_mb": 2048,
     "paddle_threshold": 0.9,
     "capture_interval_sec": 1.0,

@@ -1,29 +1,31 @@
 ; ============================================================
-;  SecreAI + RTtranslator 統合インストーラー (v1.1.4)
+;  SecreAI (Beta) + RTtranslator 統合インストーラー (v1.2.0-beta)
 ;  Inno Setup 6 スクリプト
 ; ============================================================
 
-#define MyAppName        "SecreAI"
-#define MyAppVersion     "1.1.4"
+#define MyAppName        "SecreAI (Beta)"
+#define MyAppVersion     "1.2.0-beta"
 #define MyAppPublisher   "SecreAI Dev Team"
 #define MyAppExeName     "secreAI.exe"
 
 ; --- ユーザー指定のソースフォルダ定義 ---
-#define SecreAIDistDir   "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\SecreAI_ver1.1.4"
-#define RTTDistDir       "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\RTtranslator_ver1.1.4"
-#define RTTSourceDir     "C:\Users\amach\OneDrive\デスクトップ\アップ用作業\RTtranslator_ver1.1.4"
+#define SecreAIWPFHub    "D:\SecreAI_Build\SecreAI_Hub.exe"
+#define RTTDistDir       "D:\SecreAI_Build\RTtranslator\dist\main.dist"
+#define RTTSourceDir     "D:\SecreAI_Build\RTtranslator"
 
 [Setup]
-AppId={{C12F4B7A-9E5C-4F3D-8A1B-2C3D4E5F6G7H}
+; Beta専用の新しいIDに変更し、mainのアンインストール情報等と競合しないようにします
+AppId={{D37E6F8C-1A5B-4C9D-A2B3-C4D5E6F7G8H9}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={localappdata}\{#MyAppName}
+; インストール先を main とは別フォルダ (SecreAI_Beta) に分離します
+DefaultDirName={localappdata}\SecreAI_Beta
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=d:\SecreAI_Build\installer_output
-OutputBaseFilename=SecreAI_v{#MyAppVersion}_Setup_v4
+OutputBaseFilename=SecreAI_v{#MyAppVersion}_Beta_Setup
 SetupIconFile=d:\SecreAI_Build\SecreAI.ico
 Compression=lzma
 SolidCompression=yes
@@ -40,16 +42,39 @@ Name: "english";  MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; 1. SecreAI 本体（ビルド成果物一式をコピー。config系は除外）
-Source: "{#SecreAIDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "config\config.json, data\config.json, data\rtt_config.json, data\chat_history.json, memory_db\*"
+; ==============================================================================
+;  【厳格な除外ルール】インストーラー制作時に不要ファイルを混入させないための規定
+;  1. 設定ファイル (config.json, rtt_config.json 等) はユーザー毎に初期化されるべきため同梱禁止。
+;  2. 個人データ・会話データベース (chat_history.json, memory_db\* 等) はプライバシーと初期化のため同梱禁止。
+;  3. キャッシュ (api_cache\*, search_cache\*, wav\* 音声合成キャッシュ等) は配布サイズ削減のため同梱禁止。
+;  4. 各種ログファイル (*.log) やキャプチャ中の一時画像 (temp_ss.png, temp_query_image.png) は同梱禁止。
+; ==============================================================================
 
-; 2. RTtranslator コア（ビルド成果物一式をコピー。キャッシュ系は除外）
-Source: "{#RTTDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "config.json, translation_cache.json, log.json, debug_rtt.log"
+; 1. SecreAI WPFハブ本体（ビルドされた SecreAI_Hub.exe を secreAI.exe としてメインパスへコピー）
+Source: "{#SecreAIWPFHub}"; DestDir: "{app}"; DestName: "secreAI.exe"; Flags: ignoreversion
 
-; 3. RTtranslator 追加データファイル（distに含まれていない場合のみ個別にコピーされるよう skipifsourcedoesntexist を維持）
-; ※通常はビルド成果物のフォルダ内に含まれているため、予備的な記述です。
+; 1.2 ポータブルPython環境の同梱
+Source: "d:\SecreAI_Build\python_runtime\*"; DestDir: "{app}\python_runtime"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pyc, __pycache__\*"
+
+; 1.3 Python スクリプト群（ハブから起動される game_ai.py 等のスクリプトとライブラリ、不要なキャッシュ・一時データを除外）
+Source: "d:\SecreAI_Build\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pyc, __pycache__\*"
+
+; 1.4 ルート階層の重要 Python スクリプト群の同梱 (設定画面・ウィザード起動用)
+Source: "d:\SecreAI_Build\settings_ui.py";  DestDir: "{app}"; Flags: ignoreversion
+Source: "d:\SecreAI_Build\setup_wizard.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "d:\SecreAI_Build\update_lang.py";  DestDir: "{app}"; Flags: ignoreversion
+
+; 2. RTtranslator コア（本体と重複する巨大ライブラリ、および設定・ログ・キャッシュを除外）
+Source: "{#RTTDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "config.json, translation_cache.json, log.json, *.log, debug_rtt.log, data\api_cache\*, data\search_cache\*, paddle\include\*, cupy\*, cupy_backends\*, cupyx\*, scipy\*, scipy.libs\*, pandas\*, pandas.libs\*, matplotlib\*, lxml\*, Cython\*, sklearn\*, skimage\*, shapely\*, shapely.libs\*, docx\*, qt6designer.dll, qt6pdf*.dll, qt6quick3d*.dll, qt6bluetooth.dll, qt6multimedia*.dll, qt6positioning.dll, qt6sensors.dll, qt6nfc.dll, qt6serialport.dll, qt6webchannel.dll, qt6websockets.dll, qt6quickwidgets.dll, qt6texttospeech.dll, qt6spatialaudio.dll"
+
+; 3. 同梱漏れしていた追加データとドキュメント
+Source: "d:\SecreAI_Build\data\lang\*"; DestDir: "{app}\data\lang"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "d:\SecreAI_Build\更新履歴.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "d:\SecreAI_Build\ReadMe.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "d:\SecreAI_Build\SecreAI.ico"; DestDir: "{app}"; Flags: ignoreversion
+
+; 4. RTtranslator 追加データファイル（distに含まれていない場合のみ個別にコピーされるよう skipifsourcedoesntexist を維持）
 Source: "{#RTTSourceDir}\models\lid.176.ftz";              DestDir: "{app}\models"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "{#RTTSourceDir}\frozen_east_text_detection.pb";   DestDir: "{app}";        Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#RTTSourceDir}\overlay.html";                    DestDir: "{app}";        Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#RTTSourceDir}\data\wordlists\*";                DestDir: "{app}\data\wordlists"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
@@ -59,3 +84,116 @@ Name: "{autodesktop}\{#MyAppName}";  Filename: "{app}\{#MyAppExeName}"; Tasks: d
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// レジストリから旧バージョンのインストールフォルダパスを取得する関数
+function GetInstalledPath(AppId: String): String;
+var
+  RegKey: String;
+  Path: String;
+begin
+  Result := '';
+  RegKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + AppId + '_is1';
+  // HKEY_CURRENT_USER (lowest privilege でのインストールを優先チェック)
+  if RegQueryStringValue(HKCU, RegKey, 'Inno Setup: App Path', Path) then
+  begin
+    Result := Path;
+    Exit;
+  end;
+  // HKEY_LOCAL_MACHINE (管理者権限でのインストールもチェック)
+  if RegQueryStringValue(HKLM, RegKey, 'Inno Setup: App Path', Path) then
+  begin
+    Result := Path;
+    Exit;
+  end;
+end;
+
+// ファイルおよびフォルダのコピー処理（Langフォルダは除外）
+procedure CopyUserFiles(SrcDir, DestDir: String);
+var
+  SrcFile, DestFile: String;
+  SrcDbDir, DestDbDir: String;
+  FindRec: TFindRec;
+begin
+  // コピー元とコピー先が同じであるか、または空パスの場合は処理しない
+  if (SrcDir = '') or (CompareText(SrcDir, DestDir) = 0) then Exit;
+  if not DirExists(SrcDir) then Exit;
+
+  // data フォルダを作成
+  ForceDirectories(AddBackslash(DestDir) + 'data');
+
+  // 1. data\config.json
+  SrcFile := AddBackslash(SrcDir) + 'data\config.json';
+  DestFile := AddBackslash(DestDir) + 'data\config.json';
+  if FileExists(SrcFile) and (not FileExists(DestFile)) then
+  begin
+    CopyFile(SrcFile, DestFile, False);
+  end;
+
+  // 2. data\rtt_config.json
+  SrcFile := AddBackslash(SrcDir) + 'data\rtt_config.json';
+  DestFile := AddBackslash(DestDir) + 'data\rtt_config.json';
+  if FileExists(SrcFile) and (not FileExists(DestFile)) then
+  begin
+    CopyFile(SrcFile, DestFile, False);
+  end;
+
+  // 3. data\chat_history.json
+  SrcFile := AddBackslash(SrcDir) + 'data\chat_history.json';
+  DestFile := AddBackslash(DestDir) + 'data\chat_history.json';
+  if FileExists(SrcFile) and (not FileExists(DestFile)) then
+  begin
+    CopyFile(SrcFile, DestFile, False);
+  end;
+
+  // 4. data\feedback_memory.json
+  SrcFile := AddBackslash(SrcDir) + 'data\feedback_memory.json';
+  DestFile := AddBackslash(DestDir) + 'data\feedback_memory.json';
+  if FileExists(SrcFile) and (not FileExists(DestFile)) then
+  begin
+    CopyFile(SrcFile, DestFile, False);
+  end;
+
+  // 5. memory_db フォルダの移行
+  SrcDbDir := AddBackslash(SrcDir) + 'memory_db';
+  DestDbDir := AddBackslash(DestDir) + 'memory_db';
+  if DirExists(SrcDbDir) and (not DirExists(DestDbDir)) then
+  begin
+    ForceDirectories(DestDbDir);
+    // フォルダ内のファイルをコピー
+    if FindFirst(SrcDbDir + '\*', FindRec) then
+    begin
+      try
+        repeat
+          if (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+          begin
+            if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
+            begin
+              CopyFile(SrcDbDir + '\' + FindRec.Name, DestDbDir + '\' + FindRec.Name, False);
+            end;
+          end;
+        until not FindNext(FindRec);
+      finally
+        FindClose(FindRec);
+      end;
+    end;
+  end;
+end;
+
+// インストール完了ステップでのフック処理
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  OldPath: String;
+  NewPath: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    NewPath := ExpandConstant('{app}');
+    // 旧通常版の AppId: {C12F4B7A-9E5C-4F3D-8A1B-2C3D4E5F6G7H} から移行
+    OldPath := GetInstalledPath('{C12F4B7A-9E5C-4F3D-8A1B-2C3D4E5F6G7H}');
+    if OldPath <> '' then
+    begin
+      CopyUserFiles(OldPath, NewPath);
+    end;
+  end;
+end;

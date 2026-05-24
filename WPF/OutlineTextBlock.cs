@@ -13,7 +13,7 @@ namespace RTtranslator_CS_Overlay
 
         public static readonly DependencyProperty FontFamilyProperty =
             DependencyProperty.Register("FontFamily", typeof(FontFamily), typeof(OutlineTextBlock),
-                new FrameworkPropertyMetadata(new FontFamily("MS Gothic"), FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.AffectsMeasure));
+                new FrameworkPropertyMetadata(new FontFamily("Yu Gothic UI"), FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.AffectsMeasure));
 
         public static readonly DependencyProperty FontSizeProperty =
             DependencyProperty.Register("FontSize", typeof(double), typeof(OutlineTextBlock),
@@ -29,7 +29,7 @@ namespace RTtranslator_CS_Overlay
 
         public static readonly DependencyProperty StrokeThicknessProperty =
             DependencyProperty.Register("StrokeThickness", typeof(double), typeof(OutlineTextBlock),
-                new FrameworkPropertyMetadata(2.5, FrameworkPropertyMetadataOptions.AffectsRender));
+                new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
 
         public string Text
         {

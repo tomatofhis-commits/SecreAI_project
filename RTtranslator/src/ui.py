@@ -33,6 +33,54 @@ WS_EX_NOACTIVATE = 0x08000000
 GWL_EXSTYLE = -20
 
 
+def ensure_contrast(text_color: str, bg_color: str) -> str:
+    """文字色と背景色の輝度を計算し、同化しそうな場合は明るい文字色（#ffffff）を強制する"""
+    import re
+    
+    # デフォルト値
+    tc_rgb = (255, 255, 255)
+    bg_rgb = (0, 0, 0)
+    
+    # text_color (Hex or Name) の解析
+    tc = text_color.strip().lower()
+    if tc.startswith("#"):
+        try:
+            h = tc.lstrip('#')
+            if len(h) == 3:
+                h = ''.join([c*2 for c in h])
+            tc_rgb = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+        except:
+            pass
+            
+    # bg_color (rgba or Hex) の解析
+    bg = bg_color.strip().lower()
+    if bg.startswith("rgba") or bg.startswith("rgb"):
+        try:
+            nums = [int(x) for x in re.findall(r'\d+', bg)]
+            if len(nums) >= 3:
+                bg_rgb = (nums[0], nums[1], nums[2])
+        except:
+            pass
+    elif bg.startswith("#"):
+        try:
+            h = bg.lstrip('#')
+            if len(h) == 3:
+                h = ''.join([c*2 for c in h])
+            bg_rgb = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+        except:
+            pass
+
+    # 相対輝度計算 (Y = 0.299R + 0.587G + 0.114B)
+    tc_lum = 0.299 * tc_rgb[0] + 0.587 * tc_rgb[1] + 0.114 * tc_rgb[2]
+    bg_lum = 0.299 * bg_rgb[0] + 0.587 * bg_rgb[1] + 0.114 * bg_rgb[2]
+
+    # もし文字色が非常に暗く（輝度 < 90）、背景も暗い（輝度 < 120）なら、文字色を強制的に白にする
+    if tc_lum < 90 and bg_lum < 120:
+        return "#ffffff"
+        
+    return text_color
+
+
 class TranslationOverlay(QMainWindow):
     """
     翻訳結果を表示するオーバーレイウィンドウ。
@@ -47,6 +95,7 @@ class TranslationOverlay(QMainWindow):
     font_size_calculated = pyqtSignal(str, int)
     status_updated = pyqtSignal(str)
     clear_requested = pyqtSignal()
+    fallback_triggered = pyqtSignal()
 
     def __init__(
         self,
@@ -65,6 +114,7 @@ class TranslationOverlay(QMainWindow):
         
         # 固有IDでラベルコンポーネントを管理
         self.active_labels = {}
+        self.csharp_overlays = {}  # C# WPFオーバーレイへの送信用シリアライズデータを厳格に分離管理（混在バグ根絶）
         self.valid_cids = set()
 
         # --- C# WPF Overlay 管理属性 ---
@@ -78,6 +128,11 @@ class TranslationOverlay(QMainWindow):
         self._apply_click_through()
         self._connect_signals()
 
+        # C# WPFオーバーレイ動作時は、PyQt側の透明ウィンドウ自体を画面から完全に非表示にし、
+        # Windowsのグラフィックス合成（DWM）負荷をほぼ完全に「ゼロ」に抑え込む（超省電力化・超低CPU負荷化）
+        if self.use_csharp:
+            self.hide()
+
     def _init_csharp_overlay(self, force_enabled: bool):
         """C# WPF Overlayの検出およびバックグラウンド起動を試みる"""
         if not force_enabled:
@@ -88,8 +143,10 @@ class TranslationOverlay(QMainWindow):
         base_dir = os.path.dirname(rtt_dir) # D:\SecreAI_Build 相当
         
         potential_paths = [
-            os.path.join(base_dir, "WPF", "RTtranslator_CS_Overlay.exe"),
             os.path.join(rtt_dir, "RTtranslator_CS_Overlay.exe"),
+            os.path.join(base_dir, "RTtranslator_CS_Overlay.exe"),
+            os.path.join(base_dir, "WPF", "bin", "Release", "RTtranslator_CS_Overlay.exe"),
+            os.path.join(base_dir, "WPF", "RTtranslator_CS_Overlay.exe"),
             os.path.join(os.path.abspath("."), "RTtranslator_CS_Overlay.exe"),
         ]
         
@@ -103,15 +160,15 @@ class TranslationOverlay(QMainWindow):
             print("[C# Overlay] 実行ファイルが見つかりません。PyQtモードで起動します。")
             return
 
-        # 既にポート5002で起動中か確認
+        # ゾンビプロセスの多重起動およびポート5002の競合を100%排除するため、
+        # 疎通チェックによる古いプロセスの再利用は行わず、無条件でOSレベルのタスクキルを実行します。
         try:
-            resp = requests.get(f"{self.cs_api_url}/api/status", timeout=0.3)
-            if resp.status_code == 200:
-                print("[C# Overlay] 既存のC#プロセスが既に起動しています。")
-                self.use_csharp = True
-                return
-        except:
-            pass
+            subprocess.run(["taskkill", "/F", "/IM", "RTtranslator_CS_Overlay.exe"], 
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=0x08000000)
+            print("[C# Overlay] ポート競合を防ぐため、以前の古い C# プロセスを一掃しました。")
+            time.sleep(0.3) # ポートがOSにより完全に解放されるのを待つウェイト
+        except Exception as kill_e:
+            print(f"[C# Overlay] 既存プロセスのクリーンアップに失敗: {kill_e}")
 
         # 起動していない場合は新規起動
         try:
@@ -184,16 +241,38 @@ class TranslationOverlay(QMainWindow):
         self.single_translation_received.connect(self._on_single_translation_received)
         self.status_updated.connect(self._on_status_updated)
         self.clear_requested.connect(self._on_clear_requested)
+        self.fallback_triggered.connect(self._on_fallback_triggered)
+
+    @pyqtSlot()
+    def _on_fallback_triggered(self):
+        """C#通信エラー時にPyQt描画モードへ安全に移行する"""
+        if not self.use_csharp:
+            return
+        print("[UI] PyQt描画モードへ切り替えます。ラベルキャッシュをクリアし、透過ウィンドウを表示します。")
+        self.use_csharp = False
+        
+        # dictオブジェクトを完全にパージして、次回描画時にQLabelが正しく新規作成されるようにする
+        for cid in list(self.active_labels.keys()):
+            if isinstance(self.active_labels[cid], dict):
+                del self.active_labels[cid]
+        
+        self.show()
 
     def sync_active_ids(self, active_ids: set):
         """画面から消えたID（active_idsに含まれないもの）のラベルを破棄する"""
         self.valid_cids = active_ids
         
         if self.use_csharp:
+            changed = False
             for cid in list(self.active_labels.keys()):
                 if cid not in active_ids:
                     del self.active_labels[cid]
-            self._push_csharp_update()
+            for cid in list(self.csharp_overlays.keys()):
+                if cid not in active_ids:
+                    del self.csharp_overlays[cid]
+                    changed = True
+            if changed:
+                self._push_csharp_update()
         else:
             for cid in list(self.active_labels.keys()):
                 if cid not in active_ids:
@@ -205,15 +284,21 @@ class TranslationOverlay(QMainWindow):
         if cid in self.active_labels:
             if self.use_csharp:
                 # C#座標のリアルタイム同期更新
-                item = self.active_labels[cid]
-                nx = self.x() + int(rect["x"]) - 3
-                ny = self.y() + int(rect["y"])
-                if abs(item["x"] - nx) > 3 or abs(item["y"] - ny) > 3:
-                    item["x"] = nx
-                    item["y"] = ny
-                    self._push_csharp_update()
+                item = self.csharp_overlays.get(cid)
+                if item:
+                    nx = self.x() + int(rect["x"]) - 3
+                    ny = self.y() + int(rect["y"])
+                    if abs(item["x"] - nx) > 3 or abs(item["y"] - ny) > 3:
+                        item["x"] = nx
+                        item["y"] = ny
+                        # 個別の即時HTTP送信スレッド起動を完全に廃止し、フレーム単位で一括バッチ送信させてCPU/スレッド負荷を劇的に低減！
             else:
                 label = self.active_labels[cid]
+                # フォールバック時に dict が残っている可能性があるため、型チェックを行う
+                if isinstance(label, dict):
+                    del self.active_labels[cid]
+                    return
+
                 # 座標を更新（新規生成時と同じ x-3, y に合わせる）
                 nx = int(rect["x"]) - 3
                 ny = int(rect["y"])
@@ -234,18 +319,90 @@ class TranslationOverlay(QMainWindow):
         nx, ny = int(rect["x"]), int(rect["y"])
         nw, nh = int(rect["w"]), int(rect["h"])
 
+        bg_color = chunk.get("bg_color", "rgba(0, 0, 0, 0.63)")
+        text_color = chunk.get("text_color", "#ffffff")
+        
+        # Ensure contrast dynamically before displaying
+        text_color = ensure_contrast(text_color, bg_color)
+
+        # --- 共通フォントファミリーおよびフィッティングパラメータの決定 ---
+        target_base = target_lang.split("-")[0].lower()
+        if target_base == "ko":
+            font_family = "'Malgun Gothic', 'Yu Gothic UI', sans-serif"
+            font_min = 10
+            boost = 4
+        elif target_base in ["ja", "zh"]:
+            font_family = "'Yu Gothic UI', 'Meiryo', 'MS Gothic', sans-serif"
+            font_min = 10
+            boost = 4
+        else:
+            font_family = "'Yu Gothic UI', sans-serif"
+            font_min = 8
+            boost = 0
+
+        # 仮のラベルを使用して、裏で PyQt 側の高精度バイナリサーチを行って最適なフォントサイズを算出する
+        # キャッシュされたフォントサイズがある場合でも、文字数が大幅に変化している（例：再翻訳で長さが変わった）場合は
+        # フィッティングをスキップせず、再度高精度な自動フィッティング計算を実行する（文字数変化による巨大化バグの完全根絶）
+        best_px = font_size
+        old_item = self.csharp_overlays.get(cid) if self.use_csharp else self.active_labels.get(cid)
+        old_text = old_item.get("text", "") if isinstance(old_item, dict) else (getattr(old_item, "_last_text", "") if old_item else "")
+        
+        if best_px is None or (old_text and abs(len(translated) - len(old_text)) > 2):
+            best_px = None
+            
+        if best_px is None:
+            # 測定用のテンポラリラベル（無ければ作成）
+            if not hasattr(self, '_measure_label'):
+                self._measure_label = QLabel(self.central)
+                self._measure_label.setWordWrap(True)
+                self._measure_label.setTextFormat(Qt.TextFormat.RichText)
+                self._measure_label.hide()
+            
+            lines_count = chunk.get("lines_count", 1)
+            text_to_render = translated.replace('\n', '').replace('\r', '')
+            
+            # 微調整用マージン
+            measure_w = nw
+            measure_h = nh
+            if lines_count == 1 and '\n' not in translated:
+                if ' ' not in translated.strip() and '　' not in translated.strip():
+                    measure_w += 2
+                    measure_h += 2
+
+                lo, hi = font_min, 32
+                best_px = font_min
+                while lo <= hi:
+                    mid = (lo + hi) // 2
+                    html = f'<div style="font-size: {mid}px; font-weight: bold; font-family: {font_family}; white-space: nowrap; line-height: 1.0;"><nobr>{text_to_render}</nobr></div>'
+                    self._measure_label.setText(html)
+                    self._measure_label.adjustSize()
+                    if self._measure_label.width() <= measure_w and self._measure_label.height() <= measure_h:
+                        best_px = mid
+                        lo = mid + 1
+                    else:
+                        hi = mid - 1
+            else:
+                lo, hi = font_min, 32
+                best_px = font_min
+                while lo <= hi:
+                    mid = (lo + hi) // 2
+                    html = f'<div style="font-size: {mid}px; font-weight: bold; font-family: {font_family}; line-height: 1.0;">{text_to_render}</div>'
+                    self._measure_label.setText(html)
+                    self._measure_label.setFixedWidth(measure_w)
+                    self._measure_label.adjustSize()
+                    if self._measure_label.height() <= measure_h:
+                        best_px = mid
+                        lo = mid + 1
+                    else:
+                        hi = mid - 1
+            
+            # キャッシュへの保存をトリガー
+            self.font_size_calculated.emit(cid, best_px)
+
         # --- C# WPF オーバーレイ描画ルート ---
         if self.use_csharp:
             abs_x = self.x() + nx - 3
             abs_y = self.y() + ny
-
-            bg_color = chunk.get("bg_color", "rgba(0, 0, 0, 0.63)")
-            text_color = chunk.get("text_color", "#ffffff")
-
-            lines_count = chunk.get("lines_count", 1)
-            if font_size is None:
-                line_height_px = nh / max(1, lines_count)
-                font_size = max(10, min(32, int(line_height_px) + 2))
 
             item = {
                 "id": cid,
@@ -254,11 +411,12 @@ class TranslationOverlay(QMainWindow):
                 "y": abs_y,
                 "width": nw,
                 "height": nh,
-                "font_size": font_size,
+                "font_size": best_px,  # PyQtの完璧な自動フィッティングアルゴリズムが算出したフォントサイズ！
                 "font_color": text_color,
                 "bg_color": bg_color
             }
-            self.active_labels[cid] = item
+            self.csharp_overlays[cid] = item
+            self.active_labels[cid] = item  # C#モード時もアクティブIDの管理辞書に登録し、消去検知や追従位置更新を完全に機能させる！
             self._push_csharp_update()
             return
 
@@ -266,6 +424,14 @@ class TranslationOverlay(QMainWindow):
         # すでに表示中のラベルがある場合のガードと高速更新
         if cid in self.active_labels:
             label = self.active_labels[cid]
+            if isinstance(label, dict):
+                # 古いC#用の辞書が残っている場合は削除して新規QLabelを作成する
+                del self.active_labels[cid]
+                label = QLabel(self.central)
+                label.setWordWrap(True)
+                label.setTextFormat(Qt.TextFormat.RichText)
+                self.active_labels[cid] = label
+
             # 1. テキスト内容が同じなら位置・サイズの更新のみ（再描画スキップ）
             if getattr(label, '_last_text', '') == translated:
                 label.move(nx, ny)
@@ -283,27 +449,6 @@ class TranslationOverlay(QMainWindow):
         lines_count = chunk.get("lines_count", 1)
         x, y, w, h = nx, ny, nw, nh
         
-        # 翻訳先言語に応じたフォントファミリーの決定
-        target_base = target_lang.split("-")[0].lower()
-        if target_base == "ko":
-            font_family = "'Malgun Gothic', 'Yu Gothic UI', sans-serif"
-            font_min = 10
-            boost = 4
-        elif target_base in ["ja", "zh"]:
-            font_family = "'Yu Gothic UI', 'Meiryo', 'MS Gothic', sans-serif"
-            font_min = 10
-            boost = 4
-        else:
-            font_family = "'Yu Gothic UI', sans-serif"
-            font_min = 8
-            boost = 0
-
-        line_height_px = h / max(1, lines_count)
-        base_px = max(font_min, min(32, int(line_height_px) + boost))
-        
-        bg_color = chunk.get("bg_color", "rgba(0, 0, 0, 1.0)")
-        text_color = chunk.get("text_color", "#eeeeee")
-        
         label.setStyleSheet(f"""
             QLabel {{
                 background-color: {bg_color};
@@ -315,8 +460,6 @@ class TranslationOverlay(QMainWindow):
         """)
         
         label_w = w
-        best_px = font_size # 保存されたサイズがあればそれを使う
-        
         if lines_count == 1 and '\n' not in translated:
             if ' ' not in translated.strip() and '　' not in translated.strip():
                 w += 2
@@ -325,22 +468,6 @@ class TranslationOverlay(QMainWindow):
             
             label.setWordWrap(False)
             text_to_render = translated.replace('\n', '').replace('\r', '')
-            
-            if best_px is None:
-                lo, hi = font_min, 32
-                best_px = font_min
-                while lo <= hi:
-                    mid = (lo + hi) // 2
-                    html = f'<div style="font-size: {mid}px; font-weight: bold; font-family: {font_family}; white-space: nowrap; line-height: 1.0;"><nobr>{text_to_render}</nobr></div>'
-                    label.setText(html)
-                    label.adjustSize()
-                    if label.width() <= label_w and label.height() <= h:
-                        best_px = mid
-                        lo = mid + 1
-                    else:
-                        hi = mid - 1
-                # 計算結果を通知
-                self.font_size_calculated.emit(cid, best_px)
             
             margin_top = 0
             if best_px >= h * 0.8:
@@ -352,23 +479,6 @@ class TranslationOverlay(QMainWindow):
             label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         else:
             text_to_render = translated.replace('\n', '').replace('\r', '')
-            if best_px is None:
-                lo, hi = font_min, 32
-                best_px = font_min
-                while lo <= hi:
-                    mid = (lo + hi) // 2
-                    html = f'<div style="font-size: {mid}px; font-weight: bold; font-family: {font_family}; line-height: 1.0;">{text_to_render}</div>'
-                    label.setText(html)
-                    label.setFixedWidth(label_w)
-                    label.adjustSize()
-                    if label.height() <= h:
-                        best_px = mid
-                        lo = mid + 1
-                    else:
-                        hi = mid - 1
-                # 計算結果を通知
-                self.font_size_calculated.emit(cid, best_px)
-            
             final_html = f'<div style="font-size: {best_px}px; font-weight: bold; font-family: {font_family}; line-height: 1.0;">{text_to_render}</div>'
             label.setText(final_html)
             label.setFixedSize(w, h)
@@ -388,14 +498,8 @@ class TranslationOverlay(QMainWindow):
         
         # C#側の形式にデータを整形
         overlays_list = []
-        # PyQt座標追従の geometry をベースに絶対座標を再計算
-        target_x = self.x()
-        target_y = self.y()
-
-        for cid, item in list(self.active_labels.items()):
-            # 常に最新のウィンドウ座標をオフセットとして適用する
-            # item内のx, yはローカル座標からの計算なので、self.x()/self.y()を最新にする
-            # 注: show_translation時点で item["x"] に self.x() を加算してあるが、ドラッグやリサイズで窓が動いた場合に対応
+        for cid, item in list(self.csharp_overlays.items()):
+            # シリアライズデータのみを確実に追加（QLabelウィジェットの混在汚染を完全シャットアウト）
             overlays_list.append(item)
 
         payload = {"overlays": overlays_list}
@@ -404,10 +508,17 @@ class TranslationOverlay(QMainWindow):
             try:
                 resp = requests.post(f"{self.cs_api_url}/api/update", json=payload, timeout=0.5)
                 if resp.status_code != 200:
-                    raise Exception("Status error")
+                    raise Exception(f"HTTP {resp.status_code}")
+                # 成功したらエラーカウンターをリセット
+                self._cs_error_count = 0
             except Exception as e:
-                print(f"[C# Overlay Error] 同期に失敗しました: {e} | PyQtモードへフォールバックします")
-                self.use_csharp = False
+                self._cs_error_count = getattr(self, "_cs_error_count", 0) + 1
+                if self._cs_error_count >= 3:
+                    # 3回連続失敗した場合のみフォールバック（一時的なタイムアウトで切り替わるバグを防止）
+                    print(f"[C# Overlay Error] {self._cs_error_count}回連続失敗: {e} | PyQtモードへフォールバックします")
+                    self.fallback_triggered.emit()
+                else:
+                    print(f"[C# Overlay Warning] 通信失敗({self._cs_error_count}/3): {e}")
                 
         # ネットワークI/Oでメインスレッドをブロックしないよう非同期実行
         threading.Thread(target=_task, daemon=True).start()
@@ -415,7 +526,11 @@ class TranslationOverlay(QMainWindow):
     def _sort_labels_z_order(self):
         """小さなラベル（内側の要素）が大きなラベル（外側の背景）に隠れないように、
         面積の大きいものから順に下になるようにZオーダーを並べ替える。"""
-        labels = list(self.active_labels.values())
+        # C#モード用のdictオブジェクトが混在する可能性を完全に排除し、PyQtのウィジェットのみをソート対象にする
+        labels = [lbl for lbl in self.active_labels.values() if isinstance(lbl, QWidget)]
+        if not labels:
+            return
+            
         # 面積（width * height）の大きい順に並べ替える
         labels.sort(key=lambda lbl: lbl.width() * lbl.height(), reverse=True)
         for lbl in labels:
@@ -425,12 +540,28 @@ class TranslationOverlay(QMainWindow):
     def _on_status_updated(self, status: str):
         self.status_label.setText(status)
         self.status_label.adjustSize()
+        
+        # C# WPF 側へもステータス文字列と現在のウィンドウ位置を送信する！
+        if self.use_csharp:
+            payload = {
+                "status": status,
+                "x": self.x(),
+                "y": self.y(),
+                "width": self.width()
+            }
+            def _send_status():
+                try:
+                    requests.post(f"{self.cs_api_url}/api/set_status", json=payload, timeout=0.3)
+                except:
+                    pass
+            threading.Thread(target=_send_status, daemon=True).start()
 
     @pyqtSlot()
     def _on_clear_requested(self):
         """スレッドセーフにすべてのラベルを消去する"""
         if self.use_csharp:
             self.active_labels.clear()
+            self.csharp_overlays.clear()
             self.valid_cids.clear()
             try:
                 requests.post(f"{self.cs_api_url}/api/clear", timeout=0.5)
@@ -440,6 +571,7 @@ class TranslationOverlay(QMainWindow):
             for label in self.active_labels.values():
                 label.deleteLater()
             self.active_labels.clear()
+            self.csharp_overlays.clear()
             self.valid_cids.clear()
             self.update()
 
@@ -487,6 +619,15 @@ class TranslationOverlay(QMainWindow):
             except:
                 pass
         super().closeEvent(event)
+
+    def hideEvent(self, event):
+        """非表示（翻訳停止）時にもC# Overlayプロセスも安全にキルする"""
+        if self.use_csharp:
+            try:
+                requests.post(f"{self.cs_api_url}/api/stop", timeout=0.5)
+            except:
+                pass
+        super().hideEvent(event)
 
     def mousePressEvent(self, event):
         """クリック透過でない場合のドラッグ移動対応。"""

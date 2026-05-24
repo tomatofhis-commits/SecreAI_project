@@ -1,23 +1,74 @@
 @echo off
-echo ========================================
-echo  SecreAI v1.1.4 - Nuitka Build Script
-echo ========================================
-echo.
-echo Starting build... this may take a while.
+title SecreAI Integrated Build Script (C# WPF Single-out)
+echo ========================================================
+echo  SecreAI v1.2.0-beta - Integrated Build System
+echo ========================================================
 echo.
 
-python -m nuitka --standalone --enable-plugin=tk-inter --jobs=12 -o secreAI.exe --include-package=google.genai --include-package=google.auth --include-package=openai --include-package=ollama --include-package=tavily --include-package=httpx --include-package=psutil --include-package=scripts --include-package=chromadb --include-package=numpy --include-package=pygame --include-package=pystray --include-package=keyboard --include-package=pygetwindow --include-package=PIL --include-package=onnxruntime --include-package=requests --include-package=flask --include-package=edge_tts --include-package=sounddevice --include-package=customtkinter --include-package=speech_recognition --include-package=websockets --include-package=asyncio --include-package=pydantic --include-package=typing_extensions --include-package=posthog --include-package-data=onnxruntime --include-package-data=chromadb --include-package-data=customtkinter --include-module=settings_ui --include-module=setup_wizard --include-module=scripts.game_ai --include-module=scripts.update_memory --include-module=scripts.db_maintenance --include-module=scripts.intersecting_ai --include-module=scripts.chromadb_pool --include-module=scripts.clear_history --include-module=scripts.fix_history --include-module=scripts.give_feedback --include-module=scripts.api_cache_system --include-module=scripts.memory_viewer --include-module=scripts.config_manager --include-module=scripts.error_handler --include-module=scripts.stop_ai --include-module=scripts.game_ai_audio_improvements --include-module=scripts.optimization_config --include-module=scripts.optimized_task_queue --include-module=PIL._tkinter_finder --include-data-dir=data/lang=data/lang --noinclude-data-files=data/*.json --noinclude-data-files=data/*.png --windows-console-mode=disable --lto=no --mingw64 --assume-yes-for-downloads --remove-output --windows-icon-from-ico=SecreAI.ico --nofollow-import-to=torch main_hub.py
+set MSBUILD_EXE=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
+set ISCC_EXE=G:\Program Files (x86)\Inno Setup 6\ISCC.exe
 
-if %ERRORLEVEL% neq 0 (
-    echo.
-    echo [ERROR] Build failed.
+:: 1. Build WPF (C#)
+echo ========================================================
+echo  1. Building WPF (C#) SecreAI Hub...
+echo ========================================================
+if not exist "%MSBUILD_EXE%" (
+    echo [ERROR] MSBuild.exe not found at: %MSBUILD_EXE%
     pause
     exit /b 1
 )
 
+:: Terminate active processes to release file locks
+taskkill /F /IM RTtranslator_CS_Overlay.exe >nul 2>&1
+taskkill /F /IM SecreAI_Hub.exe >nul 2>&1
+
+"%MSBUILD_EXE%" "d:\SecreAI_Build\WPF\SecreAI_Hub.csproj" /p:Configuration=Release /p:Platform=AnyCPU /p:FrameworkPathOverride="C:\Windows\Microsoft.NET\Framework64\v4.0.30319" /t:Rebuild
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo [ERROR] SecreAI Hub Compilation failed.
+    pause
+    exit /b 1
+)
+
+copy /Y "d:\SecreAI_Build\WPF\bin\Release\SecreAI_Hub.exe" "d:\SecreAI_Build\SecreAI_Hub.exe"
+echo WPF Build Done!
+
+:: 2. Setup/Verify Portable Python Runtime
+echo ========================================================
+echo  2. Checking/Building Portable Python Runtime...
+echo ========================================================
+python d:\SecreAI_Build\build_python_runtime.py
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo [ERROR] Portable Python Runtime setup failed.
+    pause
+    exit /b 1
+)
+
+:: 3. Run Inno Setup Compiler
+echo ========================================================
+echo  3. Building Installer (Inno Setup)...
+echo ========================================================
+if not exist "%ISCC_EXE%" goto skip_installer
+
+"%ISCC_EXE%" "d:\SecreAI_Build\setup_script.iss"
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo [ERROR] Installer build failed.
+    pause
+    exit /b 1
+)
+goto build_success
+
+:skip_installer
+echo [WARNING] ISCC.exe not found at: %ISCC_EXE%
+echo Skipping installer build. Files are compiled in workspace.
+pause
+exit /b 0
+
+:build_success
 echo.
-echo ========================================
-echo  Build Done! Output: main_hub.dist\secreAI.exe
-echo ========================================
-echo.
+echo ========================================================
+echo  Integrated Build Completed Successfully!
+echo ========================================================
 pause

@@ -29,36 +29,50 @@ def encode_image_to_base64(image_path):
 # --- 2. 各種 API クライアントの並列呼び出し用関数 ---
 
 def call_gemini_sync(query, image_obj, system_instr, config):
-    """Gemini 2.5 Flash への問い合わせ (同期型SDKをスレッドで実行)"""
     try:
-        model_id = config.get("MODEL_ID", "gemini-2.5-flash")
+        model_id = config.get("MODEL_ID", "gemini-3.5-flash")
+        from config_manager import parse_model_name
+        actual_model_id, level = parse_model_name(model_id)
+
         client = genai.Client(api_key=config.get("GEMINI_API_KEY"))
-        
+
         safe_query = str(query) if not isinstance(query, str) else query
         contents = [safe_query]
         if image_obj:
             contents.append(image_obj)
 
         gemini_config_obj = {"system_instruction": system_instr}
-        thinking_budget = config.get("THINKING_BUDGET", "medium")
-        if model_id == "gemini-3.1-flash-lite":
-            gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}
+        if level is None:
+            thinking_budget = config.get("THINKING_BUDGET", "medium").lower()
+            level = thinking_budget
+
+        is_thinking_supported = (
+            actual_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
+        )
+
+        if is_thinking_supported and level:
+            if actual_model_id == "gemini-3.5-flash":
+                if level not in ("medium", "high"):
+                    level = "medium"
+            gemini_config_obj["thinking_config"] = {"thinking_level": level.upper()}
 
         response = client.models.generate_content(
-            model=model_id,
+            model=actual_model_id,
             config=gemini_config_obj,
             contents=contents
         )
-        return f"【Gemini ({model_id}) の見解】\n{response.text}"
+        return f"【Gemini ({actual_model_id}) の回答】\n{response.text}"
     except Exception as e:
         return f"Gemini Error: {e}"
 
 async def call_openai_async(query, image_path, system_instr, config):
-    """OpenAI への問い合わせ (完全非同期)"""
     try:
-        model_id = config.get("MODEL_ID_GPT", "gpt-5") # 2026年時点の標準
+        model_id = config.get("MODEL_ID_GPT", "gpt-5")
+        from config_manager import parse_model_name
+        actual_model_id, level = parse_model_name(model_id)
+
         client = AsyncOpenAI(api_key=config.get("OPENAI_API_KEY"))
-        
+
         content_list = [{"type": "text", "text": query}]
         if image_path and os.path.exists(image_path):
             base64_image = encode_image_to_base64(image_path)
@@ -68,14 +82,18 @@ async def call_openai_async(query, image_path, system_instr, config):
                     "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
                 })
 
-        response = await client.chat.completions.create(
-            model=model_id,
-            messages=[
+        openai_kwargs = {
+            "model": actual_model_id,
+            "messages": [
                 {"role": "system", "content": system_instr},
                 {"role": "user", "content": content_list}
             ]
-        )
-        return f"【OpenAI ({model_id}) の見解】\n{response.choices[0].message.content}"
+        }
+        if actual_model_id in ("o1", "o3-mini") and level:
+            openai_kwargs["reasoning_effort"] = level
+
+        response = await client.chat.completions.create(**openai_kwargs)
+        return f"【OpenAI ({actual_model_id}) の回答】\n{response.choices[0].message.content}"
     except Exception as e:
         return f"OpenAI Error: {e}"
 
@@ -168,6 +186,9 @@ async def generate_intersecting_response(query, image_path, config, root, lang_d
             messages=[{'role': 'user', 'content': final_prompt}]
         )
         answer_text = response['message']['content']
+        if answer_text:
+            # AIの返答からハッシュ記号（#、＃）を除去（読み上げや表示のバグ防止）
+            answer_text = answer_text.replace('#', '').replace('＃', '')
         
         # STEP 4: 履歴保存
         if answer_text:

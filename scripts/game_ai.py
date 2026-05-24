@@ -1,4 +1,13 @@
 import subprocess, sys, os, json, threading, chromadb, ctypes, re, time, queue, requests, pygame, psutil
+
+# ポータブルPython (embeddable python) 用のパス解決
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+scripts_path = os.path.join(base_dir, "scripts")
+if scripts_path not in sys.path:
+    sys.path.insert(0, scripts_path)
+if base_dir not in sys.path:
+    sys.path.insert(0, base_dir)
+
 import pygetwindow as gw
 from PIL import ImageGrab, ImageTk, Image
 import speech_recognition as sr
@@ -186,6 +195,23 @@ def send_log_to_hub(message, is_error=False, error_code=None):
         requests.post(url, json=payload, timeout=1)
     except:
         print(message)
+
+def trigger_overlay_state(text, image_path, alpha_val, display_time, status, overlay_queue=None):
+    if overlay_queue:
+        overlay_queue.put((text, image_path, alpha_val, display_time, status))
+    else:
+        try:
+            url = "http://127.0.0.1:5000/api/overlay"
+            payload = {
+                "text": text or "",
+                "image_path": image_path or "",
+                "alpha_val": alpha_val,
+                "display_time": display_time,
+                "status": status
+            }
+            requests.post(url, json=payload, timeout=1)
+        except:
+            pass
 
 def load_lang_file(lang_code):
     path = os.path.join(APP_ROOT, "data", "lang", f"{lang_code}.json")
@@ -486,9 +512,8 @@ def execute_background_search(search_query, config, root, session_data):
                         session_id, session_getter, overlay_queue = session_data[0], session_data[1], session_data[2]
                         if session_id and session_getter and session_getter() != session_id: return
 
-                        if overlay_queue:
-                            overlay_queue.put((None, None, "OFF", 0, 'idle'))
-                            time.sleep(0.1)
+                        trigger_overlay_state(None, None, "OFF", 0, 'idle', overlay_queue)
+                        time.sleep(0.1)
                         
                         prefix = ai_p.get("search_appendix_prefix", "Here is some additional information.")
                         speak_and_show(f"{prefix} {summary}", None, config, root, session_data, show_window=True, skip_idle=False)
@@ -590,9 +615,8 @@ def execute_background_search(search_query, config, root, session_data):
                 time.sleep(0.5)
 
             overlay_queue = session_data[2]
-            if overlay_queue:
-                overlay_queue.put((None, None, "OFF", 0, 'idle'))
-                time.sleep(0.1)
+            trigger_overlay_state(None, None, "OFF", 0, 'idle', overlay_queue)
+            time.sleep(0.1)
             
             prefix = ai_p.get("search_appendix_prefix", "Here is some additional information.")
             speak_and_show(f"{prefix} {summary}", None, config, root, session_data, show_window=True, skip_idle=False)
@@ -812,7 +836,18 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
                 base64_image = base64.b64encode(image_bytes).decode('utf-8')
                 user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}})
             messages.append({"role": "user", "content": user_content})
-            res = openai_client.chat.completions.create(model=model_id, messages=messages)
+            from config_manager import parse_model_name
+            actual_model_id, level = parse_model_name(model_id)
+            
+            openai_kwargs = {
+                "model": actual_model_id,
+                "messages": messages
+            }
+            if actual_model_id in ("o1", "o3-mini") and level:
+                openai_kwargs["reasoning_effort"] = level
+                send_log_to_hub(f"システム: OpenAI 思考モデルを reasoning_effort={level} で呼び出し...")
+                
+            res = openai_client.chat.completions.create(**openai_kwargs)
             answer_text = res.choices[0].message.content
 
         elif provider == "gemini":
@@ -820,25 +855,39 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
                 msg = log_m.get("ai_init_error", "{provider} initialization error: {e}").format(provider="Gemini", e="APIキーが未設定またはクライアント初期化失敗")
                 send_log_to_hub(msg, is_error=True, error_code="api_key_invalid")
                 return "エラー: GeminiクライアントがNullです。APIキーを設定画面で確認してください。"
-            model_id = config.get("MODEL_ID", "gemini-2.5-flash")
+            model_id = config.get("MODEL_ID", "gemini-3.5-flash")
+            from config_manager import parse_model_name
+            actual_model_id, level = parse_model_name(model_id)
+
             gemini_history = []
             for h in history[-10:]:
                 role = "model" if h.startswith("AI:") else "user"
                 content = h.replace("AI:", "").replace("You: ", "").replace("あなた: ", "").strip()
                 gemini_history.append({"role": role, "parts": [{"text": content}]})
 
-            # --- 思考レベル設定 (gemini-3.1-flash-lite-preview のみ有効) ---
-            thinking_budget = config.get("THINKING_BUDGET", "medium") # THINKING_BUDGET
-            if model_id == "gemini-3.1-flash-lite-preview":
+            # --- 思考レベル設定 (gemini-3.1-flash-lite / gemini-3.5-flash など) ---
+            if level is None:
+                thinking_budget = config.get("THINKING_BUDGET", "medium").lower()
+                level = thinking_budget
+            
+            is_thinking_supported = (
+                actual_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
+            )
+            
+            if is_thinking_supported and level:
+                if actual_model_id == "gemini-3.5-flash":
+                    if level not in ("medium", "high"):
+                        level = "medium"
+                
                 gemini_config_obj = {
                     "system_instruction": system_instr,
-                    "thinking_config": {"thinking_level": thinking_budget.upper()}
+                    "thinking_config": {"thinking_level": level.upper()}
                 }
-                send_log_to_hub(f"システム: 思考レベル {thinking_budget} で呼び出し中...")
+                send_log_to_hub(f"システム: 思考レベル {level.upper()} で呼び出し...")
             else:
                 gemini_config_obj = {"system_instruction": system_instr}
 
-            chat = gemini_client.chats.create(model=model_id, config=gemini_config_obj, history=gemini_history)
+            chat = gemini_client.chats.create(model=actual_model_id, config=gemini_config_obj, history=gemini_history)
             
             # --- Type Guard: Ensure prompt is string ---
             safe_prompt = str(prompt) if not isinstance(prompt, str) else prompt
@@ -866,6 +915,9 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
             answer_text = res.text
 
         if answer_text:
+            # AIの返答からハッシュ記号（#、＃）を除去（読み上げや表示のバグ防止）
+            answer_text = answer_text.replace('#', '').replace('＃', '')
+
             # キャッシュに保存（次回の高速化・コスト削減）
             if api_cache:
                 try:
@@ -998,6 +1050,9 @@ def managed_mixer(config):
 
 def speak_and_show(text, image_path=None, config=None, root=None, session_data=None, show_window=True, skip_idle=False):
     if root is None: root = APP_ROOT
+    if text:
+        text = text.replace('#', '').replace('＃', '')
+        
     # session_data: (session_id, session_getter, overlay_queue, lang_data)
     s_data = session_data if session_data else (None, None, None, None)
     session_id, session_getter, overlay_queue = s_data[0], s_data[1], s_data[2]
@@ -1016,10 +1071,9 @@ def speak_and_show(text, image_path=None, config=None, root=None, session_data=N
     lang_code = config.get("LANGUAGE", "ja")
     alpha = config.get("WINDOW_ALPHA", 0.6)
     
-    if show_window and str(alpha) != "OFF" and overlay_queue:
+    if show_window and str(alpha) != "OFF":
         dt = config.get("DISPLAY_TIME", 60)
-        # Put request to main thread queue with status 'speaking'
-        overlay_queue.put((text, image_path, float(alpha), dt, 'speaking'))
+        trigger_overlay_state(text, image_path, float(alpha), dt, 'speaking', overlay_queue)
 
     # 新規追加：字幕システムがONならバックグラウンドでWebSocketへテキスト送信する
     if config.get("ENABLE_SUBTITLE", False):
@@ -1040,11 +1094,10 @@ def speak_and_show(text, image_path=None, config=None, root=None, session_data=N
             run_edge_tts_speak(text, lang_code, config, root, session_data)
     finally:
         # Reset indicator to idle after speech finishes unless explicitly skipped
-        if overlay_queue:
-            if not skip_idle:
-                overlay_queue.put((None, None, "OFF", 0, 'idle'))
-            # 少し待機してからリセット（音声再生完了を確実にする）
-            time.sleep(0.1)
+        if not skip_idle:
+            trigger_overlay_state(None, None, "OFF", 0, 'idle', overlay_queue)
+        # 少し待機してからリセット（音声再生完了を確実にする）
+        time.sleep(0.1)
 
 def run_voicevox_speak(text, config, root, session_data):
     """改善版: リソース管理を強化したVOICEVOX音声再生"""
@@ -1265,8 +1318,7 @@ def get_voice_input(guide, config, root, lang_data, session_data, image_path=Non
             send_log_to_hub(lang_data["log_messages"]["listening"])
             
             # Send status:listening to overlay
-            if session_data and session_data[2]:
-                session_data[2].put(("", None, "OFF", 0, 'listening'))
+            trigger_overlay_state("", None, "OFF", 0, 'listening', session_data[2] if session_data else None)
             
             # セッションチェック
             if session_id and session_getter and session_getter() != session_id: return None
@@ -1311,8 +1363,8 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
         res = None
 
         # 返答待ちインジケーター（返答待ちカラー）を開始
-        if overlay_queue and query:
-            overlay_queue.put(("", None, "OFF", 0, 'thinking'))
+        if query:
+            trigger_overlay_state("", None, "OFF", 0, 'thinking', overlay_queue)
 
         if config.get("USE_INTERSECTING_AI", False):
             try:
@@ -1358,6 +1410,16 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
     except Exception as e:
         msg = log_m.get("execution_error", "Execution error: {e}").format(e=e)
         send_log_to_hub(msg, is_error=True)
+    finally:
+        global _thread_pool_executor
+        if _thread_pool_executor is not None:
+            try:
+                wait_msg = log_m.get("background_wait", "システム: バックグラウンドタスクの完了を待機中...")
+                send_log_to_hub(wait_msg)
+            except:
+                send_log_to_hub("システム: バックグラウンドタスクの完了を待機中...")
+            _thread_pool_executor.shutdown(wait=True)
+            _thread_pool_executor = None
 
 if __name__ == "__main__":
     m = sys.argv[1] if len(sys.argv) > 1 else "voice"

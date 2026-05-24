@@ -126,7 +126,7 @@
     "search_usage_grounding_short": "Google (今日): {count}回",
     "search_usage_tavily_short": "Tavily (今月): {count}回",
     "deprecation_notice": "⚠  Gemini 2.5 シリーズ 終了予定日\nGemini 2.5 Flash: 2026年6月17日　／　Gemini 2.5 Flash-Lite: 2026年7月22日",
-    "thinking_level_label": "思考レベル (3.1-flash-lite のみ):",
+    "thinking_level_label": "思考レベル (3.1-flash-lite / 3.5-flash のみ):",
     "thinking_min": "最小",
     "thinking_low": "低",
     "thinking_mid": "中",

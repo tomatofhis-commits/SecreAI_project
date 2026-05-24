@@ -20,46 +20,57 @@ except ImportError:
 def get_ai_response(prompt, config):
     provider = config.get("DB_PROVIDER", config.get("AI_PROVIDER", "gemini")).lower()
     model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-2.5-flash"))
-    
+
     try:
+        from config_manager import parse_model_name
+        actual_model_id, level = parse_model_name(model_id)
+
         if provider == "openai":
             client = OpenAI(api_key=config.get("OPENAI_API_KEY"))
-            res = client.chat.completions.create(
-                model=model_id,
-                messages=[{"role": "system", "content": "You are a database expert. Respond ONLY with JSON."},
-                          {"role": "user", "content": prompt}],
-                response_format={ "type": "json_object" }
-            )
+            openai_kwargs = {
+                "model": actual_model_id,
+                "messages": [{"role": "system", "content": "You are a database expert. Respond ONLY with JSON."},
+                             {"role": "user", "content": prompt}],
+                "response_format": { "type": "json_object" }
+            }
+            if actual_model_id in ("o1", "o3-mini") and level:
+                openai_kwargs["reasoning_effort"] = level
+            res = client.chat.completions.create(**openai_kwargs)
             return res.choices[0].message.content
-            
+
         elif provider == "local":
             url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
             res = requests.post(f"{url.rstrip('/')}/chat/completions", json={
-                "model": model_id,
+                "model": actual_model_id,
                 "messages": [{"role": "user", "content": prompt}],
                 "format": "json",
                 "temperature": 0.2
             }, timeout=120)
             return res.json()['choices'][0]['message']['content']
-            
+
         else: # Gemini
             api_key = config.get("GEMINI_API_KEY")
             if not api_key: return "Error: Gemini API Key is missing."
             client = genai.Client(api_key=api_key)
-            
-            gen_config = {'response_mime_type': 'application/json'}
-            
-            db_thinking_budget = None
-            if model_id == "gemini-3.1-flash-lite（中）":
-                model_id = "gemini-3.1-flash-lite"
-                db_thinking_budget = "medium"
 
-            thinking_budget = db_thinking_budget if db_thinking_budget is not None else config.get("THINKING_BUDGET", "medium")
-            if model_id == "gemini-3.1-flash-lite":
-                gen_config["thinking_config"] = {"thinking_level": thinking_budget.upper()}
+            gen_config = {'response_mime_type': 'application/json'}
+
+            if level is None:
+                thinking_budget = config.get("THINKING_BUDGET", "medium").lower()
+                level = thinking_budget
+
+            is_thinking_supported = (
+                actual_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
+            )
+
+            if is_thinking_supported and level:
+                if actual_model_id == "gemini-3.5-flash":
+                    if level not in ("medium", "high"):
+                        level = "medium"
+                gen_config["thinking_config"] = {"thinking_level": level.upper()}
 
             res = client.models.generate_content(
-                model=model_id, 
+                model=actual_model_id,
                 contents=prompt,
                 config=gen_config
             )
