@@ -13,7 +13,6 @@ try:
     import google.genai as genai
     from openai import OpenAI
     import chromadb
-    from .chromadb_pool import get_chroma_collection
 except ImportError as e:
     # ログ関数がまだ定義されていないため print で出力
     print(f"Critical: Library missing: {e}")
@@ -131,10 +130,18 @@ def main():
             )
 
             def generate_text(prompt):
-                local_db_model_id = db_model_id
+                from config_manager import parse_model_name
+                local_db_model_id, level = parse_model_name(db_model_id)
+
                 if db_provider == "openai":
                     client_oa = OpenAI(api_key=config.get("OPENAI_API_KEY"))
-                    response = client_oa.chat.completions.create(model=local_db_model_id, messages=[{"role": "user", "content": prompt}])
+                    openai_kwargs = {
+                        "model": local_db_model_id,
+                        "messages": [{"role": "user", "content": prompt}]
+                    }
+                    if local_db_model_id in ("o1", "o3-mini") and level:
+                        openai_kwargs["reasoning_effort"] = level
+                    response = client_oa.chat.completions.create(**openai_kwargs)
                     return response.choices[0].message.content.strip()
                 elif db_provider == "local":
                     url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
@@ -143,20 +150,24 @@ def main():
                     return res.json()['choices'][0]['message']['content'].strip()
                 else: # Gemini
                     client_ge = genai.Client(api_key=config.get("GEMINI_API_KEY"))
-                    
+
                     gemini_config_obj = {}
-                    
-                    db_thinking_budget = None
-                    if local_db_model_id == "gemini-3.1-flash-lite（中）":
-                        local_db_model_id = "gemini-3.1-flash-lite"
-                        db_thinking_budget = "medium"
-                    
-                    thinking_budget = db_thinking_budget if db_thinking_budget is not None else config.get("THINKING_BUDGET", "medium")
-                    if local_db_model_id == "gemini-3.1-flash-lite":
-                        gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}
+                    if level is None:
+                        thinking_budget = config.get("THINKING_BUDGET", "medium").lower()
+                        level = thinking_budget
+
+                    is_thinking_supported = (
+                        local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
+                    )
+
+                    if is_thinking_supported and level:
+                        if local_db_model_id == "gemini-3.5-flash":
+                            if level not in ("medium", "high"):
+                                level = "medium"
+                        gemini_config_obj["thinking_config"] = {"thinking_level": level.upper()}
 
                     res = client_ge.models.generate_content(
-                        model=local_db_model_id, 
+                        model=local_db_model_id,
                         contents=prompt,
                         config=gemini_config_obj if gemini_config_obj else None
                     )

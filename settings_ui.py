@@ -241,12 +241,12 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     lbl_model_normal = add_label(gemini_frame, l_set.get("model_normal", "Normal Model:"), pady=(5,0))
     # すべての候補を維持
-    gemini_models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite"]
-    model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-2.5-flash"))
+    gemini_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
+    model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-3.5-flash"))
     tk.OptionMenu(gemini_frame, model_var, *gemini_models).pack(pady=2)
 
     # 思考レベル (gemini-3.1-flash-lite のみ)
-    thinking_label = add_label(gemini_frame, l_set.get("thinking_level_label", "思考レベル (3.1-flash-lite のみ):"), pady=(5,0))
+    thinking_label = add_label(gemini_frame, l_set.get("thinking_level_label", "思考レベル (3.1-flash-lite / 3.5-flash のみ):"), pady=(5,0))
     THINKING_OPTIONS = {
         l_set.get("thinking_min", "最小"):     "minimal",
         l_set.get("thinking_low", "低"):       "low",
@@ -264,7 +264,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     thinking_menu.pack(pady=2)
 
     def update_thinking_state(*args):
-        if model_var.get() == "gemini-3.1-flash-lite":
+        if model_var.get() in ("gemini-3.1-flash-lite", "gemini-3.5-flash"):
             thinking_menu.configure(state="normal")
             thinking_label.configure(fg="black")
         else:
@@ -275,8 +275,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     update_thinking_state()
 
     lbl_model_pro = add_label(gemini_frame, l_set.get("model_pro", "Pro Model:"), pady=(5,0))
-    pro_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview"]
-    model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.1-pro-preview"))
+    pro_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.5-flash（中）", "gemini-3.5-flash（高）"]
+    model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.5-flash（中）"))
     tk.OptionMenu(gemini_frame, model_pro_var, *pro_models).pack(pady=2)
 
     # OpenAI Frame
@@ -286,7 +286,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     openai_key_entry = tk.Entry(openai_frame, width=50, show="*")
     openai_key_entry.insert(0, config.get("OPENAI_API_KEY", ""))
     openai_key_entry.pack(pady=2)
-    gpt_models = ["gpt-5.4-nano", "gpt-5.4-mini", "gpt-5", "gpt-5.4", "gpt-5.5-2026-04-23"]
+    gpt_models = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"]
     gpt_model_var = tk.StringVar(openai_frame, config.get("MODEL_ID_GPT", "gpt-5.4-mini"))
     tk.OptionMenu(openai_frame, gpt_model_var, *gpt_models).pack(pady=2)
 
@@ -687,10 +687,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         provider = db_provider_var.get()
         if provider == "gemini":
             # 最新の gemini-2.5-flash-lite を筆頭に配置
-            models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite（中）"]
+            models = ["gemini-3.5-flash（中）", "gemini-3.5-flash（高）", "gemini-3.5-flash（最小）", "gemini-3.5-flash（低）", "gemini-3.1-flash-lite（中）", "gemini-3.1-flash-lite（高）", "gemini-3-flash-preview", "gemini-3.1-pro-preview"]
         elif provider == "openai":
             # 2/13に終了する旧モデルを排除し、あなたが最適化した最新モデルのみを配置
-            models = ["gpt-5.4-nano", "gpt-5.4-mini", "gpt-5", "gpt-5.4", "gpt-5.5-2026-04-23"]
+            models = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"]
         else: # local
             # APIから取得した最新のOllamaリストを使用
             models = ollama_dynamic_models.copy() if ollama_dynamic_models else ["gemma3:4b", "gemma3:1b", "gemma3:12b", "gemma2:9b", "llama3.2:3b"]
@@ -973,10 +973,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     # キャプチャ方式の選択
     tk.Label(rtt_perf_group, text=l_set.get("rtt_label_capture_engine", "キャプチャ方式:"), anchor="w").grid(row=0, column=0, sticky="w", padx=8, pady=4)
-    rtt_engine_map = {"BitBlt (推奨/高精細)": "bitblt", "PrintWindow (互換/高精細)": "printwindow", "mss (標準)": "mss"}
+    rtt_engine_map = {"高速キャプチャ (WGC / DXCAM) (推奨)": "wgc", "BitBlt (高精細)": "bitblt", "PrintWindow (互換/高精細)": "printwindow", "mss (標準)": "mss"}
     rtt_engine_map_rev = {v: k for k, v in rtt_engine_map.items()}
-    saved_engine = config.get("rtt_capture_mode", "bitblt")
-    rtt_engine_var = tk.StringVar(value=rtt_engine_map_rev.get(saved_engine, "BitBlt (推奨/高精細)"))
+    saved_engine = config.get("rtt_capture_mode", "wgc")
+    rtt_engine_var = tk.StringVar(value=rtt_engine_map_rev.get(saved_engine, "高速キャプチャ (WGC / DXCAM) (推奨)"))
     tk.OptionMenu(rtt_perf_group, rtt_engine_var, *rtt_engine_map.keys()).grid(row=0, column=1, sticky="w", padx=8, pady=4)
 
     # 相互排他制御の関数
@@ -1091,7 +1091,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["rtt_paddle_gpu_mem_mb"] = int(rtt_vram_var.get())
         config["rtt_ocr_thread_limit_percent"] = int(rtt_cpu_pct_var.get().replace("%",""))
         config["rtt_paddle_language"] = rtt_paddle_lang_map.get(rtt_paddle_lang_var.get(), "japan")
-        config["rtt_capture_mode"] = rtt_engine_map.get(rtt_engine_var.get(), "bitblt")
+        config["rtt_capture_mode"] = rtt_engine_map.get(rtt_engine_var.get(), "wgc")
         config["rtt_eco_mode"] = rtt_eco_var.get()
         config["rtt_single_mode"] = rtt_single_var.get()
         config["rtt_ocr_skip_sensitivity"] = _SENS_VALUES[int(rtt_sens_slider.get())]

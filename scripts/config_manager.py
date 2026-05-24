@@ -12,14 +12,14 @@ DEFAULT_CONFIG = {
     "GEMINI_API_KEY": "",
     "OPENAI_API_KEY": "",
     "TAVILY_API_KEY": "",
-    "MODEL_ID": "gemini-2.0-flash",
-    "MODEL_ID_PRO": "gemini-2.0-flash-thinking-exp",
+    "MODEL_ID": "gemini-3.5-flash",
+    "MODEL_ID_PRO": "gemini-3.5-flash（中）",
     "MODEL_ID_GPT": "gpt-5.4-mini",
     "OLLAMA_URL": "http://localhost:11434/v1",
     "MODEL_ID_LOCAL": "gemma3:12b",
     "MODEL_ID_SUMMARY": "gemma3:4b",
     "DB_PROVIDER": "gemini",
-    "DB_MODEL_ID": "gemini-2.0-flash",
+    "DB_MODEL_ID": "gemini-3.5-flash（中）",
     "search_switch": False,
     "SEARCH_PROVIDER": "tavily",
     # SEARCH_PROVIDER の選択肢:
@@ -74,7 +74,7 @@ DEFAULT_CONFIG = {
     "rtt_paddle_gpu_index": 0,        # 使用GPU番号（-1=CPU）
     "rtt_paddle_gpu_mem_mb": 1024,
     "rtt_paddle_language": "japan",
-    "rtt_capture_mode": "bitblt",     # キャプチャ方式: "bitblt", "printwindow", "mss"
+    "rtt_capture_mode": "wgc",     # キャプチャ方式: "wgc", "bitblt", "printwindow", "mss"
     "rtt_capture_interval_sec": 1.0,  # キャプチャ間隔
     "rtt_ocr_skip_sensitivity": 2400, # 文字変化判定のしきい値
     "rtt_cpu_threads": 0,             # 0=自動（全コア）/ 1〜N=制限
@@ -124,11 +124,42 @@ def migrate_config(config):
         migrated = True
 
     # 廃止モデルの自動置換 (v1.0.6)
-    _model_renames = {"gpt-5-mini": "gpt-5.4-mini", "gpt-5.2": "gpt-5.4"}
+    _model_renames = {
+        "gpt-5-mini": "gpt-5.4-mini",
+        "gpt-5.2": "gpt-5.4",
+        "gpt-4o": "gpt-5.4",
+        "gpt-4o-mini": "gpt-5.4-mini",
+        "gpt-5.5-2026-04-23": "gpt-5.5",
+        "o3-mini（低）": "gpt-5-mini",
+        "o3-mini（中）": "gpt-5-mini",
+        "o3-mini（高）": "gpt-5-mini",
+        "o1（低）": "gpt-5",
+        "o1（中）": "gpt-5",
+        "o1（高）": "gpt-5"
+    }
     for _key in ("MODEL_ID_GPT", "DB_MODEL_ID"):
         if config.get(_key) in _model_renames:
             config[_key] = _model_renames[config[_key]]
             migrated = True
+
+    # Gemini 旧モデルの自動置換 (Gemini 2.5 系列終了に伴う 3.5 Flash への移行)
+    _gemini_renames = {
+        "gemini-2.0-flash": "gemini-3.5-flash",
+        "gemini-2.5-flash-lite": "gemini-3.5-flash",
+        "gemini-2.5-flash": "gemini-3.5-flash"
+    }
+    
+    if config.get("MODEL_ID") in _gemini_renames:
+        config["MODEL_ID"] = _gemini_renames[config["MODEL_ID"]]
+        migrated = True
+        
+    if config.get("MODEL_ID_PRO") in ("gemini-2.0-flash-thinking-exp", "gemini-2.5-flash", "gemini-2.5-flash-lite"):
+        config["MODEL_ID_PRO"] = "gemini-3.5-flash（中）"
+        migrated = True
+        
+    if config.get("DB_MODEL_ID") in ("gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash"):
+        config["DB_MODEL_ID"] = "gemini-3.5-flash（中）"
+        migrated = True
 
     # 常に最新のデフォルト値で不足しているキーを補完する
     for key, default_value in DEFAULT_CONFIG.items():
@@ -182,3 +213,36 @@ def save_config(config_path, config):
     except Exception as e:
         print(f"Config save error: {e}")
         return False
+
+def parse_model_name(model_name):
+    """
+    モデル名から実モデル名と指定された思考レベル（またはreasoning_effort）をパースする。
+    例:
+      'gemini-3.5-flash（中）' -> ('gemini-3.5-flash', 'medium')
+      'o3-mini（低）' -> ('o3-mini', 'low')
+    """
+    if not model_name:
+        return "", None
+        
+    import re
+    # 全角・半角のカッコに対応
+    m = re.match(r"^([a-zA-Z0-9\.\-_:]+)[（\‍(]([^）\‍)]+)[）\‍)]$", model_name.strip())
+    if m:
+        actual_name = m.group(1).strip()
+        level_str = m.group(2).strip()
+        
+        # 思考レベルのマッピング
+        level_map = {
+            "最小": "minimal",
+            "minimal": "minimal",
+            "低": "low",
+            "low": "low",
+            "中": "medium",
+            "medium": "medium",
+            "高": "high",
+            "high": "high"
+        }
+        level = level_map.get(level_str, None)
+        return actual_name, level
+        
+    return model_name.strip(), None

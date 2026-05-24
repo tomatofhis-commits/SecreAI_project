@@ -114,7 +114,7 @@
     "tab_extensions": "Extensões (Extensions)",
     "enable_subtitle": "Ativar integração do sistema de legendas de IA local\n(Envia texto para ws://localhost:8765)",
     "deprecation_notice": "⚠ Fim da vida útil da série Gemini 2.5\nGemini 2.5 Flash: 17 de junho de 2026 / Gemini 2.5 Flash-Lite: 22 de julho de 2026",
-    "thinking_level_label": "Nível de raciocínio (apenas 3.1-flash-lite):",
+    "thinking_level_label": "Nível de raciocínio (apenas 3.1-flash-lite / 3.5-flash):",
     "thinking_min": "Mínimo",
     "thinking_low": "Baixo",
     "thinking_mid": "Médio",
@@ -147,7 +147,21 @@
     "rtt_label_capture_engine": "Motor de captura:",
     "rtt_label_eco": "Modo Eco (supressão OCR 10s)",
     "rtt_label_single": "Modo de tradução de captura única (Escanear uma vez)",
-    "rtt_label_sens": "Sensibilidade de resposta:"
+    "rtt_label_sens": "Sensibilidade de resposta:",
+    "btn_open_memory_viewer": "Exibir a lista e gestão de memórias",
+    "search_label": "Pesquisar:",
+    "col_time": "Data e Hora",
+    "col_content": "Conteúdo da memória",
+    "col_len": "Número de caracteres",
+    "btn_delete": "Excluir memória selecionada",
+    "btn_summarize": "Resumir as memórias selecionadas",
+    "btn_bulk_summarize": "Resumir em massa o conteúdo para resumo (textos longos, sem data)",
+    "msg_summary_success": "Resumo concluído.",
+    "search_provider_label": "Mecanismo de busca:",
+    "search_limit_notice": "※ O limite da cota gratuita do Tavily é de 1000 vezes por mês. Ao selecionar o Google Search, ele será fixado em \"gemini-2.5-flash-lite\".",
+    "search_usage_grounding": "Em {date}, o Google Search foi executado {count} vezes.",
+    "search_usage_grounding_short": "Google (hoje): {count} vezes",
+    "search_usage_tavily_short": "Tavily (este mês): {count} vezes"
   },
   "log_messages": {
     "module_loaded": "Sistema: Módulo de atualização de memória carregado.",
@@ -182,7 +196,36 @@
     "google_quota_exceeded": "Sistema: Limite do nível gratuito da Google Search (Gemini Grounding) atingido. Tente novamente mais tarde.",
     "memory_update_reserved": "Sistema: Tarefa de organização de memória reservada.",
     "timeout_ai_response": "⏱️ Timeout resposta IA ({timeout} segundos)",
-    "timeout_web_search": "⏱️ Timeout pesquisa web ({timeout} segundos)"
+    "timeout_web_search": "⏱️ Timeout pesquisa web ({timeout} segundos)",
+    "gatekeeper_analyzing": "Sistema: Gatekeeper está avaliando a necessidade de busca.",
+    "gatekeeper_approve": "Sistema: O guardião aprovou a pesquisa.",
+    "gatekeeper_skip": "Sistema: o Gatekeeper ignorou a pesquisa (Razão: {reason})",
+    "query_optimized": "Sistema: Otimizamos a consulta de pesquisa: {original} -> {optimized}",
+    "timeout_execution": "Tempo limite: {func_name} ({timeout} segundos)",
+    "error_execution": "Erro: {func_name} - {e}",
+    "memory_search_error": "Erro de recuperação da memória de longo prazo: {e}",
+    "count_increment_error": "Erro de atualização da conta Tavily: {e}",
+    "search_cache_hit": "[Acerto de Cache de Pesquisa] Reutilizando resultados de pesquisa anteriores para economizar custos.",
+    "search_searching": "A executar pesquisa na Web... (Tempo limite: {timeout} segundos)",
+    "cache_save_error": "Erro ao salvar cache: {e}",
+    "background_search_error": "Erro de pesquisa em segundo plano: {e}",
+    "search_recorded": "Sistema: As informações de pesquisa foram registradas no DB como \"informações da web\".",
+    "internal_db_save_error": "Erro de salvamento no DB interno: {e}",
+    "ai_init_error": "{provider} erro de inicialização: {e}",
+    "api_cache_hit": "[Acerto de Cache] Reutiliza respostas anteriores para reduzir custos.",
+    "ai_thinking": "Obtendo resposta da IA... (Tempo limite: {timeout} segundos)",
+    "chat_error": "Erro de chat ({provider}): {e}",
+    "intersecting_ai_start": "Sistema: Executa no modo AI Composto.",
+    "intersecting_ai_error": "Erro de IA composto: {e}. Voltando ao modo normal.",
+    "dependency_missing": "Importante: Biblioteca dependente não encontrada: {e}",
+    "memory_cycle_progress": "Sistema: Ciclo de Memória em andamento ({count}/5)",
+    "audio_gen_error": "Erro de geração de voz: {e}",
+    "audio_save_error": "Erro ao salvar áudio: {e}",
+    "edge_tts_start": "Edge-TTS Iniciando leitura: {text}...",
+    "edge_tts_error": "Edge-TTS Erro: {e}",
+    "voicevox_error": "VOICEVOX Erro: {e}",
+    "chromadb_connected": "Conexão ChromaDB concluída: {path}",
+    "chromadb_error": "Erro de conexão ChromaDB: {e}"
   },
   "ai_prompt": {
     "role": "Você é um secretário confiável e um parceiro capaz.",
@@ -249,7 +292,9 @@
     "btn_back": "Voltar",
     "btn_next": "Próximo",
     "btn_finish": "Concluir",
-    "confirm_skip_api": "Nenhuma chave API inserida. Deseja configurá-la mais tarde?\n(Uma das chaves é necessária para conversar com a IA)"
+    "confirm_skip_api": "Nenhuma chave API inserida. Deseja configurá-la mais tarde?\n(Uma das chaves é necessária para conversar com a IA)",
+    "vv_path_label": "Caminho do executável do VOICEVOX:",
+    "btn_skip": "Pular"
   },
   "error_messages": {
     "title_prefix": "Erro",
@@ -293,6 +338,7 @@
     "model_stats_title": "Estatísticas por modelo",
     "model_header": "Modelo/Provedor",
     "requests_header": "Solicitações",
-    "hits_header": "Acertos"
+    "hits_header": "Acertos",
+    "btn_update": "Atualizar informações"
   }
 }

@@ -50,15 +50,15 @@ OPTIMIZED_CONFIG = {
     "MODEL_OPTIMIZATION": {
         # 軽量タスクには軽量モデルを使用
         "USE_LITE_FOR_SIMPLE_TASKS": True,
-        "SIMPLE_TASK_MODEL": "gemini-2.5-flash-lite",  # 最も安い
+        "SIMPLE_TASK_MODEL": "gemini-3.1-flash-lite",  # 最も安い
         
         # タスク別モデル設定
         "TASK_MODELS": {
-            "chat": "gemini-2.5-flash",  # 通常会話
-            "vision": "gemini-2.5-flash",  # 画像分析
-            "analysis": "gemini-3-flash-preview",  # 複雑な分析
+            "chat": "gemini-3.5-flash",  # 通常会話
+            "vision": "gemini-3.5-flash",  # 画像分析
+            "analysis": "gemini-3.1-pro-preview",  # 複雑な分析
             "summary": "gemma3:4b",  # ローカル要約(無料)
-            "feedback": "gemini-3-flash-preview"  # フィードバック分析
+            "feedback": "gemini-3.5-flash（中）"  # フィードバック分析
         }
     }
 }
@@ -76,9 +76,9 @@ COST_SAVING_TIPS = """
    - 古い会話は ChromaDB に移動
 
 3. **モデルの使い分け**
-   - 簡単な質問: gemini-2.5-flash-lite (最安)
-   - 通常の会話: gemini-2.5-flash (標準)
-   - 複雑な分析: gemini-3-flash-preview (高性能)
+   - 簡単な質問: gemini-3.1-flash-lite (最安)
+   - 通常の会話: gemini-3.5-flash (標準)
+   - 複雑な分析: gemini-3.1-pro-preview (高性能/Pro)
 
 4. **ローカルモデルの活用**
    - 要約: gemma3:4b (無料・高速)
@@ -144,7 +144,7 @@ ECONOMY_MODE = {
 
 PERFORMANCE_MODE = {
     "AI_PROVIDER": "gemini",
-    "MODEL_ID": "gemini-3-flash-preview",  # 最高性能
+    "MODEL_ID": "gemini-3.5-flash",  # 最高性能
     "search_switch": True,
     "USE_INTERSECTING_AI": True,  # 複合AI有効
     "PERFORMANCE": {
@@ -159,7 +159,7 @@ PERFORMANCE_MODE = {
 
 BALANCED_MODE = {
     "AI_PROVIDER": "gemini",
-    "MODEL_ID": "gemini-2.5-flash",  # コスパ良好
+    "MODEL_ID": "gemini-3.5-flash",  # コスパ良好
     "MODEL_ID_SUMMARY": "gemma3:4b",  # ローカル要約
     "search_switch": True,
     "USE_INTERSECTING_AI": False,  # 必要時のみ

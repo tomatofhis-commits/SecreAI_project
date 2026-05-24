@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
@@ -22,12 +23,23 @@ namespace RTtranslator_CS_Overlay
         [DllImport("user32.dll")]
         private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
+        [DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TRANSPARENT = 0x00000020;
         private const int WS_EX_NOACTIVATE = 0x08000000;
 
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_SHOWWINDOW = 0x0040;
+
         // --- UI Canvas ---
         public Canvas OverlayCanvas { get; private set; }
+        private Border _statusBorder;
+        private TextBlock _statusTextBlock;
 
         // --- HTTP API Listener ---
         private HttpListener _httpListener;
@@ -36,6 +48,7 @@ namespace RTtranslator_CS_Overlay
 
         // --- Overlay Tracking Dictionary ---
         private readonly Dictionary<string, Border> _activeOverlays = new Dictionary<string, Border>();
+        private double _dpiScale = 1.0;
 
         public MainWindow()
         {
@@ -61,12 +74,38 @@ namespace RTtranslator_CS_Overlay
             };
             this.Content = OverlayCanvas;
 
+            // Create Status UI (PyQt 側のデザインを 100% 美麗に再現)
+            _statusTextBlock = new TextBlock
+            {
+                Text = "⏳ 待機中...",
+                Foreground = new SolidColorBrush(Color.FromRgb(0, 255, 0)), // #00FF00
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                FontFamily = new FontFamily("Yu Gothic UI"),
+                Padding = new Thickness(10, 4, 10, 4),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            _statusBorder = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(178, 0, 0, 0)), // rgba(0,0,0,0.7)
+                BorderBrush = new SolidColorBrush(Color.FromArgb(76, 0, 255, 0)), // rgba(0,255,0,0.3)
+                BorderThickness = new Thickness(0, 0, 0, 1),
+                Height = 28,
+                Child = _statusTextBlock,
+                Visibility = Visibility.Collapsed // 初期状態は非表示
+            };
+
+            OverlayCanvas.Children.Add(_statusBorder);
+
             this.Loaded += Window_Loaded;
             this.Closed += Window_Closed;
 
+
             // Start checking parent process lifetime if a PID is passed
             var args = Environment.GetCommandLineArgs();
-            if (args.Length > 1 && int.TryParse(args[1], out int parentPid))
+            int parentPid;
+            if (args.Length > 1 && int.TryParse(args[1], out parentPid))
             {
                 StartParentProcessMonitor(parentPid);
             }
@@ -80,10 +119,20 @@ namespace RTtranslator_CS_Overlay
             var hwnd = new WindowInteropHelper(this).Handle;
             int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
             SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
+
+            // Enforce static topmost Z-Order to avoid window focus freeze issues
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
+            // Acquire current OS display DPI scaling factor (e.g. 1.5 for 150%, 2.0 for 200%)
+            var source = PresentationSource.FromVisual(this);
+            if (source != null && source.CompositionTarget != null)
+            {
+                _dpiScale = source.CompositionTarget.TransformToDevice.M11;
+            }
+
             // Start local HTTP Server on background thread
             StartHttpServer();
         }
@@ -104,13 +153,13 @@ namespace RTtranslator_CS_Overlay
                         var parent = System.Diagnostics.Process.GetProcessById(parentPid);
                         if (parent == null || parent.HasExited)
                         {
-                            Dispatcher.Invoke(() => this.Close());
+                            Dispatcher.Invoke(new Action(() => this.Close()));
                             break;
                         }
                     }
                     catch
                     {
-                        Dispatcher.Invoke(() => this.Close());
+                        Dispatcher.Invoke(new Action(() => this.Close()));
                         break;
                     }
                     Thread.Sleep(1500);
@@ -141,7 +190,7 @@ namespace RTtranslator_CS_Overlay
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to start local C# API server on port 5002:\n{ex.Message}", "RTT Overlay Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(string.Format("Failed to start local C# API server on port 5002:\n{0}", ex.Message), "RTT Overlay Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -209,7 +258,7 @@ namespace RTtranslator_CS_Overlay
                         if (payload != null)
                         {
                             // Dispatch UI updates to WPF main thread
-                            Dispatcher.Invoke(() => SyncOverlays(payload.overlays));
+                            Dispatcher.Invoke(new Action(() => SyncOverlays(payload.overlays)));
                             SendJsonResponse(resp, new { status = "ok" });
                         }
                         else
@@ -220,7 +269,7 @@ namespace RTtranslator_CS_Overlay
                 }
                 else if (path == "/api/clear" && req.HttpMethod == "POST")
                 {
-                    Dispatcher.Invoke(() => ClearAllOverlays());
+                    Dispatcher.Invoke(new Action(() => ClearAllOverlays()));
                     SendJsonResponse(resp, new { status = "ok" });
                 }
                 else if (path == "/api/capture" && req.HttpMethod == "POST")
@@ -253,10 +302,28 @@ namespace RTtranslator_CS_Overlay
                         }
                     }
                 }
+                else if (path == "/api/set_status" && req.HttpMethod == "POST")
+                {
+                    using (var reader = new StreamReader(req.InputStream, Encoding.UTF8))
+                    {
+                        string body = reader.ReadToEnd();
+                        var serializer = new JavaScriptSerializer();
+                        var payload = serializer.Deserialize<StatusUpdatePayload>(body);
+                        if (payload != null)
+                        {
+                            Dispatcher.Invoke(new Action(() => UpdateStatusUI(payload)));
+                            SendJsonResponse(resp, new { status = "ok" });
+                        }
+                        else
+                        {
+                            SendErrorResponse(resp, HttpStatusCode.BadRequest, "Invalid status payload");
+                        }
+                    }
+                }
                 else if (path == "/api/stop" && req.HttpMethod == "POST")
                 {
                     SendJsonResponse(resp, new { status = "ok", message = "Stopping application" });
-                    Dispatcher.Invoke(() => this.Close());
+                    Dispatcher.Invoke(new Action(() => this.Close()));
                 }
                 else
                 {
@@ -296,9 +363,71 @@ namespace RTtranslator_CS_Overlay
             resp.Close();
         }
 
+        // --- Helper Methods for Layout & Typography Optimization ---
+        private Brush GetContrastTextBrush(Brush textBrush, Brush bgBrush)
+        {
+            Color tc = Colors.White;
+            Color bgc = Color.FromArgb(160, 0, 0, 0); // Default dark
+
+            SolidColorBrush stb = textBrush as SolidColorBrush;
+            if (stb != null) tc = stb.Color;
+
+            SolidColorBrush sbg = bgBrush as SolidColorBrush;
+            if (sbg != null) bgc = sbg.Color;
+
+            // Calculate relative luminance (Y = 0.299R + 0.587G + 0.114B)
+            double tl = 0.299 * tc.R + 0.587 * tc.G + 0.114 * tc.B;
+            double bgl = 0.299 * bgc.R + 0.587 * bgc.G + 0.114 * bgc.B;
+
+            // If text is dark (luminance < 90) and background is also dark, force text to White
+            if (tl < 90)
+            {
+                if (bgl < 120 || bgc.A < 180)
+                {
+                    return Brushes.White;
+                }
+            }
+            // If both are extremely bright and alpha is opaque, force text to Black
+            else if (tl > 180 && bgl > 180 && bgc.A > 150)
+            {
+                return Brushes.Black;
+            }
+
+            return textBrush;
+        }
+
+        private double MeasureTextWidth(string text, double fontSize, FontFamily fontFamily)
+        {
+            var formattedText = new FormattedText(
+                text,
+                CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight,
+                new Typeface(fontFamily, FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+                fontSize,
+                Brushes.Black);
+            return formattedText.Width;
+        }
+
+        private double MeasureTextHeight(string text, double fontSize, FontFamily fontFamily, double maxWidth)
+        {
+            var formattedText = new FormattedText(
+                text,
+                CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight,
+                new Typeface(fontFamily, FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+                fontSize,
+                Brushes.Black);
+            if (maxWidth > 0)
+            {
+                formattedText.MaxTextWidth = maxWidth;
+            }
+            return formattedText.Height;
+        }
+
         // --- Core UI Synchronization (WPF Thread only) ---
         private void SyncOverlays(List<OverlayItem> incomingItems)
         {
+
             if (incomingItems == null) incomingItems = new List<OverlayItem>();
 
             var processedIds = new HashSet<string>();
@@ -312,9 +441,16 @@ namespace RTtranslator_CS_Overlay
 
                 processedIds.Add(item.id);
 
+                // OSのDPIスケーリングに合わせて、受信したすべての物理ピクセル寸法をWPFの論理ピクセルにデスケール補正する
+                double logicalX = item.x / _dpiScale;
+                double logicalY = item.y / _dpiScale;
+                double logicalWidth = item.width / _dpiScale;
+                double logicalHeight = item.height / _dpiScale;
+                double logicalFontSize = (item.font_size > 0 ? item.font_size : 14) / _dpiScale;
+
                 // Align coordinates relative to our full-screen Canvas positioned at (vLeft, vTop)
-                double relativeX = item.x - vLeft;
-                double relativeY = item.y - vTop;
+                double relativeX = logicalX - vLeft;
+                double relativeY = logicalY - vTop;
 
                 // Configure styling properties
                 Brush textBrush = Brushes.White;
@@ -337,19 +473,55 @@ namespace RTtranslator_CS_Overlay
                     catch { }
                 }
 
+                // Apply dynamic contrast fallbacks to ensure readability (Anti black-on-black logic)
+                textBrush = GetContrastTextBrush(textBrush, bgBrush);
+
+                // Auto-scale font size dynamically to fit the text bounding box (Overflow prevention)
+                double finalFontSize = logicalFontSize;
+                FontFamily fontFamily = new FontFamily("Yu Gothic UI");
+
+                double maxW = Math.Max(10, logicalWidth - 6);
+                double maxH = Math.Max(10, logicalHeight - 5);
+
+                // Dynamically downscale font size step-by-step
+                bool isMultiLine = item.text.Contains("\n") || item.text.Contains("\r") || item.text.Contains(" ");
+                while (finalFontSize > 8)
+                {
+                    double h = MeasureTextHeight(item.text, finalFontSize, fontFamily, maxW);
+
+                    if (isMultiLine)
+                    {
+                        if (h <= maxH)
+                        {
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        double w = MeasureTextWidth(item.text, finalFontSize, fontFamily);
+                        if (w <= maxW && h <= maxH)
+                        {
+                            break;
+                        }
+                    }
+                    finalFontSize -= 1.0;
+                }
+
                 // If element already exists, update properties
-                if (_activeOverlays.TryGetValue(item.id, out Border border))
+                Border border;
+                if (_activeOverlays.TryGetValue(item.id, out border))
                 {
                     Canvas.SetLeft(border, relativeX);
                     Canvas.SetTop(border, relativeY);
-                    border.Width = item.width;
-                    border.Height = item.height;
+                    border.Width = logicalWidth;
+                    border.Height = logicalHeight;
                     border.Background = bgBrush;
 
                     var textBlock = (OutlineTextBlock)border.Child;
                     textBlock.Text = item.text;
-                    textBlock.FontSize = item.font_size > 0 ? item.font_size : 14;
+                    textBlock.FontSize = finalFontSize;
                     textBlock.Fill = textBrush;
+                    textBlock.StrokeThickness = 0.0;
                 }
                 else
                 {
@@ -357,11 +529,11 @@ namespace RTtranslator_CS_Overlay
                     var textBlock = new OutlineTextBlock
                     {
                         Text = item.text,
-                        FontSize = item.font_size > 0 ? item.font_size : 14,
+                        FontSize = finalFontSize,
                         Fill = textBrush,
                         Stroke = Brushes.Black,
-                        StrokeThickness = 2.5,
-                        FontFamily = new FontFamily("MS Gothic"),
+                        StrokeThickness = 0.0,
+                        FontFamily = fontFamily,
                         HorizontalAlignment = HorizontalAlignment.Center,
                         VerticalAlignment = VerticalAlignment.Center
                     };
@@ -371,10 +543,10 @@ namespace RTtranslator_CS_Overlay
                     {
                         Background = bgBrush,
                         CornerRadius = new CornerRadius(5),
-                        Padding = new Thickness(6, 4, 6, 4),
+                        Padding = new Thickness(3, 2, 3, 2), // Slightly tighter padding for better overlay bounds fit
                         Child = textBlock,
-                        Width = item.width,
-                        Height = item.height
+                        Width = logicalWidth,
+                        Height = logicalHeight
                     };
 
                     Canvas.SetLeft(newBorder, relativeX);
@@ -398,7 +570,8 @@ namespace RTtranslator_CS_Overlay
 
             foreach (var id in idsToRemove)
             {
-                if (_activeOverlays.TryGetValue(id, out Border border))
+                Border border;
+                if (_activeOverlays.TryGetValue(id, out border))
                 {
                     OverlayCanvas.Children.Remove(border);
                     _activeOverlays.Remove(id);
@@ -410,6 +583,34 @@ namespace RTtranslator_CS_Overlay
         {
             OverlayCanvas.Children.Clear();
             _activeOverlays.Clear();
+            
+            // ClearAll時もステータスバーは生き残らせるためにCanvasへ再配置
+            if (_statusBorder != null)
+            {
+                OverlayCanvas.Children.Add(_statusBorder);
+            }
+        }
+
+        private void UpdateStatusUI(StatusUpdatePayload payload)
+        {
+            if (string.IsNullOrEmpty(payload.status))
+            {
+                _statusBorder.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            _statusTextBlock.Text = payload.status;
+            
+            // PyQt and WPF logical coordinates are already DPI-scaled. 
+            // Do not divide by _dpiScale to prevent double-scaling which pushes the border off-screen.
+            double left = payload.x - SystemParameters.VirtualScreenLeft;
+            double top = payload.y - SystemParameters.VirtualScreenTop;
+            double w = payload.width;
+
+            Canvas.SetLeft(_statusBorder, left);
+            Canvas.SetTop(_statusBorder, top);
+            _statusBorder.Width = w;
+            _statusBorder.Visibility = Visibility.Visible;
         }
     }
 
@@ -437,5 +638,13 @@ namespace RTtranslator_CS_Overlay
         public string window_title { get; set; }
         public string mode { get; set; }
         public int[] rect { get; set; }
+    }
+
+    public class StatusUpdatePayload
+    {
+        public string status { get; set; }
+        public int x { get; set; }
+        public int y { get; set; }
+        public int width { get; set; }
     }
 }

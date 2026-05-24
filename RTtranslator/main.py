@@ -324,6 +324,7 @@ class TranslationController:
         # OCRワーカーが現在処理中かどうかのフラグ
         self._ocr_busy: bool = False
         self._current_frame_id = 0
+        self._current_captured_by = "なし"
         self._last_clear_id = 0
         self._single_run_done = False
         self._single_run_done_candidate = False
@@ -588,6 +589,25 @@ class TranslationController:
             if self.translator.model != new_model:
                 self.translator.model = new_model
             
+            # WinRT OCR 言語設定の動的反映（設定画面のチェック切り替えを反映！）
+            new_ocr_langs = new_config.get("ocr_languages", [])
+            if new_ocr_langs and hasattr(self, 'ocr'):
+                validated_langs = []
+                for lang in new_ocr_langs:
+                    if lang in self.ocr.available_langs:
+                        validated_langs.append(lang)
+                    else:
+                        try:
+                            import winocr
+                            dummy_img = Image.new('RGB', (10, 10))
+                            winocr.recognize_pil_sync(dummy_img, lang=lang)
+                            validated_langs.append(lang)
+                        except:
+                            pass
+                if validated_langs:
+                    self.ocr.available_langs = validated_langs
+                    print(f"[Update] WinRT OCR 言語設定を更新しました: {self.ocr.available_langs}")
+            
             if hasattr(self.translator, "ollama_url"):
                 # 末尾の / を除いて更新
                 self.translator.ollama_url = new_url.rstrip("/")
@@ -605,12 +625,18 @@ class TranslationController:
         1つのIDに関するすべてのメモリ（UI・状態・履歴・空間バケット）を完全に削除する。
         ゴースト防止のための統一パージ関数。
         """
-        # 1. UIラベルを削除
+        # 1. UIラベルを削除（PyQt ラベルと C# overlays の両方を確実に消す）
         if hasattr(self.overlay, 'active_labels') and cid in self.overlay.active_labels:
             label = self.overlay.active_labels[cid]
             if hasattr(label, 'deleteLater'):
                 label.deleteLater()
             del self.overlay.active_labels[cid]
+        # C#モード時: csharp_overlays からも確実に削除しないとゴーストが残り続ける
+        if hasattr(self.overlay, 'csharp_overlays') and cid in self.overlay.csharp_overlays:
+            del self.overlay.csharp_overlays[cid]
+        if hasattr(self.overlay, 'use_csharp') and self.overlay.use_csharp:
+            if hasattr(self.overlay, '_push_csharp_update'):
+                self.overlay._push_csharp_update()
         
         # 2. 各状態辞書から削除
         self.overlay_state.pop(cid, None)
@@ -640,6 +666,8 @@ class TranslationController:
         self.history_chunks.clear()
         self._history_grid.clear()
         self.pending_texts.clear()
+        if hasattr(self, 'translator') and self.translator:
+            self.translator.clear_queue()
         self._shadow_skip_cache.clear()
         
         # 3. OCR強制再開フラグと「古い結果」の破棄
@@ -915,6 +943,14 @@ class TranslationController:
         
         perf_info = f" | Queue: {backlog} | Latency: {latency:.1f}s"
         status_prefix = self._last_analysis_status if hasattr(self, '_last_analysis_status') else "監視中"
+        # 解析中、監視中のプレフィックスに実際のキャプチャ方式を付与する
+        cap_name = getattr(self, "_current_captured_by", "なし")
+        if status_prefix == "解析中":
+            if cap_name != "なし":
+                status_prefix = f"解析中 ({cap_name})"
+        elif status_prefix in ("👀 監視中", "監視中"):
+            if cap_name != "なし":
+                status_prefix = f"監視中 ({cap_name})"
         
         # シングルモード実行済みならステータスを上書き
         if self.config.get("single_mode", False) and self._single_run_done:
@@ -944,9 +980,14 @@ class TranslationController:
             # UI をターゲットのクライアント領域（枠内）へ追従させる
             self.overlay.update_geometry(rect)
 
+            # --- 【CPU超省電力化】エコモード待機時間の超早期判定は後半のOCRトリガー制限に統合されました ---
+            pass
+
             # 1. 画面キャプチャ（1回のループで1回のみ）
-            capture_mode = self.config.get("capture_mode", "bitblt")
-            use_cs_cap = self.config.get("use_csharp_overlay", True) and getattr(self.overlay, "use_csharp", False)
+            capture_mode = self.config.get("capture_mode", "wgc")
+            # C#字幕表示（WPF）はONのままで、キャプチャ処理はPython側の超高速・低負荷なネイティブキャプチャ（DXCAM等）をデフォルトにします。
+            # 巨大な画像バイナリを毎秒HTTP転送するボトルネックを完全に回避し、Python時代の爆速パフォーマンスを復元します。
+            use_cs_cap = self.config.get("use_csharp_capture", False)
             cs_api_url = getattr(self.overlay, "cs_api_url", "http://127.0.0.1:5002")
             image = capture_window(
                 self.window_title,
@@ -955,6 +996,11 @@ class TranslationController:
                 use_csharp=use_cs_cap,
                 cs_api_url=cs_api_url
             )
+
+            if image:
+                self._current_captured_by = image.info.get("captured_by", capture_mode).upper()
+            else:
+                self._current_captured_by = "なし"
 
             # 2. キューからの結果取得とUI反映
             self._poll_ocr_result(image)
@@ -1011,16 +1057,17 @@ class TranslationController:
                         is_missed = True
                         
                         if parent_rect and step3_crop is not None:
-                            # --- テンプレートマッチングによる追従 ---
+                            # --- テンプレートマッチングによる追従 (DPIスケール考慮) ---
                             h, w = step3_crop.shape
-                            px, py = int(parent_rect['x']), int(parent_rect['y'])
+                            px_phys = int(parent_rect['x'] * scale_x)
+                            py_phys = int(parent_rect['y'] * scale_y)
                             
                             # 探索範囲 (±50px): テキストがスクロール・移動するゲームに対応
                             search_margin = 50
-                            sx = max(0, px - search_margin)
-                            sy = max(0, py - search_margin)
-                            ex = min(current_image_np.shape[1], px + w + search_margin)
-                            ey = min(current_image_np.shape[0], py + h + search_margin)
+                            sx = max(0, px_phys - search_margin)
+                            sy = max(0, py_phys - search_margin)
+                            ex = min(current_image_np.shape[1], px_phys + w + search_margin)
+                            ey = min(current_image_np.shape[0], py_phys + h + search_margin)
                             
                             search_region = current_image_np[sy:ey, sx:ex]
                             
@@ -1028,29 +1075,36 @@ class TranslationController:
                                 res = cv2.matchTemplate(search_region, step3_crop, cv2.TM_CCOEFF_NORMED)
                                 min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
                                 
-                                if max_val > 0.75: # 一致
-                                    # 新しい位置 (画像全体での座標)
+                                # 類似度しきい値を 0.72 に緩和 (背景誤認防止と検出率のバランス)
+                                if max_val > 0.72:
+                                    # 新しい位置 (物理ピクセル座標)
                                     nx = sx + max_loc[0]
                                     ny = sy + max_loc[1]
                                     
-                                    dx = nx - px
-                                    dy = ny - py
+                                    dx_phys = nx - px_phys
+                                    dy_phys = ny - py_phys
                                     
-                                    # 位置を更新
-                                    parent_rect['x'] += dx
-                                    parent_rect['y'] += dy
-                                    old_r['x'] += dx
-                                    old_r['y'] += dy
+                                    # 移動量を論理座標に変換
+                                    dx_logical = dx_phys / scale_x
+                                    dy_logical = dy_phys / scale_y
+                                    
+                                    # 位置を更新 (論理座標)
+                                    parent_rect['x'] += dx_logical
+                                    parent_rect['y'] += dy_logical
+                                    old_r['x'] += dx_logical
+                                    old_r['y'] += dy_logical
                                     
                                     # crop更新
-                                    new_crop = current_image_np[int(parent_rect['y']):int(parent_rect['y']+h), int(parent_rect['x']):int(parent_rect['x']+w)]
+                                    new_px_phys = int(parent_rect['x'] * scale_x)
+                                    new_py_phys = int(parent_rect['y'] * scale_y)
+                                    new_crop = current_image_np[new_py_phys:new_py_phys+h, new_px_phys:new_px_phys+w]
                                     if new_crop.shape == step3_crop.shape:
                                         state['step3_crop'] = new_crop
                                         
                                     is_missed = False
                                     
                                     # 追従した場合はオーバーレイに位置を送信
-                                    if dx != 0 or dy != 0:
+                                    if dx_phys != 0 or dy_phys != 0:
                                         self._position_queue.put((cid, old_r.copy()))
                         
                         # --- WGCフレームを使った消失判定 ---
@@ -1073,22 +1127,27 @@ class TranslationController:
                             # OCR時のエッジ密度が残存しているかを絶対値で判定
                             retention_ratio = density / base_density
                             
-                            # 密度が15%未満に激減 → テキストが確実に消えた（即時削除）
+                            # [v1.1.4仕様] 密度が15%未満に激減 → テキストが確実に消えた（即時削除）
                             if retention_ratio < 0.15:
                                 is_missed = True
                                 force_evict = True  # スライディングウィンドウを待たず即パージ
-                            # テンプレートマッチが成功した場合：密度が15%以上残っていれば生存
-                            elif not is_missed and retention_ratio >= 0.15:
+                            # [改善C] テンプレートマッチが失敗 かつ 密度35%未満 → 追加の即時パージ
+                            # (テンプレートマッチ成功時は is_missed=False が既に確定しているためここには来ない)
+                            elif is_missed and retention_ratio < 0.35:
+                                force_evict = True  # スライディングウィンドウを待たず即パージ
+                            # テンプレートマッチが成功した場合：密度が30%以上残っていれば生存
+                            elif not is_missed and retention_ratio >= 0.30:
                                 pass  # 生存確定
-                            # テンプレートマッチが失敗した場合：密度が35%以上残っていれば生存とみなす
-                            elif is_missed and retention_ratio >= 0.35:
-                                is_missed = False  # まだエッジが十分残っている → テキスト存在の可能性
+                            # [v1.1.4仕様] テンプレートマッチが失敗した場合：密度が75%以上残っていれば生存とみなす
+                            # (density_diff < 25% に相当: メモ「エッジ救済閾値」準拠)
+                            elif is_missed and retention_ratio >= 0.75:
+                                is_missed = False  # エッジが極めて強く残っている場合のみ生存とみなす
                         else:
                             # base_density が未設定の場合は従来の絶対しきい値で判定
-                            if density < 0.005:
+                            if density < 0.01:
                                 is_missed = True
                                 force_evict = True
-                            elif is_missed and density > 0.01:
+                            elif is_missed and density > 0.02:
                                 is_missed = False  # 密度がゼロではないので生存とみなす
                         
                         # --- スライディングウィンドウによる生存判定 (3回連続 or 6回中4回) ---
@@ -1098,12 +1157,13 @@ class TranslationController:
                         state['existence_history'] = history
                         
                         # 判定条件
-                        consecutive_miss = all(h == 0 for h in history[-3:])
+                        # [改善B] 連続不在判定を 3→2 フレームに短縮（6フレームウィンドウは維持）
+                        consecutive_miss = all(h == 0 for h in history[-2:])
                         ratio_miss = (history.count(0) >= 4)
                         
                         # force_evict: 密度が激減した場合はウィンドウを待たず即パージ
                         if force_evict or consecutive_miss or ratio_miss:
-                            evict_reason = "密度激減(即時)" if force_evict else ("3回連続不在" if consecutive_miss else "6回中4回不在")
+                            evict_reason = "密度激減(即時)" if force_evict else ("2回連続不在" if consecutive_miss else "6回中4回不在")
                             self._purge_cid(cid)
                         else:
                             # 生存継続: last_seen を更新して長期カウンターをリセット
@@ -1139,6 +1199,15 @@ class TranslationController:
                                         state['_last_deep_verify'] = now_ts  # エラーでも次回まで待つ
                 except Exception as e:
                     print(f"[Monitor Error] {e}")
+
+            # --- 【CPU超軽量化】通常・エコモード時の頻度制限による重い全体Canny画像処理の早期バイパス ---
+            # 既存の字幕のリアルタイム追従（追従）やエッジ消失判定は毎フレーム実行（上記）しつつ、
+            # 新しいOCRをトリガーする処理は、エコモード時は10秒、通常時は0.3秒間は完全にスキップする。
+            current_time = time.time()
+            is_eco = self.config.get("eco_mode", False)
+            limit_time = 10.0 if is_eco else 0.3
+            if current_time - getattr(self, "_last_ocr_exec_time", 0.0) < limit_time:
+                return
 
             # 128x72 に統一して判定 (ピクセルとエッジ両用)
             curr_gray_full = np.array(image.resize((128, 72)).convert("L"))
@@ -1213,6 +1282,8 @@ class TranslationController:
                 self.pending_texts.clear()
                 self._last_raw_chunks = []
                 self._history_grid.clear()
+                if hasattr(self, 'translator') and self.translator:
+                    self.translator.clear_queue()
                 self.overlay.sync_active_ids(set())
 
             # 内部状態更新 (冒頭で実施済み)
@@ -1260,7 +1331,9 @@ class TranslationController:
                     self._prev_edge_count = edge_count
                     return
             else:
-                is_forced = (time_since_force >= 10.0)
+                # 強制OCRの周期設定：通常モードなら5.0秒、エコモードなら10.0秒
+                force_interval = 10.0 if is_eco else 5.0
+                is_forced = (time_since_force >= force_interval)
             
             prev_edge_for_log = self._prev_edge_count
             
@@ -1269,10 +1342,12 @@ class TranslationController:
             if is_forced:
                 pass
             # 2. エッジ激変 (10%以上): 内容が変わったため実行（通常モードのみ）
-            elif edge_diff_rate > 0.10:
+            # ただし、エッジ数が極めて少ない（20未満）場合はノイズによる比率ブレを防ぐため激変判定を適用しない
+            elif edge_diff_rate > 0.10 and max(edge_count, self._prev_edge_count) >= 20:
                 pass 
             # 3. エッジ安定 (5%未満): 文字の形が変わっていないため、ピクセル変化を無視してスキップ
-            elif edge_diff_rate < 0.05:
+            # またはエッジ数が極めて少ない場合（20未満）も文字無し/ノイズとみなし、背景変化無視としてスキップ
+            elif edge_diff_rate < 0.05 or max(edge_count, self._prev_edge_count) < 20:
                 self._prev_edge_count = edge_count # 安定継続
                 if not self._ocr_busy:
                     self._update_status("監視中 (背景変化無視)")
@@ -1288,11 +1363,17 @@ class TranslationController:
             
             self._prev_edge_count = edge_count
             
-            if edge_count < 100:
+            # エッジ数が極端に少ない（15未満）場合は、文字が消えたと判断してクリアする
+            if edge_count < 15:
                 if self.overlay_state:
                     self.overlay.clear_labels()
                     self.overlay_state.clear()
                     self.active_translations.clear()
+                    self.history_chunks.clear()
+                    self._history_grid.clear()
+                    self.pending_texts.clear()
+                    if hasattr(self, 'translator') and self.translator:
+                        self.translator.clear_queue()
                     print(f"[Monitor] Empty screen detected (Edges: {edge_count}): Cleared all states.")
                 
                 # 強制実行フラグが立っていた場合はタイマーをリセット（無限ループ防止）
@@ -1330,7 +1411,7 @@ class TranslationController:
                 except queue.Empty:
                     pass
 
-            # self.window_rect_data = {"x": rect[0], "y": rect[1], "w": logical_w, "h": logical_h}
+            self.window_rect_data = {"x": rect[0], "y": rect[1], "w": logical_w, "h": logical_h}
             
             # 重複削除
 
@@ -1363,11 +1444,13 @@ class TranslationController:
             now = current_time
                 
             # 爆速追従：位置更新キューの処理
+            got_position_update = False
             while not self._position_queue.empty():
                 try:
                     cid, new_rect = self._position_queue.get_nowait()
                     if hasattr(self, 'overlay'):
                         self.overlay.update_translation_position(cid, new_rect)
+                        got_position_update = True
                         if cid in self.overlay_state:
                             self.overlay_state[cid]['rect'] = new_rect
                             
@@ -1384,6 +1467,10 @@ class TranslationController:
                 except Exception as e:
                     print(f"[Position Tracking] エラー: {e}")
                     break
+
+            if got_position_update and hasattr(self, 'overlay') and getattr(self.overlay, 'use_csharp', False):
+                if hasattr(self.overlay, '_push_csharp_update'):
+                    self.overlay._push_csharp_update()
 
             while True:
                 try:
@@ -1405,6 +1492,8 @@ class TranslationController:
                         self._last_raw_chunks = []
                         self._history_grid.clear()
                         self._shadow_skip_cache.clear()
+                        if hasattr(self, 'translator') and self.translator:
+                            self.translator.clear_queue()
                         self.overlay.sync_active_ids(set())
                         continue
 
@@ -1515,8 +1604,8 @@ class TranslationController:
                     for old_cid in list(self.overlay_state.keys()):
                         if old_cid == cid: continue
                         old_rect = self.overlay_state[old_cid]['rect']
-                        # 新しい枠と古い枠が50%以上重なっているなら、古い方は「残骸」とみなす
-                        if calculate_iou(chunk['rect'], old_rect) > 0.5:
+                        # 新しい枠と古い枠が20%以上重なっているなら、古い方は「残骸」とみなして即座に削除（重複防止）
+                        if calculate_iou(chunk['rect'], old_rect) > 0.20:
                             self._purge_cid(old_cid)
     
                     new_history[cid] = chunk
@@ -1549,7 +1638,8 @@ class TranslationController:
                             stored_fs = self.overlay_state.get(cid, {}).get('font_size')
                             self.overlay.show_translation(cid, chunk, cached_trans, target_lang, font_size=stored_fs)
                             # OBS API用ステートの更新（ブラウザ用）
-                            # font_size を引き継いで上書き消失を防ぐ
+                            # font_size ・ 追従テンプレートを引き継いで上書き消失・ゴースト消え残りを防ぐ
+                            existing_state = self.overlay_state.get(cid, {})
                             self.overlay_state[cid] = {
                                 "text": cached_trans,
                                 "text_raw": text_raw,
@@ -1558,11 +1648,14 @@ class TranslationController:
                                 "text_color": chunk.get("text_color", "#eeeeee"),
                                 "lines_count": chunk.get("lines_count", 1),
                                 "base_density": chunk.get("base_density", 0.0),
-                                "parent_rect": chunk.get("parent_rect"),
-                                "step3_crop": chunk.get("step3_crop"),
                                 "font_size": stored_fs,
+                                "mismatch_strikes": existing_state.get("mismatch_strikes", 0),
+                                "change_strikes": existing_state.get("change_strikes", 0),
+                                # 追従用テンプレート: Numpy配列のor評価バグを防ぐため is not None で確認
+                                "parent_rect": chunk.get("parent_rect") if chunk.get("parent_rect") is not None else existing_state.get("parent_rect"),
+                                "step3_crop": chunk.get("step3_crop") if chunk.get("step3_crop") is not None else existing_state.get("step3_crop"),
                                 # 初回表示時刻: 既に表示中なら引き継ぐ（長期ゴースト検証用）
-                                "_display_start": self.overlay_state.get(cid, {}).get("_display_start", time.time()),
+                                "_display_start": existing_state.get("_display_start", time.time()),
                             }
     
                 # 空間バケットを再構築
@@ -1586,7 +1679,33 @@ class TranslationController:
                 for cid in list(self.overlay_state.keys()):
                     if cid in current_ids:
                         self.overlay_state[cid]['last_seen'] = current_time
-                    
+                
+                # --- 【改善A】OCR差分フィードバック (ocr_miss_count) ---
+                # OCRスキャン結果と overlay_state を突合し、2回連続で見つからなかったIDを即時パージする。
+                # スライディングウィンドウ（Monitor フェーズ）と独立して動作するため、
+                # 他テキストが画面に残っている場合でも迅速に個別消去できる。
+                for cid in list(self.overlay_state.keys()):
+                    state = self.overlay_state.get(cid)
+                    if state is None:
+                        continue
+                    # __IGNORE__ 系はスキップ（表示対象外のID）
+                    if state.get('text') in {"__IGNORE__", "__IGNORE_1__", "__IGNORE_2__"}:
+                        continue
+
+                    if cid in current_ids:
+                        # OCRで発見された → 不在カウンタをリセット
+                        state['ocr_miss_count'] = 0
+                    else:
+                        # OCRで見つからなかった → 不在カウンタをインクリメント
+                        miss_cnt = state.get('ocr_miss_count', 0) + 1
+                        state['ocr_miss_count'] = miss_cnt
+
+                        # 2回連続でOCRに見つからなければ即時パージ
+                        # （スライディングウィンドウを待たないため追加の遅延はゼロ）
+                        if miss_cnt >= 2:
+                            print(f"[OCR-Miss] 2連続OCR不在 → 即時パージ: ID={cid}")
+                            self._purge_cid(cid)
+                
                 # ゴーストとして生き残っているIDも含めて同期するが、
                 # 重複削除のあとで再度同期する必要がある
                 
@@ -1748,17 +1867,7 @@ class TranslationController:
                                     if len(self._recent_cleared_texts) > 50:
                                         self._recent_cleared_texts.popitem(last=False)
     
-                                    if active_cid in self.overlay_state:
-                                        if hasattr(self.overlay, 'active_labels') and active_cid in self.overlay.active_labels:
-                                            lbl = self.overlay.active_labels[active_cid]
-                                            if hasattr(lbl, 'deleteLater'):
-                                                lbl.deleteLater()
-                                            del self.overlay.active_labels[active_cid]
-                                        del self.overlay_state[active_cid]
-                                    if active_cid in self.active_translations:
-                                        del self.active_translations[active_cid]
-                                    if active_cid in self.history_chunks:
-                                        del self.history_chunks[active_cid]
+                                    self._purge_cid(active_cid)
                                     # ここでは break せず、他の重なりもチェックする
                                     continue
                                 else:
@@ -2006,7 +2115,8 @@ class TranslationController:
                             # 保存されたフォントサイズがあれば渡す
                             stored_fs = self.overlay_state.get(cid, {}).get('font_size')
                             self.overlay.show_translation(cid, chunk, found_trans, target_lang, font_size=stored_fs)
-                            # font_size を引き継いで上書き消失を防ぐ
+                            # font_size ・ 追従テンプレートを引き継いで上書き消失・ゴースト消え残りを防ぐ
+                            existing_state = self.overlay_state.get(cid, {})
                             self.overlay_state[cid] = {
                                 "text": found_trans,
                                 "raw_text": text_raw,
@@ -2014,8 +2124,16 @@ class TranslationController:
                                 "bg_color": chunk.get("bg_color", "rgba(0,0,0,1.0)"),
                                 "text_color": "#ffffff",
                                 "lines_count": chunk.get("lines_count", 1),
-                                "base_density": self.ocr.calculate_edge_density(image, chunk['rect']),
+                                # image=None（エコモード早期リターン等）の場合は再計算せず既存値を引き継ぐ
+                                "base_density": self.ocr.calculate_edge_density(image, chunk['rect']) if image is not None else existing_state.get("base_density", chunk.get("base_density", 0.0)),
                                 "font_size": stored_fs,
+                                "mismatch_strikes": existing_state.get("mismatch_strikes", 0),
+                                "change_strikes": existing_state.get("change_strikes", 0),
+                                # 追従用テンプレート: Numpy配列のor評価バグを防ぐため is not None で確認
+                                "parent_rect": chunk.get("parent_rect") if chunk.get("parent_rect") is not None else existing_state.get("parent_rect"),
+                                "step3_crop": chunk.get("step3_crop") if chunk.get("step3_crop") is not None else existing_state.get("step3_crop"),
+                                # 初回表示時刻: 既に表示中なら引き継ぐ（長期ゴースト検証用）
+                                "_display_start": existing_state.get("_display_start", time.time()),
                             }
                         else:
                             new_chunks.append(chunk)
@@ -2471,8 +2589,8 @@ class TranslationController:
                             "change_strikes": 0,
                             "font_size": stored_fs,
                             # 追従用テンプレート: チャンクから取得し、なければ既存ステートから引き継ぐ
-                            "step3_crop": ac_chunk.get("step3_crop") or existing_state.get("step3_crop"),
-                            "parent_rect": ac_chunk.get("parent_rect") or existing_state.get("parent_rect"),
+                            "step3_crop": ac_chunk.get("step3_crop") if ac_chunk.get("step3_crop") is not None else existing_state.get("step3_crop"),
+                            "parent_rect": ac_chunk.get("parent_rect") if ac_chunk.get("parent_rect") is not None else existing_state.get("parent_rect"),
                             # 初回表示時刻: 既に表示中なら引き継ぐ（長期ゴースト検証用）
                             "_display_start": existing_state.get("_display_start", time.time()),
                         }
@@ -2514,7 +2632,7 @@ class ControlPanel(QMainWindow):
 
         
     def _setup_window(self):
-        self.setWindowTitle("Real Time Translate - Control Panel v1.1.4")
+        self.setWindowTitle("Real Time Translate - Control Panel v1.2.0-beta")
         self.setFixedSize(560, 640)
         
     def _setup_ui(self):
@@ -2910,7 +3028,7 @@ class ControlPanel(QMainWindow):
         self.capture_combo.addItem("高速キャプチャ (WGC / DXCAM)", "wgc")
         
         # 保存設定を反映
-        saved_mode = self.config.get("capture_mode", "bitblt")
+        saved_mode = self.config.get("capture_mode", "wgc")
         idx = self.capture_combo.findData(saved_mode)
         if idx >= 0: self.capture_combo.setCurrentIndex(idx)
 
@@ -2925,7 +3043,7 @@ class ControlPanel(QMainWindow):
         cap_mode_layout.addWidget(self.capture_combo, stretch=1)
         capture_vbox.addLayout(cap_mode_layout)
         
-        cap_hint = QLabel("※通常はBitBlt推奨。画面が真っ黒な場合はPrintWindowまたはmssに変更。")
+        cap_hint = QLabel("※通常は高速・低負荷なWGC推奨。画面が真っ黒な場合はPrintWindowまたはmssに変更。")
         cap_hint.setFont(QFont("Yu Gothic UI", 8))
         cap_hint.setStyleSheet("color: #888;")
         capture_vbox.addWidget(cap_hint)

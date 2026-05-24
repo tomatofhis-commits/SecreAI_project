@@ -101,13 +101,13 @@ namespace RTtranslator_CS_Overlay
             IntPtr hwnd = FindWindow(null, windowTitle);
             if (hwnd == IntPtr.Zero)
             {
-                Console.WriteLine($"[C# WindowCapturer] Window not found: {windowTitle}");
+                Console.WriteLine(string.Format("[C# WindowCapturer] Window not found: {0}", windowTitle));
                 return null;
             }
 
             if (IsIconic(hwnd))
             {
-                Console.WriteLine($"[C# WindowCapturer] Window is minimized: {windowTitle}");
+                Console.WriteLine(string.Format("[C# WindowCapturer] Window is minimized: {0}", windowTitle));
                 return null;
             }
 
@@ -155,6 +155,11 @@ namespace RTtranslator_CS_Overlay
             else if (mode == "screen" || mode == "mss")
             {
                 return CaptureScreen(pLeft, pTop, pW, pH);
+            }
+            else if (mode == "wgc" || mode == "dxcam")
+            {
+                Console.WriteLine("[C# WindowCapturer] WGC/DXCAM mode is not implemented in C# overlay server. Falling back to Python.");
+                return null;
             }
 
             // デフォルトは bitblt

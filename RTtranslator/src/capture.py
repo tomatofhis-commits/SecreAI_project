@@ -220,10 +220,20 @@ def capture_dxcam(rect: tuple, window_title: str) -> Image.Image | None:
         # camera.grab は numpy 配列 (RGB) を返す
         frame = camera.grab(region=region)
         if frame is not None:
-            return Image.fromarray(frame)
-        return None
+            img = Image.fromarray(frame)
+            img.info["captured_by"] = "wgc"
+            return img
+        
+        # grab が None を返した場合（D3Dデバイスエラーやタイミングエラー等）
+        raise Exception("dxcam_grab_none")
     except Exception as e:
-        print(f"[Capture] DXCAM エラー: {e}")
+        err_msg = str(e)
+        print(f"[Capture] DXCAM エラー: {err_msg}")
+        # 例外情報を PIL Image の info タグに伝達するフォールバック画像を即座に作成して返す！
+        img_fb = capture_bitblt(rect, window_title)
+        if img_fb:
+            img_fb.info["captured_by"] = f"bitblt (WGCエラー: {err_msg})"
+            return img_fb
         return None
 
 
@@ -287,10 +297,11 @@ def capture_window(
     if rect is None:
         return None
 
-    # C#ハイブリッドキャプチャ委託の試行
-    if use_csharp:
+    # C#ハイブリッドキャプチャ委託の試行 (WGC/DXCAMはPython側の本物のGPUキャプチャを利用するため除外)
+    if use_csharp and mode not in ("wgc", "dxcam"):
         img = capture_csharp(window_title, rect=rect, mode=mode, api_url=cs_api_url)
         if img:
+            img.info["captured_by"] = "csharp"
             return img
         # C#キャプチャが失敗した、または取得できなかった場合は自動フォールバック
 
@@ -298,12 +309,19 @@ def capture_window(
         img = capture_bitblt(rect, window_title)
         # 真っ黒（extremaがすべて0）でなければ採用
         if img and img.getextrema() != ((0, 0), (0, 0), (0, 0)):
+            img.info["captured_by"] = "bitblt"
             return img
         # BitBltが失敗した、または真っ黒な場合はフォールバックとしてPrintWindowを試す
-        return capture_printwindow(window_title, rect)
+        img_fb = capture_printwindow(window_title, rect)
+        if img_fb:
+            img_fb.info["captured_by"] = "printwindow (BitBltフォールバック)"
+            return img_fb
 
     elif mode == "printwindow":
-        return capture_printwindow(window_title, rect)
+        img = capture_printwindow(window_title, rect)
+        if img:
+            img.info["captured_by"] = "printwindow"
+            return img
 
     elif mode == "mss":
         # mss 方式 (常に物理ピクセルで取得される)
@@ -312,15 +330,27 @@ def capture_window(
         try:
             with mss.mss() as sct:
                 screenshot = sct.grab(monitor)
-                return Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+                img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+                if img:
+                    img.info["captured_by"] = "mss"
+                    return img
         except Exception:
             return None
 
     elif mode == "wgc" or mode == "dxcam":
         img = capture_dxcam(rect, window_title)
         if img:
+            img.info["captured_by"] = "wgc"
             return img
-        # DXCAM が失敗した場合はフォールバック
-        return capture_bitblt(rect, window_title)
+        # DXCAM が失敗した場合はフォールバックとして BitBlt を試す
+        img_fb1 = capture_bitblt(rect, window_title)
+        if img_fb1 and img_fb1.getextrema() != ((0, 0), (0, 0), (0, 0)):
+            img_fb1.info["captured_by"] = "bitblt (WGCフォールバック)"
+            return img_fb1
+        # BitBlt も真っ黒か失敗した場合は最終手段として PrintWindow を試す
+        img_fb2 = capture_printwindow(window_title, rect)
+        if img_fb2:
+            img_fb2.info["captured_by"] = "printwindow (WGCフォールバック)"
+            return img_fb2
 
     return None

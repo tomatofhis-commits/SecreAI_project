@@ -74,17 +74,24 @@ def generate_ai_text(prompt, config, system_instr=None, is_json=False):
         client = OpenAI(api_key=config.get("OPENAI_API_KEY", ""))
         model_id = config.get("MODEL_ID_GPT", "gpt-5")
         
+        from config_manager import parse_model_name
+        actual_model_id, level = parse_model_name(model_id)
+
         messages = []
         if system_instr:
             messages.append({"role": "system", "content": system_instr})
         messages.append({"role": "user", "content": prompt})
-        
+
         response_format = {"type": "json_object"} if is_json else None
-        res = client.chat.completions.create(
-            model=model_id,
-            messages=messages,
-            response_format=response_format,
-        )
+        openai_kwargs = {
+            "model": actual_model_id,
+            "messages": messages,
+            "response_format": response_format
+        }
+        if actual_model_id in ("o1", "o3-mini") and level:
+            openai_kwargs["reasoning_effort"] = level
+            
+        res = client.chat.completions.create(**openai_kwargs)
         return res.choices[0].message.content.strip()
 
     # --- B. Llama (Local Ollama) プロバイダー ---
@@ -119,21 +126,33 @@ def generate_ai_text(prompt, config, system_instr=None, is_json=False):
     # --- C. Gemini プロバイダー (デフォルト) ---
     else:
         client = genai.Client(api_key=config.get("GEMINI_API_KEY", ""))
-        # フィードバック分析(プロファイリング)には賢いProモデルを優先
-        model_id = config.get("MODEL_ID_PRO" if system_instr else "MODEL_ID", "gemini-2.5-flash")
+        model_id = config.get("MODEL_ID_PRO" if system_instr else "MODEL_ID", "gemini-3.5-flash")
         
+        from config_manager import parse_model_name
+        actual_model_id, level = parse_model_name(model_id)
+
         gen_config = {}
         if system_instr:
             gen_config["system_instruction"] = system_instr
         if is_json:
             gen_config["response_mime_type"] = "application/json"
-            
-        thinking_budget = config.get("THINKING_BUDGET", "medium")
-        if model_id == "gemini-3.1-flash-lite":
-            gen_config["thinking_config"] = {"thinking_level": thinking_budget.upper()}
+
+        if level is None:
+            thinking_budget = config.get("THINKING_BUDGET", "medium").lower()
+            level = thinking_budget
+
+        is_thinking_supported = (
+            actual_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
+        )
+
+        if is_thinking_supported and level:
+            if actual_model_id == "gemini-3.5-flash":
+                if level not in ("medium", "high"):
+                    level = "medium"
+            gen_config["thinking_config"] = {"thinking_level": level.upper()}
 
         res = client.models.generate_content(
-            model=model_id,
+            model=actual_model_id,
             contents=prompt,
             config=gen_config if gen_config else None
         )

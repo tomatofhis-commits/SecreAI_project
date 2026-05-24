@@ -142,7 +142,7 @@
     "timeout_memory_update": "Memory Update Timeout (seconds):",
     "max_background_workers": "Parallel Workers:",
     "deprecation_notice": "⚠ Gemini 2.5 Series End of Life\nGemini 2.5 Flash: June 17, 2026 / Gemini 2.5 Flash-Lite: July 22, 2026",
-    "thinking_level_label": "Thinking Level (3.1-flash-lite only):",
+    "thinking_level_label": "Thinking Level (3.1-flash-lite / 3.5-flash only):",
     "thinking_min": "Minimal",
     "thinking_low": "Low",
     "thinking_mid": "Medium",
@@ -236,7 +236,9 @@
     "edge_tts_error": "Edge-TTS Error: {e}",
     "voicevox_error": "VOICEVOX Error: {e}",
     "chromadb_connected": "ChromaDB connected: {path}",
-    "chromadb_error": "ChromaDB error: {e}"
+    "chromadb_error": "ChromaDB error: {e}",
+    "gatekeeper_analyzing": "System: Gatekeeper is determining the necessity of search...",
+    "gatekeeper_approve": "System: Gatekeeper approved the search."
   },
   "ai_prompt": {
     "role": "You are a reliable partner supporting a live stream.",

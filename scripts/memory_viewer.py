@@ -340,29 +340,36 @@ class MemoryViewer:
                 )
 
                 new_content = ""
+                from config_manager import parse_model_name
+                actual_model, level = parse_model_name(db_model_id)
                 if db_provider == "openai":
                     from openai import OpenAI
                     client_oa = OpenAI(api_key=self.config.get("OPENAI_API_KEY"))
-                    response = client_oa.chat.completions.create(
-                        model=db_model_id, 
-                        messages=[{"role": "user", "content": prompt}],
-                    )
+                    openai_kwargs = {
+                        "model": actual_model,
+                        "messages": [{"role": "user", "content": prompt}]
+                    }
+                    if actual_model in ("o1", "o3-mini") and level:
+                        openai_kwargs["reasoning_effort"] = level
+                    response = client_oa.chat.completions.create(**openai_kwargs)
                     new_content = response.choices[0].message.content.strip()
                 elif db_provider == "gemini":
                     import google.genai as genai
                     client_ge = genai.Client(api_key=self.config.get("GEMINI_API_KEY"))
-                    
-                    actual_model = db_model_id
                     gemini_config_obj = {}
-                    if db_model_id == "gemini-3.1-flash-lite（中）":
-                        actual_model = "gemini-3.1-flash-lite"
-                        gemini_config_obj["thinking_config"] = {"thinking_level": "MEDIUM"}
-                    elif db_model_id == "gemini-3.1-flash-lite":
-                        budget = self.config.get("THINKING_BUDGET", "MEDIUM")
-                        gemini_config_obj["thinking_config"] = {"thinking_level": budget.upper()}
-
+                    if level is None:
+                        thinking_budget = self.config.get("THINKING_BUDGET", "medium").lower()
+                        level = thinking_budget
+                    is_thinking_supported = (
+                        actual_model in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
+                    )
+                    if is_thinking_supported and level:
+                        if actual_model == "gemini-3.5-flash":
+                            if level not in ("medium", "high"):
+                                level = "medium"
+                        gemini_config_obj["thinking_config"] = {"thinking_level": level.upper()}
                     res = client_ge.models.generate_content(
-                        model=actual_model, 
+                        model=actual_model,
                         contents=prompt,
                         config=gemini_config_obj if gemini_config_obj else None
                     )
@@ -446,29 +453,36 @@ class MemoryViewer:
                     )
                     
                     new_content = ""
+                    from config_manager import parse_model_name
+                    actual_model, level = parse_model_name(db_model_id)
                     if db_provider == "openai":
                         from openai import OpenAI
                         client_oa = OpenAI(api_key=self.config.get("OPENAI_API_KEY"))
-                        response = client_oa.chat.completions.create(
-                            model=db_model_id, 
-                            messages=[{"role": "user", "content": prompt}],
-                        )
+                        openai_kwargs = {
+                            "model": actual_model,
+                            "messages": [{"role": "user", "content": prompt}]
+                        }
+                        if actual_model in ("o1", "o3-mini") and level:
+                            openai_kwargs["reasoning_effort"] = level
+                        response = client_oa.chat.completions.create(**openai_kwargs)
                         new_content = response.choices[0].message.content.strip()
                     elif db_provider == "gemini":
                         import google.genai as genai
                         client_ge = genai.Client(api_key=self.config.get("GEMINI_API_KEY"))
-                        
-                        actual_model = db_model_id
                         gemini_config_obj = {}
-                        if db_model_id == "gemini-3.1-flash-lite（中）":
-                            actual_model = "gemini-3.1-flash-lite"
-                            gemini_config_obj["thinking_config"] = {"thinking_level": "MEDIUM"}
-                        elif db_model_id == "gemini-3.1-flash-lite":
-                            budget = self.config.get("THINKING_BUDGET", "MEDIUM")
-                            gemini_config_obj["thinking_config"] = {"thinking_level": budget.upper()}
-
+                        if level is None:
+                            thinking_budget = self.config.get("THINKING_BUDGET", "medium").lower()
+                            level = thinking_budget
+                        is_thinking_supported = (
+                            actual_model in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
+                        )
+                        if is_thinking_supported and level:
+                            if actual_model == "gemini-3.5-flash":
+                                if level not in ("medium", "high"):
+                                    level = "medium"
+                            gemini_config_obj["thinking_config"] = {"thinking_level": level.upper()}
                         res = client_ge.models.generate_content(
-                            model=actual_model, 
+                            model=actual_model,
                             contents=prompt,
                             config=gemini_config_obj if gemini_config_obj else None
                         )

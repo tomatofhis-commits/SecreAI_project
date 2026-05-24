@@ -55,7 +55,7 @@ except ImportError:
 # ------------------------
 # 🔹 GLOBAL CONFIGURATION 🔹
 # ------------------------
-VERSION = "1.1.4"
+VERSION = "1.2.0-beta"
 CONFIG_VERSION = "2.0"
 APP_NAME = f"SecreAI - NextGen {VERSION}"
 
@@ -127,6 +127,12 @@ def check_for_updates():
 
 # --- Flaskサーバー ---
 app = Flask(__name__)
+
+@app.route('/api/session', methods=['GET'])
+def get_session():
+    if main_gui:
+        return jsonify({"session_id": main_gui.active_session_id})
+    return jsonify({"session_id": "default_sess"})
 
 @app.route('/api/log', methods=['POST'])
 def receive_log():
@@ -265,20 +271,45 @@ def run_script(script_name, args=[]):
     new_id = str(uuid.uuid4())
     main_gui.active_session_id = new_id
     
-    # Send stop signal log? (Optional, maybe not needed if seamless)
-    # stop_ai() # No longer needed in the old sense
+    # 既存の game_ai プロセスがあれば終了させる
+    if getattr(main_gui, 'game_ai_process', None):
+        try:
+            if main_gui.game_ai_process.poll() is None:
+                main_gui.game_ai_process.terminate()
+                main_gui.game_ai_process.wait(timeout=1.0)
+        except Exception:
+            try:
+                main_gui.game_ai_process.kill()
+            except:
+                pass
+        main_gui.game_ai_process = None
     
     if script_name == "game_ai.py":
         mode = args[0] if len(args) > 0 else "voice"
         chat_text = args[1] if len(args) > 1 else None
         
-        # Pass the session ID control mechanisms
-        # args for game_ai.main: (mode, chat_text, session_id, session_getter, overlay_queue)
-        threading.Thread(
-            target=game_ai.main, 
-            args=(mode, chat_text, new_id, get_current_session_id, main_gui.overlay_queue), 
-            daemon=True
-        ).start()
+        # 起動コマンドの構築
+        if getattr(sys, 'frozen', False):
+            # exe 実行時
+            cmd = [sys.executable, "--game-ai", mode]
+        else:
+            # python スクリプト実行時
+            script_path = os.path.join(base_dir, "scripts", "game_ai.py")
+            if not os.path.exists(script_path):
+                script_path = os.path.join(base_dir, "game_ai.py")
+            cmd = [sys.executable, script_path, mode]
+            
+        if chat_text:
+            cmd.append(chat_text)
+            
+        try:
+            main_gui.game_ai_process = subprocess.Popen(
+                cmd,
+                creationflags=0x08000000,  # CREATE_NO_WINDOW
+                cwd=base_dir
+            )
+        except Exception as e:
+            main_gui.update_log_area(f"Failed to start game_ai process: {e}", is_error=True)
 
     elif script_name == "clear_history.py":
         threading.Thread(target=clear_history.main, daemon=True).start()
@@ -293,6 +324,18 @@ def stop_ai():
     if main_gui:
         main_gui.active_session_id = str(uuid.uuid4()) # Changing ID stops the current runner
         main_gui.current_ai_status = 'idle'
+        
+        # 既存の game_ai プロセスがあれば終了させる
+        if getattr(main_gui, 'game_ai_process', None):
+            try:
+                if main_gui.game_ai_process.poll() is None:
+                    main_gui.game_ai_process.terminate()
+            except:
+                pass
+            main_gui.game_ai_process = None
+            
+        # オーバーレイを明示的に閉じる (idleシグナルをキューに投入)
+        main_gui.overlay_queue.put(("", "", 0.0, 0, "idle"))
         
         s = main_gui.lang.get("system", {})
         msg = s.get("ai_stop_signal", "AI Stop Signal Sent.")
@@ -319,7 +362,7 @@ def setup_hotkeys():
     except: pass
 
 def check_single_instance(lang_data=None):
-    app_id = "Global\\AI_Secretary_Hub_Unique_ID_12345"
+    app_id = "Global\\SecreAI_Hub_Python_Mutex_ID_12345"
     kernel32 = ctypes.windll.kernel32
     mutex = kernel32.CreateMutexW(None, False, app_id)
     if kernel32.GetLastError() == 183:
@@ -742,38 +785,41 @@ class MainApp(ctk.CTk):
         if getattr(self, '_rtt_process', None) and self._rtt_process.poll() is None:
             return  # 既に起動中
 
-        # --- RTT 実行ファイルの探索 ---
-        rtt_exe = os.path.join(base_dir, "RTtranslator_core.exe")
-        if not os.path.exists(rtt_exe):
-            potential_exe_paths = [
-                os.path.join(os.path.dirname(base_dir), "Real_Time_Translate", "main.dist", "RTtranslator_core.exe"),
-                os.path.join(os.path.dirname(os.path.dirname(base_dir)), "Real_Time_Translate", "main.dist", "RTtranslator_core.exe"),
-                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(base_dir))), "Real_Time_Translate", "main.dist", "RTtranslator_core.exe"),
-            ]
-            for p in potential_exe_paths:
-                if os.path.exists(p):
-                    rtt_exe = p
-                    break
-
+        # --- RTT 実行ファイルおよびスクリプトの探索 ---
+        # 開発中の最新 Python コードが存在する場合は、古いビルド済み EXE よりも 100% 最優先で起動する（開発優先モード）
         rtt_script = None
         rtt_script_dir = None
-        if not os.path.exists(rtt_exe):
-            search_dirs = [
-                os.path.join(base_dir, "RTtranslator"),
-                os.path.join(os.path.dirname(base_dir), "RTtranslator"),
-                os.path.join(os.path.dirname(os.path.dirname(base_dir)), "RTtranslator"),
-            ]
-            for d in search_dirs:
-                p = os.path.join(d, "main.py")
-                if os.path.exists(p):
-                    rtt_script = p
-                    rtt_script_dir = d
-                    break
+        
+        search_dirs = [
+            os.path.join(base_dir, "RTtranslator"),
+            os.path.join(os.path.dirname(base_dir), "RTtranslator"),
+            os.path.join(os.path.dirname(os.path.dirname(base_dir)), "RTtranslator"),
+        ]
+        for d in search_dirs:
+            p = os.path.join(d, "main.py")
+            if os.path.exists(p):
+                rtt_script = p
+                rtt_script_dir = d
+                break
 
-            if rtt_script:
-                self.update_log_area("[RTT] EXEが見つかりません。Pythonスクリプトで代替起動します（開発モード）。")
-                rtt_exe = None
-            else:
+        rtt_exe = None
+        if rtt_script:
+            self.update_log_area("[RTT] 開発用Pythonスクリプトを最優先で検出・起動します（開発優先モード）。")
+        else:
+            # 開発用スクリプトがない場合のみ、ビルド済み EXE を探索する
+            rtt_exe = os.path.join(base_dir, "RTtranslator_core.exe")
+            if not os.path.exists(rtt_exe):
+                potential_exe_paths = [
+                    os.path.join(os.path.dirname(base_dir), "Real_Time_Translate", "main.dist", "RTtranslator_core.exe"),
+                    os.path.join(os.path.dirname(os.path.dirname(base_dir)), "Real_Time_Translate", "main.dist", "RTtranslator_core.exe"),
+                    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(base_dir))), "Real_Time_Translate", "main.dist", "RTtranslator_core.exe"),
+                ]
+                for p in potential_exe_paths:
+                    if os.path.exists(p):
+                        rtt_exe = p
+                        break
+
+            if not rtt_exe:
                 self.update_log_area(
                     f"[RTT] 実行ファイルが見つかりません: {os.path.join(base_dir, 'RTtranslator_core.exe')}\n"
                     f"[RTT] 開発用スクリプトも見つかりませんでした。", is_error=True)
@@ -1025,10 +1071,8 @@ class MainApp(ctk.CTk):
         try:
             while True:
                 data = self.overlay_queue.get_nowait()
-                if len(data) == 4:
-                    self.show_overlay_on_main_thread(data[0], data[1], data[2], data[3])
-                else:
-                    self.show_overlay_on_main_thread(*data)
+                # 常に5要素タプル (text, image_path, alpha_val, display_time, status) でアンパック
+                self.show_overlay_on_main_thread(*data)
         except queue.Empty:
             pass
         self.after(100, self.poll_overlay_queue)
@@ -1155,6 +1199,28 @@ def run_server():
         except: time.sleep(1)
 
 if __name__ == "__main__":
+    # もし引数に --game-ai が指定されていたら、GUIではなく game_ai を動かして終了する
+    if len(sys.argv) > 1 and sys.argv[1] == "--game-ai":
+        m = sys.argv[2] if len(sys.argv) > 2 else "voice"
+        t = sys.argv[3] if len(sys.argv) > 3 else None
+        
+        # scripts へのパスを通す
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(os.path.abspath(sys.executable))
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        scripts_path = os.path.join(base_dir, "scripts")
+        if os.path.exists(scripts_path) and scripts_path not in sys.path:
+            sys.path.insert(0, scripts_path)
+            
+        try:
+            import game_ai
+        except ImportError:
+            from scripts import game_ai
+            
+        game_ai.main(m, t)
+        sys.exit(0)
+
     set_app_id()
     temp_config = load_config_with_defaults()
     lang_code = temp_config.get("LANGUAGE", "ja")

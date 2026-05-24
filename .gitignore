@@ -90,3 +90,23 @@ RTtranslator/run_builds.ps1
 
 # Backups
 * - コピー/
+
+# WPF Build artifacts
+WPF/bin/
+WPF/obj/
+WPF/packages/
+
+# Executables in root and folders
+/*.exe
+/RTtranslator/*.exe
+/WPF/*.exe
+
+# Python Portable runtime (local)
+/python_runtime/
+/test_install_migration/
+/test_install_run/
+
+# Large models and local configs
+/frozen_east_text_detection.pb
+/config.json
+/models/

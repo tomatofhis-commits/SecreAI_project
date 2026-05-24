@@ -15,7 +15,7 @@ common_keys = [
 translations = {
     "ja": {
         "deprecation_notice": "⚠  Gemini 2.5 シリーズ 終了予定日\nGemini 2.5 Flash: 2026年6月17日　／　Gemini 2.5 Flash-Lite: 2026年7月22日",
-        "thinking_level_label": "思考レベル (3.1-flash-lite のみ):",
+        "thinking_level_label": "思考レベル (3.1-flash-lite / 3.5-flash のみ):",
         "thinking_min": "最小", "thinking_low": "低", "thinking_mid": "中", "thinking_high": "高",
         "search_opt_grounding_2_5": "gemini-2.5-flash-liteのgrounding",
         "search_opt_tavily": "tavilyで検索しollamaで要約",
@@ -28,7 +28,7 @@ translations = {
     },
     "en": {
         "deprecation_notice": "⚠ Gemini 2.5 Series End of Life\nGemini 2.5 Flash: June 17, 2026 / Gemini 2.5 Flash-Lite: July 22, 2026",
-        "thinking_level_label": "Thinking Level (3.1-flash-lite only):",
+        "thinking_level_label": "Thinking Level (3.1-flash-lite / 3.5-flash only):",
         "thinking_min": "Minimal", "thinking_low": "Low", "thinking_mid": "Medium", "thinking_high": "High",
         "search_opt_grounding_2_5": "gemini-2.5-flash-lite grounding",
         "search_opt_tavily": "Search with tavily, summarize with ollama",
@@ -41,7 +41,7 @@ translations = {
     },
     "zh-CN": {
         "deprecation_notice": "⚠ Gemini 2.5 系列停用日期\nGemini 2.5 Flash: 2026年6月17日 / Gemini 2.5 Flash-Lite: 2026年7月22日",
-        "thinking_level_label": "思考级别 (仅限 3.1-flash-lite):",
+        "thinking_level_label": "思考级别 (仅限 3.1-flash-lite / 3.5-flash):",
         "thinking_min": "最小", "thinking_low": "低", "thinking_mid": "中", "thinking_high": "高",
         "search_opt_grounding_2_5": "gemini-2.5-flash-lite grounding",
         "search_opt_tavily": "使用 tavily 搜索，ollama 总结",
@@ -54,7 +54,7 @@ translations = {
     },
     "ko": {
         "deprecation_notice": "⚠ Gemini 2.5 시리즈 종료 예정일\nGemini 2.5 Flash: 2026년 6月 17일 / Gemini 2.5 Flash-Lite: 2026년 7월 22일",
-        "thinking_level_label": "사고 レベル (3.1-flash-lite 전용):",
+        "thinking_level_label": "사고 레벨 (3.1-flash-lite / 3.5-flash 전용):",
         "thinking_min": "최소", "thinking_low": "낮음", "thinking_mid": "중간", "thinking_high": "높음",
         "search_opt_grounding_2_5": "gemini-2.5-flash-lite grounding",
         "search_opt_tavily": "tavily로 검색하고 ollama로 요약",
@@ -67,7 +67,7 @@ translations = {
     },
     "es": {
         "deprecation_notice": "⚠ Fin de vida de la serie Gemini 2.5\nGemini 2.5 Flash: 17 de junio de 2026 / Gemini 2.5 Flash-Lite: 22 de julio de 2026",
-        "thinking_level_label": "Nivel de pensamiento (solo 3.1-flash-lite):",
+        "thinking_level_label": "Nivel de pensamiento (solo 3.1-flash-lite / 3.5-flash):",
         "thinking_min": "Mínimo", "thinking_low": "Bajo", "thinking_mid": "Medio", "thinking_high": "Alto",
         "search_opt_grounding_2_5": "gemini-2.5-flash-lite grounding",
         "search_opt_tavily": "Buscar con tavily, resumir con ollama",
@@ -80,7 +80,7 @@ translations = {
     },
     "fr": {
         "deprecation_notice": "⚠ Fin de vie de la série Gemini 2.5\nGemini 2.5 Flash : 17 juin 2026 / Gemini 2.5 Flash-Lite : 22 juillet 2026",
-        "thinking_level_label": "Niveau de réflexion (3.1-flash-lite uniquement):",
+        "thinking_level_label": "Niveau de réflexion (3.1-flash-lite / 3.5-flash uniquement):",
         "thinking_min": "Minimal", "thinking_low": "Bas", "thinking_mid": "Moyen", "thinking_high": "Haut",
         "search_opt_grounding_2_5": "gemini-2.5-flash-lite grounding",
         "search_opt_tavily": "Rechercher avec tavily, résumer avec ollama",
@@ -93,7 +93,7 @@ translations = {
     },
     "de": {
         "deprecation_notice": "⚠ Lebensende der Gemini 2.5 Serie\nGemini 2.5 Flash: 17. Juni 2026 / Gemini 2.5 Flash-Lite: 22. Juli 2026",
-        "thinking_level_label": "Denkstufe (nur 3.1-flash-lite):",
+        "thinking_level_label": "Denkstufe (nur 3.1-flash-lite / 3.5-flash):",
         "thinking_min": "Minimal", "thinking_low": "Niedrig", "thinking_mid": "Mittel", "thinking_high": "Hoch",
         "search_opt_grounding_2_5": "gemini-2.5-flash-lite grounding",
         "search_opt_tavily": "Suchen mit tavily, zusammenfassen mit ollama",
@@ -106,7 +106,7 @@ translations = {
     },
     "it": {
         "deprecation_notice": "⚠ Fine della serie Gemini 2.5\nGemini 2.5 Flash: 17 giugno 2026 / Gemini 2.5 Flash-Lite: 22 luglio 2026",
-        "thinking_level_label": "Livello di pensiero (solo 3.1-flash-lite):",
+        "thinking_level_label": "Livello di pensiero (solo 3.1-flash-lite / 3.5-flash):",
         "thinking_min": "Minimo", "thinking_low": "Basso", "thinking_mid": "Medio", "thinking_high": "Alto",
         "search_opt_grounding_2_5": "gemini-2.5-flash-lite grounding",
         "search_opt_tavily": "Cerca con tavily, riassumi con ollama",
@@ -119,7 +119,7 @@ translations = {
     },
     "pt": {
         "deprecation_notice": "⚠ Fim da vida útil da série Gemini 2.5\nGemini 2.5 Flash: 17 de junho de 2026 / Gemini 2.5 Flash-Lite: 22 de julho de 2026",
-        "thinking_level_label": "Nível de raciocínio (apenas 3.1-flash-lite):",
+        "thinking_level_label": "Nível de raciocínio (apenas 3.1-flash-lite / 3.5-flash):",
         "thinking_min": "Mínimo", "thinking_low": "Baixo", "thinking_mid": "Médio", "thinking_high": "Alto",
         "search_opt_grounding_2_5": "gemini-2.5-flash-lite grounding",
         "search_opt_tavily": "Pesquisar com tavily, resumir com ollama",
@@ -132,7 +132,7 @@ translations = {
     },
     "ru": {
         "deprecation_notice": "⚠ Окончание поддержки серии Gemini 2.5\nGemini 2.5 Flash: 17 июня 2026 г. / Gemini 2.5 Flash-Lite: 22 июля 2026 г.",
-        "thinking_level_label": "Уровень мышления (только 3.1-flash-lite):",
+        "thinking_level_label": "Уровень мышления (только 3.1-flash-lite / 3.5-flash):",
         "thinking_min": "Минимальный", "thinking_low": "Низкий", "thinking_mid": "Средний", "thinking_high": "Высокий",
         "search_opt_grounding_2_5": "gemini-2.5-flash-lite grounding",
         "search_opt_tavily": "Поиск с tavily, резюме с ollama",
