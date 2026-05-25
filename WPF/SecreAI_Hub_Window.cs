@@ -1036,8 +1036,8 @@ namespace SecreAI_Hub
             // Soft slate or solid dark
             if (_logTextBox.Background.ToString() == "#FF1A1A1A")
             {
-                _logTextBox.Background = new SolidColorBrush(Color.FromRgb(10, 30, 10)); // Soft green log theme
-                _logTextBox.Foreground = Brushes.Lime;
+                _logTextBox.Background = new SolidColorBrush(Color.FromRgb(0, 255, 0)); // Pure green (G255) for OBS Chroma Key
+                _logTextBox.Foreground = Brushes.White;
             }
             else
             {
