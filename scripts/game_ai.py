@@ -199,31 +199,36 @@ def is_voicevox_up():
 APP_ROOT = get_app_root()
 
 def send_log_to_hub(message, is_error=False, error_code=None):
-    try:
-        url = "http://127.0.0.1:5000/api/log"
-        payload = {"message": message, "is_error": is_error}
-        if error_code:
-            payload["error_code"] = error_code
-        requests.post(url, json=payload, timeout=1)
-    except:
-        print(message)
+    print(message)
+    def _send():
+        try:
+            url = "http://127.0.0.1:5000/api/log"
+            payload = {"message": message, "is_error": is_error}
+            if error_code:
+                payload["error_code"] = error_code
+            requests.post(url, json=payload, timeout=1)
+        except:
+            pass
+    threading.Thread(target=_send, daemon=True).start()
 
 def trigger_overlay_state(text, image_path, alpha_val, display_time, status, overlay_queue=None):
     if overlay_queue:
         overlay_queue.put((text, image_path, alpha_val, display_time, status))
     else:
-        try:
-            url = "http://127.0.0.1:5000/api/overlay"
-            payload = {
-                "text": text or "",
-                "image_path": image_path or "",
-                "alpha_val": alpha_val,
-                "display_time": display_time,
-                "status": status
-            }
-            requests.post(url, json=payload, timeout=1)
-        except:
-            pass
+        def _send():
+            try:
+                url = "http://127.0.0.1:5000/api/overlay"
+                payload = {
+                    "text": text or "",
+                    "image_path": image_path or "",
+                    "alpha_val": alpha_val,
+                    "display_time": display_time,
+                    "status": status
+                }
+                requests.post(url, json=payload, timeout=1)
+            except:
+                pass
+        threading.Thread(target=_send, daemon=True).start()
 
 def load_lang_file(lang_code):
     path = os.path.join(APP_ROOT, "data", "lang", f"{lang_code}.json")
@@ -1452,11 +1457,48 @@ def run_api_server():
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
 
+    # 起動時の事前キャッシュ
+    cached_info = {
+        "speakers": {"ずんだもん": 3, "四国めたん": 2, "春日部つむぎ": 8, "雨晴はう": 10},
+        "ollama_models": []
+    }
+
+    def load_cache_async():
+        try:
+            resp = requests.get("http://127.0.0.1:50021/speakers", timeout=2.0)
+            if resp.status_code == 200:
+                cached_info["speakers"] = {s['name']: s['styles'][0]['id'] for s in resp.json()}
+        except Exception:
+            pass
+
+        try:
+            root = get_app_root()
+            config_path = os.path.join(root, "data", "config.json")
+            if not os.path.exists(config_path):
+                config_path = os.path.join(root, "config", "config.json")
+            with open(config_path, "r", encoding="utf-8") as f:
+                conf = json.load(f)
+            url = conf.get("OLLAMA_URL", "http://localhost:11434/v1")
+            base_url = url.split("/v1")[0].rstrip("/")
+            resp = requests.get(f"{base_url}/api/tags", timeout=2.0)
+            if resp.status_code == 200:
+                models = [m.get("name", "") for m in resp.json().get("models", [])]
+                if models:
+                    cached_info["ollama_models"] = models
+        except Exception:
+            pass
+
+    threading.Thread(target=load_cache_async, daemon=True).start()
+
     app = Flask("SecreAI_Game_AI_Server")
 
     @app.route('/api/status', methods=['GET'])
     def status():
         return jsonify({"status": "ok", "active_session": get_active_session_id()})
+
+    @app.route('/api/cache', methods=['GET'])
+    def get_cache():
+        return jsonify(cached_info)
 
     @app.route('/api/stop', methods=['POST'])
     def stop():
