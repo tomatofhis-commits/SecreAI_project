@@ -41,6 +41,18 @@ class DummyParent(tk.Tk):
             self.lang = {}
 
     def load_speakers(self):
+        # 1. Try daemon server cache
+        try:
+            resp = requests.get("http://127.0.0.1:5003/api/cache", timeout=0.3)
+            if resp.status_code == 200:
+                data = resp.json()
+                self.cached_speakers = data.get("speakers", {})
+                if self.cached_speakers:
+                    return
+        except:
+            pass
+
+        # 2. Fallback to direct request
         try:
             resp = requests.get("http://127.0.0.1:50021/speakers", timeout=1.0)
             if resp.status_code == 200:
@@ -51,6 +63,18 @@ class DummyParent(tk.Tk):
     def load_ollama_models(self):
         self.cached_ollama_models = self.config_data.get("CACHED_OLLAMA_MODELS", [])
         if not self.cached_ollama_models:
+            # 1. Try daemon server cache
+            try:
+                resp = requests.get("http://127.0.0.1:5003/api/cache", timeout=0.3)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    self.cached_ollama_models = data.get("ollama_models", [])
+                    if self.cached_ollama_models:
+                        return
+            except:
+                pass
+
+            # 2. Fallback to direct request
             url = self.config_data.get("OLLAMA_URL", "http://localhost:11434/v1")
             try:
                 base_url = url.split("/v1")[0].rstrip("/")
