@@ -51,6 +51,18 @@ except ImportError:
 
 # --- 1. ロックの準備 ---
 file_lock = threading.Lock()
+active_session_id = None
+active_session_lock = threading.Lock()
+
+def get_active_session_id():
+    global active_session_id
+    with active_session_lock:
+        return active_session_id
+
+def set_active_session_id(session_id):
+    global active_session_id
+    with active_session_lock:
+        active_session_id = session_id
 
 # バックグラウンドタスク用の並列実行関数
 def submit_background_task(func, *args, timeout=None):
@@ -1421,7 +1433,132 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
             _thread_pool_executor.shutdown(wait=True)
             _thread_pool_executor = None
 
+def monitor_parent_stdin():
+    """親プロセスの終了（stdinのクローズ）を監視し、閉じたら自死する"""
+    try:
+        sys.stdin.read(1)
+    except Exception:
+        pass
+    send_log_to_hub("システム: 親プロセスの終了（stdin断）を検知したため、終了します。")
+    ensure_mixer_cleanup()
+    os._exit(0)
+
+def run_api_server():
+    from flask import Flask, request, jsonify
+    import logging
+    import gc
+
+    # Flaskの内部ログを抑制
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+
+    app = Flask("SecreAI_Game_AI_Server")
+
+    @app.route('/api/status', methods=['GET'])
+    def status():
+        return jsonify({"status": "ok", "active_session": get_active_session_id()})
+
+    @app.route('/api/stop', methods=['POST'])
+    def stop():
+        set_active_session_id(None)
+        try:
+            if pygame.mixer.get_init():
+                pygame.mixer.music.stop()
+                pygame.mixer.music.unload()
+        except Exception as e:
+            send_log_to_hub(f"Stop Music Error: {e}", is_error=True)
+        
+        send_log_to_hub("システム: 対話プロセスおよび音声を停止しました。")
+        gc.collect()
+        return jsonify({"status": "stopped"})
+
+    @app.route('/api/execute', methods=['POST'])
+    def execute():
+        data = request.get_json() or {}
+        mode = data.get("mode", "voice")
+        chat_text = data.get("chat_text")
+        session_id = data.get("session_id")
+
+        if not session_id:
+            import uuid
+            session_id = str(uuid.uuid4())
+
+        set_active_session_id(session_id)
+
+        def run_task():
+            try:
+                main(mode=mode, chat_text=chat_text, session_id=session_id, session_getter=get_active_session_id)
+            except Exception as e:
+                send_log_to_hub(f"Execution Thread Error: {e}", is_error=True)
+            finally:
+                gc.collect()
+
+        threading.Thread(target=run_task, daemon=True).start()
+        return jsonify({"status": "started", "session_id": session_id})
+
+    @app.route('/api/action', methods=['POST'])
+    def action():
+        data = request.get_json() or {}
+        action_name = data.get("action")
+        
+        if not action_name:
+            return jsonify({"status": "error", "message": "No action specified"}), 400
+
+        def run_action_task():
+            try:
+                if action_name == "clear":
+                    send_log_to_hub("システム: 履歴の整理（削除）を実行中...")
+                    import clear_history
+                    clear_history.main()
+                    send_log_to_hub("システム: 履歴の整理が完了しました。")
+                    
+                elif action_name == "fix":
+                    send_log_to_hub("システム: 履歴の修復を実行中...")
+                    import fix_history
+                    fix_history.main()
+                    send_log_to_hub("システム: 履歴の修復が完了しました。")
+                    
+                elif action_name == "feedback":
+                    fb_type = data.get("feedback_type", "positive")
+                    send_log_to_hub(f"システム: フィードバック（{fb_type}）を送信中...")
+                    import give_feedback
+                    give_feedback.main(fb_type)
+                    send_log_to_hub(f"システム: フィードバック（{fb_type}）の送信が完了しました。")
+                    
+                elif action_name == "settings":
+                    send_log_to_hub("システム: 設定画面を起動中...")
+                    script_path = os.path.join(APP_ROOT, "scripts", "run_settings.py")
+                    if not os.path.exists(script_path):
+                        script_path = os.path.join(APP_ROOT, "run_settings.py")
+                    subprocess.Popen([sys.executable, script_path], creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+                    
+                elif action_name == "setup":
+                    send_log_to_hub("システム: セットアップウィザードを起動中...")
+                    script_path = os.path.join(APP_ROOT, "scripts", "run_setup_wizard.py")
+                    if not os.path.exists(script_path):
+                        script_path = os.path.join(APP_ROOT, "run_setup_wizard.py")
+                    subprocess.Popen([sys.executable, script_path], creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+                    
+                else:
+                    send_log_to_hub(f"エラー: 未知のアクション '{action_name}' です。", is_error=True)
+            except Exception as e:
+                send_log_to_hub(f"Action Thread Error ({action_name}): {e}", is_error=True)
+            finally:
+                gc.collect()
+
+        threading.Thread(target=run_action_task, daemon=True).start()
+        return jsonify({"status": "dispatched", "action": action_name})
+
+    send_log_to_hub("システム: 常駐 API サーバーが起動しました（ポート: 5003）。")
+    app.run(host="127.0.0.1", port=5003, debug=False, threaded=True)
+
 if __name__ == "__main__":
     m = sys.argv[1] if len(sys.argv) > 1 else "voice"
     t = sys.argv[2] if len(sys.argv) > 2 else None
-    main(m, t)
+    
+    if m == "server":
+        if not sys.stdin.isatty():
+            threading.Thread(target=monitor_parent_stdin, daemon=True).start()
+        run_api_server()
+    else:
+        main(m, t)
