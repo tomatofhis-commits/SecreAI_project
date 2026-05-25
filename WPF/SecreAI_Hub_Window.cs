@@ -49,6 +49,7 @@ namespace SecreAI_Hub
         private string _currentAiStatus = "idle";
         private double _animationTime = 0.0;
         private Process _rttProcess;
+        private Process _gameAiServerProcess;
         private System.Windows.Forms.NotifyIcon _trayIcon;
         private bool _isSettingsOpen = false;
         private bool _isWizardOpen = false;
@@ -597,9 +598,74 @@ namespace SecreAI_Hub
             return "python"; // Fallback to global python
         }
 
+        private void RunScriptFallback(string scriptName, string[] args, bool isAiScript)
+        {
+            bool started = false;
+            try
+            {
+                string scriptPath = Path.Combine(_baseDir, "scripts", scriptName);
+                if (!File.Exists(scriptPath))
+                {
+                    scriptPath = Path.Combine(_baseDir, scriptName);
+                }
+
+                StringBuilder argBuilder = new StringBuilder();
+                argBuilder.Append("\"" + scriptPath + "\"");
+                foreach (var arg in args)
+                {
+                    argBuilder.Append(" \"" + arg + "\"");
+                }
+
+                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), argBuilder.ToString())
+                {
+                    WorkingDirectory = _baseDir,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                Process p = Process.Start(psi);
+                if (p != null)
+                {
+                    started = true;
+                    
+                    if (isAiScript)
+                    {
+                        Thread.Sleep(3000);
+                        Dispatcher.BeginInvoke(new Action(() => {
+                            _btnVoice.IsEnabled = true;
+                            _btnVision.IsEnabled = true;
+                        }));
+                    }
+                    
+                    p.WaitForExit();
+                }
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.BeginInvoke(new Action(() => {
+                    UpdateLogArea("Failed to run " + scriptName + " (Fallback): " + ex.Message, true);
+                }));
+            }
+            finally
+            {
+                if (!started && isAiScript)
+                {
+                    Dispatcher.BeginInvoke(new Action(() => {
+                        _btnVoice.IsEnabled = true;
+                        _btnVision.IsEnabled = true;
+                    }));
+                }
+            }
+        }
+
         private void RunScript(string scriptName, string[] args)
         {
-            if (scriptName == "game_ai.py")
+            bool isAiScript = scriptName == "game_ai.py";
+            bool isClearHistory = scriptName == "clear_history.py";
+            bool isFixHistory = scriptName == "fix_history.py";
+            bool isGiveFeedback = scriptName == "give_feedback.py";
+
+            if (isAiScript)
             {
                 bool isLocked = false;
                 Dispatcher.Invoke(new Action(() => {
@@ -607,17 +673,13 @@ namespace SecreAI_Hub
                 }));
                 if (isLocked)
                 {
-                    return; // Avoid multiple quick clicks or triggers
+                    return;
                 }
             }
 
-            // Stop previous session by generating new UUID
             _activeSessionId = Guid.NewGuid().ToString();
 
-            bool isAiScript = scriptName == "game_ai.py";
-
             Thread t = new Thread(() => {
-                // ボタンを無効化（game_ai.pyの場合のみ）
                 if (isAiScript)
                 {
                     Dispatcher.BeginInvoke(new Action(() => {
@@ -629,43 +691,85 @@ namespace SecreAI_Hub
                 bool started = false;
                 try
                 {
-                    string scriptPath = Path.Combine(_baseDir, "scripts", scriptName);
-                    if (!File.Exists(scriptPath))
-                    {
-                        scriptPath = Path.Combine(_baseDir, scriptName);
-                    }
+                    LaunchGameAiServerProcess();
 
-                    // Format arguments
-                    StringBuilder argBuilder = new StringBuilder();
-                    argBuilder.Append("\"" + scriptPath + "\"");
-                    foreach (var arg in args)
-                    {
-                        argBuilder.Append(" \"" + arg + "\"");
-                    }
+                    var serializer = new JavaScriptSerializer();
 
-                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), argBuilder.ToString())
+                    if (isAiScript)
                     {
-                        WorkingDirectory = _baseDir,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
-
-                    Process p = Process.Start(psi);
-                    if (p != null)
-                    {
-                        started = true;
-                        
-                        if (isAiScript)
+                        var payload = new Dictionary<string, object>
                         {
-                            // 起動成功後、3秒間待機した時点でボタンの無効化を解除（2重起動防止）
+                            { "mode", args.Length > 0 ? args[0] : "voice" },
+                            { "chat_text", args.Length > 1 ? args[1] : "" },
+                            { "session_id", _activeSessionId }
+                        };
+                        string json = serializer.Serialize(payload);
+
+                        try
+                        {
+                            SendPostRequest("http://127.0.0.1:5003/api/execute", json);
+                            started = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            Dispatcher.BeginInvoke(new Action(() => {
+                                UpdateLogArea("[Game AI] APIサーバーとの接続に失敗しました。再起動してリトライします: " + ex.Message, true);
+                            }));
+                            
+                            RestartGameAiServerProcess();
+                            
+                            try
+                            {
+                                SendPostRequest("http://127.0.0.1:5003/api/execute", json);
+                                started = true;
+                            }
+                            catch (Exception retryEx)
+                            {
+                                Dispatcher.BeginInvoke(new Action(() => {
+                                    UpdateLogArea("[Game AI] リトライに失敗しました。従来のプロセス直接起動にフォールバックします: " + retryEx.Message, true);
+                                }));
+                            }
+                        }
+
+                        if (started)
+                        {
                             Thread.Sleep(3000);
                             Dispatcher.BeginInvoke(new Action(() => {
                                 _btnVoice.IsEnabled = true;
                                 _btnVision.IsEnabled = true;
                             }));
                         }
-                        
-                        p.WaitForExit();
+                        else
+                        {
+                            RunScriptFallback(scriptName, args, isAiScript);
+                        }
+                    }
+                    else if (isClearHistory || isFixHistory || isGiveFeedback)
+                    {
+                        string action = isClearHistory ? "clear" : (isFixHistory ? "fix" : "feedback");
+                        var payload = new Dictionary<string, object>
+                        {
+                            { "action", action }
+                        };
+                        if (isGiveFeedback && args.Length > 0)
+                        {
+                            payload["feedback_type"] = args[0];
+                        }
+                        string json = serializer.Serialize(payload);
+
+                        try
+                        {
+                            SendPostRequest("http://127.0.0.1:5003/api/action", json);
+                            started = true;
+                        }
+                        catch
+                        {
+                            RunScriptFallback(scriptName, args, isAiScript);
+                        }
+                    }
+                    else
+                    {
+                        RunScriptFallback(scriptName, args, isAiScript);
                     }
                 }
                 catch (Exception ex)
@@ -673,17 +777,6 @@ namespace SecreAI_Hub
                     Dispatcher.BeginInvoke(new Action(() => {
                         UpdateLogArea("Failed to run " + scriptName + ": " + ex.Message, true);
                     }));
-                }
-                finally
-                {
-                    // 起動に失敗した場合（started=false）のみ、即座にボタンを有効化する
-                    if (!started && isAiScript)
-                    {
-                        Dispatcher.BeginInvoke(new Action(() => {
-                            _btnVoice.IsEnabled = true;
-                            _btnVision.IsEnabled = true;
-                        }));
-                    }
                 }
             });
             t.IsBackground = true;
@@ -696,6 +789,14 @@ namespace SecreAI_Hub
             _currentAiStatus = "idle";
             string msg = GetLangString("system", "ai_stop_signal", "AI Stop Signal Sent.");
             UpdateLogArea(msg);
+
+            ThreadPool.QueueUserWorkItem((state) => {
+                try
+                {
+                    SendPostRequest("http://127.0.0.1:5003/api/stop", "");
+                }
+                catch { }
+            });
         }
 
         public string GetActiveSessionId()
@@ -1298,6 +1399,67 @@ namespace SecreAI_Hub
             return rttCfg;
         }
 
+        private void LaunchGameAiServerProcess()
+        {
+            if (_gameAiServerProcess != null && !_gameAiServerProcess.HasExited)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_gameAiServerProcess != null)
+                {
+                    try { _gameAiServerProcess.Kill(); _gameAiServerProcess.WaitForExit(1000); } catch { }
+                    _gameAiServerProcess = null;
+                }
+
+                string scriptPath = Path.Combine(_baseDir, "scripts", "game_ai.py");
+                if (!File.Exists(scriptPath))
+                {
+                    scriptPath = Path.Combine(_baseDir, "game_ai.py");
+                }
+
+                StringBuilder argBuilder = new StringBuilder();
+                argBuilder.Append("\"" + scriptPath + "\" server");
+
+                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), argBuilder.ToString())
+                {
+                    WorkingDirectory = _baseDir,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardInput = true
+                };
+
+                _gameAiServerProcess = Process.Start(psi);
+                Dispatcher.BeginInvoke(new Action(() => {
+                    UpdateLogArea("[Game AI] 常駐 API サーバーを起動しました (ポート: 5003)。");
+                }));
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.BeginInvoke(new Action(() => {
+                    UpdateLogArea("[Game AI] 常駐 API サーバーの起動に失敗しました: " + ex.Message, true);
+                }));
+            }
+        }
+
+        private void RestartGameAiServerProcess()
+        {
+            try
+            {
+                if (_gameAiServerProcess != null && !_gameAiServerProcess.HasExited)
+                {
+                    _gameAiServerProcess.Kill();
+                    _gameAiServerProcess.WaitForExit(2000);
+                }
+            }
+            catch { }
+            _gameAiServerProcess = null;
+            LaunchGameAiServerProcess();
+            Thread.Sleep(2500);
+        }
+
         private void LaunchRttProcess()
         {
             if (IsRttProcessRunning()) return;
@@ -1427,6 +1589,9 @@ namespace SecreAI_Hub
         {
             // Start RTT process headless
             LaunchRttProcess();
+
+            // Start Game AI API server
+            LaunchGameAiServerProcess();
 
             // Start VOICEVOX if path configured
             object vvPathObj;
@@ -1764,6 +1929,21 @@ namespace SecreAI_Hub
                     try
                     {
                         _rttProcess.Kill();
+                    }
+                    catch { }
+                }
+
+                // Kill Game AI server process
+                if (_gameAiServerProcess != null && !_gameAiServerProcess.HasExited)
+                {
+                    try
+                    {
+                        SendPostRequest("http://127.0.0.1:5003/api/stop", "");
+                    }
+                    catch { }
+                    try
+                    {
+                        _gameAiServerProcess.Kill();
                     }
                     catch { }
                 }
