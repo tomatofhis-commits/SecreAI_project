@@ -53,6 +53,7 @@ except ImportError:
 file_lock = threading.Lock()
 active_session_id = None
 active_session_lock = threading.Lock()
+is_server_mode = False
 
 def get_active_session_id():
     global active_session_id
@@ -1428,15 +1429,17 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
         msg = log_m.get("execution_error", "Execution error: {e}").format(e=e)
         send_log_to_hub(msg, is_error=True)
     finally:
-        global _thread_pool_executor
-        if _thread_pool_executor is not None:
-            try:
-                wait_msg = log_m.get("background_wait", "システム: バックグラウンドタスクの完了を待機中...")
-                send_log_to_hub(wait_msg)
-            except:
-                send_log_to_hub("システム: バックグラウンドタスクの完了を待機中...")
-            _thread_pool_executor.shutdown(wait=True)
-            _thread_pool_executor = None
+        global is_server_mode
+        if not is_server_mode:
+            global _thread_pool_executor
+            if _thread_pool_executor is not None:
+                try:
+                    wait_msg = log_m.get("background_wait", "システム: バックグラウンドタスクの完了を待機中...")
+                    send_log_to_hub(wait_msg)
+                except:
+                    send_log_to_hub("システム: バックグラウンドタスクの完了を待機中...")
+                _thread_pool_executor.shutdown(wait=True)
+                _thread_pool_executor = None
 
 def monitor_parent_stdin():
     """親プロセスの終了（stdinのクローズ）を監視し、閉じたら自死する"""
@@ -1599,6 +1602,7 @@ if __name__ == "__main__":
     t = sys.argv[2] if len(sys.argv) > 2 else None
     
     if m == "server":
+        is_server_mode = True
         if not sys.stdin.isatty():
             threading.Thread(target=monitor_parent_stdin, daemon=True).start()
         run_api_server()
