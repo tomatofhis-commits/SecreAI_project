@@ -41,6 +41,13 @@ Name: "english";  MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[InstallDelete]
+; 古いPython版ハブがルート上に配置していたDLLや.pyd等のファイルをクリーンアップします（データフォルダは保護されます）
+Type: files; Name: "{app}\*.pyd"
+Type: files; Name: "{app}\*.dll"
+Type: files; Name: "{app}\python*.dll"
+Type: files; Name: "{app}\secreAI.exe"
+
 [Files]
 ; ==============================================================================
 ;  【厳格な除外ルール】インストーラー制作時に不要ファイルを混入させないための規定
