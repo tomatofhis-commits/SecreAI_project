@@ -95,7 +95,7 @@ namespace SecreAI_Hub
             LoadLanguage();
 
             // Window Settings
-            Title = "SecreAI Hub v1.2.0-beta - Controller";
+            Title = "SecreAI Hub v1.2.0 - Controller";
             Width = 1150;
             Height = 880;
             Background = new SolidColorBrush(Color.FromRgb(18, 18, 20));
@@ -499,6 +499,23 @@ namespace SecreAI_Hub
             _labelContext.Content = GetLangString("gui", "label_context", "Context:");
             _btnSave.Content = GetLangString("gui", "btn_quick_save", "Quick Save");
             _btnAdvanced.Content = GetLangString("gui", "btn_open_settings", "Advanced Settings");
+
+            // Reconstruct top menu bar dynamically when language changes
+            DockPanel rootDock = Content as DockPanel;
+            if (rootDock != null)
+            {
+                for (int i = 0; i < rootDock.Children.Count; i++)
+                {
+                    if (rootDock.Children[i] is Menu)
+                    {
+                        rootDock.Children.RemoveAt(i);
+                        Menu newMenu = CreateWpfMenuBar();
+                        DockPanel.SetDock(newMenu, Dock.Top);
+                        rootDock.Children.Insert(i, newMenu);
+                        break;
+                    }
+                }
+            }
         }
         #endregion
 
@@ -874,13 +891,13 @@ namespace SecreAI_Hub
             // 1. System Cascade Menu
             MenuItem systemMenu = new MenuItem
             {
-                Header = "システム (System)"
+                Header = GetLangString("menu", "system_cascade", "システム (System)")
             };
             styleTopLevelMenu(systemMenu);
             menuBar.Items.Add(systemMenu);
 
-            systemMenu.Items.Add(CreateMenuSubItem("ターゲットウィンドウの更新 (Refresh Windows)", (s, e) => RefreshWindowTitles()));
-            systemMenu.Items.Add(CreateMenuSubItem("記憶管理 (Memory Management)", (s, e) => {
+            systemMenu.Items.Add(CreateMenuSubItem(GetLangString("menu", "refresh_windows", "ターゲットウィンドウ一覧を更新 (Refresh Windows)"), (s, e) => RefreshWindowTitles()));
+            systemMenu.Items.Add(CreateMenuSubItem(GetLangString("menu", "open_memory", "記憶管理 (Memory Management)"), (s, e) => {
                 Thread t = new Thread(() => {
                     try
                     {
@@ -903,34 +920,36 @@ namespace SecreAI_Hub
                 t.IsBackground = true;
                 t.Start();
             }));
-            systemMenu.Items.Add(CreateMenuSubItem("短期記憶の整理 (Reset Memory)", (s, e) => {
-                if (MessageBox.Show("これまでの会話履歴（短期記憶）をリセットしますか？\n(Clear history?)", "確認 (Confirm)", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            systemMenu.Items.Add(CreateMenuSubItem(GetLangString("menu", "reset_memory", "短期記憶の整理 (Reset Memory)"), (s, e) => {
+                string confirmMsg = GetLangString("menu", "reset_memory_confirm_msg", "これまでの会話履歴（短期記憶）をリセットしますか？\n(Clear history?)");
+                string confirmTitle = GetLangString("menu", "reset_memory_confirm_title", "確認 (Confirm)");
+                if (MessageBox.Show(confirmMsg, confirmTitle, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                 {
                     RunScript("clear_history.py", new string[0]);
-                    UpdateLogArea("短期記憶をリセットしました。");
+                    UpdateLogArea(GetLangString("menu", "status_memory_reset", "短期記憶をリセットしました。"));
                 }
             }));
             
             systemMenu.Items.Add(new Separator());
-            systemMenu.Items.Add(CreateMenuSubItem("ハブの再起動 (Restart Hub)", (s, e) => RestartHub()));
+            systemMenu.Items.Add(CreateMenuSubItem(GetLangString("menu", "restart", "ハブの再起動 (Restart Hub)"), (s, e) => RestartHub()));
             systemMenu.Items.Add(new Separator());
-            systemMenu.Items.Add(CreateMenuSubItem("終了 (Exit)", (s, e) => ShutdownAllProcessesAndQuit()));
+            systemMenu.Items.Add(CreateMenuSubItem(GetLangString("menu", "exit", "終了 (Exit)"), (s, e) => ShutdownAllProcessesAndQuit()));
 
             // 2. RTトランスレーター Cascade Menu
             MenuItem rttMenu = new MenuItem
             {
-                Header = "RTトランスレーター"
+                Header = GetLangString("menu", "rtt_cascade", "RTトランスレーター")
             };
             styleTopLevelMenu(rttMenu);
             menuBar.Items.Add(rttMenu);
 
-            rttMenu.Items.Add(CreateMenuSubItem("翻訳を開始 (Start)", (s, e) => RttStart()));
-            rttMenu.Items.Add(CreateMenuSubItem("翻訳を停止 (Stop)", (s, e) => RttStop()));
+            rttMenu.Items.Add(CreateMenuSubItem(GetLangString("menu", "rtt_start", "翻訳を開始 (Start)"), (s, e) => RttStart()));
+            rttMenu.Items.Add(CreateMenuSubItem(GetLangString("menu", "rtt_stop", "翻訳を停止 (Stop)"), (s, e) => RttStop()));
             rttMenu.Items.Add(new Separator());
 
             _ecoMenuItem = new MenuItem
             {
-                Header = "エコモード (Eco Mode)",
+                Header = GetLangString("menu", "rtt_eco_mode", "エコモード (Eco Mode)"),
                 IsCheckable = true,
                 IsChecked = IsEcoModeOn(),
                 Foreground = Brushes.White,
@@ -948,7 +967,7 @@ namespace SecreAI_Hub
 
             _singleMenuItem = new MenuItem
             {
-                Header = "シングルモード (Single Mode)",
+                Header = GetLangString("menu", "rtt_single_mode", "シングルモード (Single Mode)"),
                 IsCheckable = true,
                 IsChecked = IsSingleModeOn(),
                 Foreground = Brushes.White,
@@ -1853,7 +1872,7 @@ namespace SecreAI_Hub
                         if (data != null && data.TryGetValue("tag_name", out tagObj))
                         {
                             string latestV = tagObj.ToString().TrimStart('v');
-                            string currentV = "1.2.0-beta";
+                            string currentV = "1.2.0";
                             
                             if (string.Compare(latestV, currentV) > 0)
                             {

@@ -26,7 +26,10 @@
     "rtt_stop": "번역 중지",
     "rtt_eco_mode": "에코 모드",
     "rtt_single_mode": "원샷 번역 모드",
-    "rtt_settings": "RTT 설정 열기"
+    "rtt_settings": "RTT 설정 열기",
+    "reset_memory_confirm_title": "확인",
+    "reset_memory_confirm_msg": "이전 대화 기록(단기 기억)을 초기화하시겠습니까?",
+    "status_memory_reset": "단기 기억을 초기화했습니다."
   },
   "gui": {
     "log_header": "AI 전사 & 시스템 로그",
@@ -159,7 +162,26 @@
     "search_limit_notice": "※Tavily의 무료 사용량 제한은 월 1000회입니다. Google 검색 선택 시 \"gemini-2.5-flash-lite\"로 고정됩니다.",
     "search_usage_grounding": "{date}에 {count}번 Google Search를 실행했습니다",
     "search_usage_grounding_short": "Google (오늘): {count}번",
-    "search_usage_tavily_short": "Tavily (이번 달): {count}회"
+    "search_usage_tavily_short": "Tavily (이번 달): {count}회",
+    "rtt_ocr_en_us": "영어 (en-US)",
+    "rtt_ocr_ja_jp": "일본어 (ja-JP)",
+    "rtt_ocr_ru_ru": "러시아어 (ru-RU)",
+    "rtt_ocr_ko_kr": "한국어 (ko-KR)",
+    "rtt_ocr_zh_hans": "중국어 (zh-Hans)",
+    "rtt_gpu_cpu_only": "CPU만 사용 (-1)",
+    "rtt_gpu_default": "GPU 0 (기본값)",
+    "rtt_paddle_lang_ja_en": "일본어 (JA/EN)",
+    "rtt_paddle_lang_en": "영어 (EN)",
+    "rtt_paddle_lang_ko": "한국어 (KO)",
+    "rtt_paddle_lang_zh": "중국어 (ZH)",
+    "rtt_paddle_lang_ru": "러시아어 (RU)",
+    "rtt_paddle_lang_latin": "유럽 제어 (Latin)",
+    "rtt_capture_wgc": "고속 캡처 (WGC / DXCAM) (권장)",
+    "rtt_capture_bitblt": "BitBlt (고정밀)",
+    "rtt_capture_printwindow": "PrintWindow (호환/고정밀)",
+    "rtt_capture_mss": "mss (표준)",
+    "rtt_sens_lowest": "최저",
+    "rtt_sens_highest": "최대"
   },
   "log_messages": {
     "module_loaded": "시스템: 기억 업데이트 모듈이 로드되었습니다.",

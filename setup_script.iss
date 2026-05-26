@@ -1,10 +1,10 @@
 ; ============================================================
-;  SecreAI (Beta) + RTtranslator 統合インストーラー (v1.2.0-beta)
+;  SecreAI + RTtranslator 統合インストーラー (v1.2.0)
 ;  Inno Setup 6 スクリプト
 ; ============================================================
 
-#define MyAppName        "SecreAI (Beta)"
-#define MyAppVersion     "1.2.0-beta"
+#define MyAppName        "SecreAI"
+#define MyAppVersion     "1.2.0"
 #define MyAppPublisher   "SecreAI Dev Team"
 #define MyAppExeName     "secreAI.exe"
 
@@ -14,18 +14,18 @@
 #define RTTSourceDir     "D:\SecreAI_Build\RTtranslator"
 
 [Setup]
-; Beta専用の新しいIDに変更し、mainのアンインストール情報等と競合しないようにします
-AppId={{D37E6F8C-1A5B-4C9D-A2B3-C4D5E6F7G8H9}
+; 本番用IDを設定します
+AppId={{C12F4B7A-9E5C-4F3D-8A1B-2C3D4E5F6G7H}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-; インストール先を main とは別フォルダ (SecreAI_Beta) に分離します
-DefaultDirName={localappdata}\SecreAI_Beta
+; インストール先を通常のSecreAIフォルダに設定します
+DefaultDirName={localappdata}\SecreAI
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=d:\SecreAI_Build\installer_output
-OutputBaseFilename=SecreAI_v{#MyAppVersion}_Beta_Setup
+OutputBaseFilename=SecreAI_v{#MyAppVersion}_Setup
 SetupIconFile=d:\SecreAI_Build\SecreAI.ico
 Compression=lzma
 SolidCompression=yes
