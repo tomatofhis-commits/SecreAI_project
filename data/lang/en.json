@@ -29,7 +29,10 @@
     "rtt_stop": "Stop Translation",
     "rtt_eco_mode": "Eco Mode",
     "rtt_single_mode": "One-shot Translation Mode",
-    "rtt_settings": "Open RTT Settings"
+    "rtt_settings": "Open RTT Settings",
+    "reset_memory_confirm_title": "Confirm",
+    "reset_memory_confirm_msg": "Do you want to reset the conversation history (short-term memory)?",
+    "status_memory_reset": "Short-term memory has been reset."
   },
   "gui": {
     "log_header": "AI Transcript & System Log",
@@ -174,7 +177,26 @@
     "rtt_label_capture_engine": "Capture Engine:",
     "rtt_label_eco": "Eco Mode (10s OCR Suppress)",
     "rtt_label_single": "One-shot Translation Mode (Scan once)",
-    "rtt_label_sens": "Response Sensitivity:"
+    "rtt_label_sens": "Response Sensitivity:",
+    "rtt_ocr_en_us": "English (en-US)",
+    "rtt_ocr_ja_jp": "Japanese (ja-JP)",
+    "rtt_ocr_ru_ru": "Russian (ru-RU)",
+    "rtt_ocr_ko_kr": "Korean (ko-KR)",
+    "rtt_ocr_zh_hans": "Chinese (zh-Hans)",
+    "rtt_gpu_cpu_only": "CPU Only (-1)",
+    "rtt_gpu_default": "GPU 0 (Default)",
+    "rtt_paddle_lang_ja_en": "Japanese (JA/EN)",
+    "rtt_paddle_lang_en": "English (EN)",
+    "rtt_paddle_lang_ko": "Korean (KO)",
+    "rtt_paddle_lang_zh": "Chinese (ZH)",
+    "rtt_paddle_lang_ru": "Russian (RU)",
+    "rtt_paddle_lang_latin": "Latin languages",
+    "rtt_capture_wgc": "High-speed Capture (WGC / DXCAM) (Recommended)",
+    "rtt_capture_bitblt": "BitBlt (High Detail)",
+    "rtt_capture_printwindow": "PrintWindow (Compatible/High Detail)",
+    "rtt_capture_mss": "mss (Standard)",
+    "rtt_sens_lowest": "Lowest",
+    "rtt_sens_highest": "Highest"
   },
   "log_messages": {
     "module_loaded": "System: Memory update module loaded.",

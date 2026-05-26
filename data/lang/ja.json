@@ -26,7 +26,10 @@
     "rtt_stop": "翻訳を停止",
     "rtt_eco_mode": "エコモード",
     "rtt_single_mode": "ワンショット翻訳モード",
-    "rtt_settings": "RTT設定を開く"
+    "rtt_settings": "RTT設定を開く",
+    "reset_memory_confirm_title": "確認",
+    "reset_memory_confirm_msg": "これまでの会話履歴（短期記憶）をリセットしますか？",
+    "status_memory_reset": "短期記憶をリセットしました。"
   },
   "gui": {
     "log_header": "AI Transcript & System Log",
@@ -159,7 +162,26 @@
     "rtt_label_capture_engine": "キャプチャ方式:",
     "rtt_label_eco": "エコモード (10秒間OCR抑制)",
     "rtt_label_single": "ワンショット翻訳モード (1回のみスキャン)",
-    "rtt_label_sens": "読取反応感度:"
+    "rtt_label_sens": "読取反応感度:",
+    "rtt_ocr_en_us": "英語 (en-US)",
+    "rtt_ocr_ja_jp": "日本語 (ja-JP)",
+    "rtt_ocr_ru_ru": "ロシア語 (ru-RU)",
+    "rtt_ocr_ko_kr": "韓国語 (ko-KR)",
+    "rtt_ocr_zh_hans": "中国語 (zh-Hans)",
+    "rtt_gpu_cpu_only": "CPU のみ (-1)",
+    "rtt_gpu_default": "GPU 0 (デフォルト)",
+    "rtt_paddle_lang_ja_en": "日本語 (JA/EN)",
+    "rtt_paddle_lang_en": "英語 (EN)",
+    "rtt_paddle_lang_ko": "韓国語 (KO)",
+    "rtt_paddle_lang_zh": "中国語 (ZH)",
+    "rtt_paddle_lang_ru": "ロシア語 (RU)",
+    "rtt_paddle_lang_latin": "欧州諸語 (Latin)",
+    "rtt_capture_wgc": "高速キャプチャ (WGC / DXCAM) (推奨)",
+    "rtt_capture_bitblt": "BitBlt (高精細)",
+    "rtt_capture_printwindow": "PrintWindow (互換/高精細)",
+    "rtt_capture_mss": "mss (標準)",
+    "rtt_sens_lowest": "最低",
+    "rtt_sens_highest": "最大"
   },
   "log_messages": {
     "module_loaded": "システム: 記憶更新モジュールをロードしました。",

@@ -26,7 +26,10 @@
     "rtt_stop": "Arrêter la traduction",
     "rtt_eco_mode": "Mode Éco",
     "rtt_single_mode": "Mode de traduction à capture unique",
-    "rtt_settings": "Ouvrir les paramètres RTT"
+    "rtt_settings": "Ouvrir les paramètres RTT",
+    "reset_memory_confirm_title": "Confirmer",
+    "reset_memory_confirm_msg": "Voulez-vous réinitialiser l'historique des conversations (mémoire à court terme) ?",
+    "status_memory_reset": "La mémoire à court terme a été réinitialisée."
   },
   "gui": {
     "log_header": "Transcription IA et Journal Système",
@@ -161,7 +164,26 @@
     "search_limit_notice": "* L'offre gratuite de Tavily est limitée à 1000 requêtes par mois. Lorsque Google Search est sélectionné, le modèle est fixé à \"gemini-2.5-flash-lite\".",
     "search_usage_grounding": "Le {date}, Google Search a été exécuté {count} fois.",
     "search_usage_grounding_short": "Google (aujourd'hui) : {count} fois",
-    "search_usage_tavily_short": "Tavily (du mois) : {count} fois"
+    "search_usage_tavily_short": "Tavily (du mois) : {count} fois",
+    "rtt_ocr_en_us": "Anglais (en-US)",
+    "rtt_ocr_ja_jp": "Japonais (ja-JP)",
+    "rtt_ocr_ru_ru": "Russe (ru-RU)",
+    "rtt_ocr_ko_kr": "Coréen (ko-KR)",
+    "rtt_ocr_zh_hans": "Chinois (zh-Hans)",
+    "rtt_gpu_cpu_only": "CPU uniquement (-1)",
+    "rtt_gpu_default": "GPU 0 (Par défaut)",
+    "rtt_paddle_lang_ja_en": "Japonais (JA/EN)",
+    "rtt_paddle_lang_en": "Anglais (EN)",
+    "rtt_paddle_lang_ko": "Coréen (KO)",
+    "rtt_paddle_lang_zh": "Chinois (ZH)",
+    "rtt_paddle_lang_ru": "Russe (RU)",
+    "rtt_paddle_lang_latin": "Langues latines",
+    "rtt_capture_wgc": "Capture rapide (WGC / DXCAM) (Recommandé)",
+    "rtt_capture_bitblt": "BitBlt (Détails élevés)",
+    "rtt_capture_printwindow": "PrintWindow (Compatible/Détails élevés)",
+    "rtt_capture_mss": "mss (Standard)",
+    "rtt_sens_lowest": "Minimum",
+    "rtt_sens_highest": "Maximum"
   },
   "log_messages": {
     "module_loaded": "Système: Module de mise à jour de la mémoire chargé.",

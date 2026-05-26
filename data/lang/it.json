@@ -26,7 +26,10 @@
     "rtt_stop": "Ferma traduzione",
     "rtt_eco_mode": "Modalità Eco",
     "rtt_single_mode": "Modalità di traduzione a scatto singolo",
-    "rtt_settings": "Apri impostazioni RTT"
+    "rtt_settings": "Apri impostazioni RTT",
+    "reset_memory_confirm_title": "Conferma",
+    "reset_memory_confirm_msg": "Vuoi ripristinare la cronologia della conversazione (memoria a breve termine)?",
+    "status_memory_reset": "La memoria a breve termine è stata ripristinata."
   },
   "gui": {
     "log_header": "Trascrizione AI & Registro di Sistema",
@@ -161,7 +164,26 @@
     "search_limit_notice": "※ Il limite del piano gratuito di Tavily è di 1000 utilizzi al mese. Quando Google Search è selezionato, verrà impostato su \"gemini-2.5-flash-lite\".",
     "search_usage_grounding": "Il {date}, Google Search è stato eseguito {count} volte",
     "search_usage_grounding_short": "Google (oggi): {count} volte",
-    "search_usage_tavily_short": "Tavily (Questo mese): {count} volte"
+    "search_usage_tavily_short": "Tavily (Questo mese): {count} volte",
+    "rtt_ocr_en_us": "Inglese (en-US)",
+    "rtt_ocr_ja_jp": "Giapponese (ja-JP)",
+    "rtt_ocr_ru_ru": "Russo (ru-RU)",
+    "rtt_ocr_ko_kr": "Coreano (ko-KR)",
+    "rtt_ocr_zh_hans": "Cinese (zh-Hans)",
+    "rtt_gpu_cpu_only": "Solo CPU (-1)",
+    "rtt_gpu_default": "GPU 0 (Predefinito)",
+    "rtt_paddle_lang_ja_en": "Giapponese (JA/EN)",
+    "rtt_paddle_lang_en": "Inglese (EN)",
+    "rtt_paddle_lang_ko": "Coreano (KO)",
+    "rtt_paddle_lang_zh": "Cinese (ZH)",
+    "rtt_paddle_lang_ru": "Russo (RU)",
+    "rtt_paddle_lang_latin": "Lingue latine",
+    "rtt_capture_wgc": "Cattura rapida (WGC / DXCAM) (Consigliato)",
+    "rtt_capture_bitblt": "BitBlt (Dettagli elevati)",
+    "rtt_capture_printwindow": "PrintWindow (Compatibile/Dettagli elevati)",
+    "rtt_capture_mss": "mss (Standard)",
+    "rtt_sens_lowest": "Minima",
+    "rtt_sens_highest": "Massima"
   },
   "log_messages": {
     "module_loaded": "Sistema: Modulo aggiornamento memoria caricato.",

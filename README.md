@@ -1,4 +1,4 @@
-# SecreAI - 高性能AI秘書システム (Ver 1.2.0-beta)
+# SecreAI - 高性能AI秘書システム (Ver 1.2.0)
 
 ![SecreAI Logo](SecreAI.ico)
 
@@ -6,7 +6,7 @@ SecreAIは、Google Geminiをコアエンジンに据え、ウェブ検索、画
 
 ---
 
-## 🚀 主要機能 (Ver 1.2.0-beta)
+## 🚀 主要機能 (Ver 1.2.0)
 
 - **マルチモーダル対話**: テキスト、音声、視覚（画面キャプチャ）を組み合わせた自然な対話。
 - **ゲートキーパーAI**: ウェブ検索の必要性を事前に判断し、APIコストを削減しながら最速の回答を提供。
@@ -70,24 +70,23 @@ AIのロジック、データベース処理、バックグラウンド並列処
 - **[build.bat](file:///D:/SecreAI_Build/build.bat)**: C#コードのビルド、ポータブルPythonランタイムの構築、Inno Setupコンパイルを一括して全自動で行う統合ビルドバッチ。
 - **[build_wpf.bat](file:///D:/SecreAI_Build/build_wpf.bat)**: MSBuildを適切なプラットフォーム・フレームワーク設定で呼び出し、C#フロントエンド（Hub & Overlay）をクリーンビルドするスクリプト。
 - **[build_python_runtime.py](file:///D:/SecreAI_Build/build_python_runtime.py)**: ユーザー環境にPythonが無くても動作するよう、軽量ポータブルPython（embeddable）を自動ダウンロードし、TavilyやPyAudio等の必須ライブラリを組み込んで最適構築するスクリプト。
-- **[setup_script.iss](file:///D:/SecreAI_Build/setup_script.iss)**: Inno Setupによるインストーラーの定義ファイル。不要なキャッシュや個人APIキー・個人DB等の機密データを確実に除外してクリーンな配布パッケージ（Setup.exe）を作るクレンジングルールが記述されています。
+- **[setup_script.iss](file:///D:/SecreAI_Build/setup_script.iss)**: Inno Setupによるインストーラーの定義ファイル。不要なキャッシュや個人データ等を除外してクリーンな配布パッケージ（Setup.exe）を作るルールが記述されています。
 - **[kill_zombies.bat](file:///D:/SecreAI_Build/kill_zombies.bat)**: 開発時や異常終了時にバックグラウンドに残存した `RTtranslator_core.exe` や `SecreAI_Hub.exe` などの全プロセスを安全に一括強制終了するデバッグ用ツール。
 - **[update_lang.py](file:///D:/SecreAI_Build/update_lang.py)**: 新機能追加で更新された日本語設定（`ja.json`）のキーを検出し、他9カ国語（英語、韓国語、中国語等）の設定ファイルへ自動的にGemini APIで高品質翻訳して同期・追加するドキュメントローカライズ支援スクリプト。
 - **[overlay.html](file:///D:/SecreAI_Build/overlay.html)**: OBS Studio等の配信ソフトに、翻訳字幕などを直接流し込むための透過背景ウェブオーバーレイファイル。
 
 ---
 
-## � AIモデルの特徴とコストについて (2026年2月現在)
+## 💡 AIモデルの特徴とコストについて (2026年5月現在)
 
 初めて利用される方向けに、各AIモデルの性能と気になるコスト面について解説します。
 
 ### 1. Google Gemini (メインエンジン)
 本システムのメインとなるAIです。以下のモデルを選択可能です。
 
-- **Gemini-2.5-flash-lite / Gemini-2.5-flash**: 安定した標準モデル。（※2026年夏に終了予定）
-- **Gemini-3-flash-preview**: 次世代の高速・大規模処理向けプレビュー版。
-- **Gemini-3.1-flash-lite**: **[おすすめ]** 4段階の「思考レベル」を調整可能な最新モデル。
-- **Gemini-3.1-pro-preview**: 最も強力な知能を持つフラグシッププレビューモデル。複雑な推論に。
+- **Gemini-3.5-flash**: **[おすすめ]** 4段階の「思考レベル」（最小/低/中/高）を調整可能な最新世代の超高速・高性能モデル。
+- **Gemini-3.5-pro**: 複雑な推論や高度な分析に最適化された強力なフラグシップモデル。
+- **Gemini-3.1-pro-preview / Gemini-3-flash-preview**: 次世代のプレビューモデル。
 
 > [!IMPORTANT]
 > **Gemini の利用制限と無料枠**
@@ -97,7 +96,7 @@ AIのロジック、データベース処理、バックグラウンド並列処
 ### 2. OpenAI (オプション)
 さらに高度な知能や、特定のモデルを使用したい場合に利用します。
 
-- **gpt-5.4-nano / gpt-5.4-mini / gpt-5 / gpt-5.4**: 業界最高水準の推論能力と知識量。
+- **gpt-5.5 / gpt-5.4 / gpt-5.4-mini / gpt-5.4-nano / gpt-5**: 思考レベル付きのモデルも含め、業界最高水準の推論能力と知識量を持つモデルが選択可能です。
 
 > [!TIP]
 > **OpenAI のコストメリット**

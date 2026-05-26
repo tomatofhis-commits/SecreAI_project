@@ -26,7 +26,10 @@
     "rtt_stop": "停止翻译",
     "rtt_eco_mode": "节能模式",
     "rtt_single_mode": "单次捕捉翻译模式",
-    "rtt_settings": "打开RTT设置"
+    "rtt_settings": "打开RTT设置",
+    "reset_memory_confirm_title": "确认",
+    "reset_memory_confirm_msg": "您确定要重置之前的对话历史（短期记忆）吗？",
+    "status_memory_reset": "短期记忆已重置。"
   },
   "gui": {
     "log_header": "AI 转录 & 系统日志",
@@ -161,7 +164,26 @@
     "search_limit_notice": "* Tavily的免费额度上限为每月1000次。选择Google Search时，将固定为“gemini-2.5-flash-lite”。",
     "search_usage_grounding": "{date} 执行了 {count} 次 Google Search",
     "search_usage_grounding_short": "谷歌 (今天): {count}次",
-    "search_usage_tavily_short": "Tavily (本月): {count}次"
+    "search_usage_tavily_short": "Tavily (本月): {count}次",
+    "rtt_ocr_en_us": "英语 (en-US)",
+    "rtt_ocr_ja_jp": "日语 (ja-JP)",
+    "rtt_ocr_ru_ru": "俄语 (ru-RU)",
+    "rtt_ocr_ko_kr": "韩语 (ko-KR)",
+    "rtt_ocr_zh_hans": "中文 (zh-Hans)",
+    "rtt_gpu_cpu_only": "仅使用 CPU (-1)",
+    "rtt_gpu_default": "GPU 0 (默认)",
+    "rtt_paddle_lang_ja_en": "日语 (JA/EN)",
+    "rtt_paddle_lang_en": "英语 (EN)",
+    "rtt_paddle_lang_ko": "韩语 (KO)",
+    "rtt_paddle_lang_zh": "中文 (ZH)",
+    "rtt_paddle_lang_ru": "俄语 (RU)",
+    "rtt_paddle_lang_latin": "拉丁语系 (Latin)",
+    "rtt_capture_wgc": "高速捕获 (WGC / DXCAM) (推荐)",
+    "rtt_capture_bitblt": "BitBlt (高清晰度)",
+    "rtt_capture_printwindow": "PrintWindow (兼容/高清晰度)",
+    "rtt_capture_mss": "mss (标准)",
+    "rtt_sens_lowest": "最低",
+    "rtt_sens_highest": "最高"
   },
   "log_messages": {
     "module_loaded": "系统: 记忆更新模块已加载。",

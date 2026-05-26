@@ -862,9 +862,16 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     rtt_ocr_group.pack(fill="x", padx=8, pady=5)
 
     # 1段目: 英語・日本語
-    _OCR_ROW0 = [("英語 (en-US)", "en-US"), ("日本語 (ja-JP)", "ja-JP")]
+    _OCR_ROW0 = [
+        (l_set.get("rtt_ocr_en_us", "英語 (en-US)"), "en-US"), 
+        (l_set.get("rtt_ocr_ja_jp", "日本語 (ja-JP)"), "ja-JP")
+    ]
     # 2段目: ロシア語・韓国語・中国語
-    _OCR_ROW1 = [("ロシア語 (ru-RU)", "ru-RU"), ("韓国語 (ko-KR)", "ko-KR"), ("中国語 (zh-Hans)", "zh-Hans")]
+    _OCR_ROW1 = [
+        (l_set.get("rtt_ocr_ru_ru", "ロシア語 (ru-RU)"), "ru-RU"), 
+        (l_set.get("rtt_ocr_ko_kr", "韓国語 (ko-KR)"), "ko-KR"), 
+        (l_set.get("rtt_ocr_zh_hans", "中国語 (zh-Hans)"), "zh-Hans")
+    ]
     ALL_RTT_OCR_LANGS = _OCR_ROW0 + _OCR_ROW1
 
     saved_ocr_langs = set(config.get("rtt_ocr_languages", ["en-US", "ru-RU", "ko-KR", "zh-Hans"]))
@@ -927,12 +934,12 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     _detected_gpus = _detect_gpus()
     # GPU選択肢: 実GPUをインデックス付きで並べ、最後に「CPUのみ」を追加
     if _detected_gpus:
-        _gpu_opts = [f"GPU {i}: {name}" for i, name in enumerate(_detected_gpus)] + ["CPU のみ (-1)"]
+        _gpu_opts = [f"GPU {i}: {name}" for i, name in enumerate(_detected_gpus)] + [l_set.get("rtt_gpu_cpu_only", "CPU のみ (-1)")]
         _gpu_val_map = {f"GPU {i}: {name}": i for i, name in enumerate(_detected_gpus)}
-        _gpu_val_map["CPU のみ (-1)"] = -1
+        _gpu_val_map[l_set.get("rtt_gpu_cpu_only", "CPU のみ (-1)")] = -1
     else:
-        _gpu_opts = ["GPU 0 (デフォルト)", "CPU のみ (-1)"]
-        _gpu_val_map = {"GPU 0 (デフォルト)": 0, "CPU のみ (-1)": -1}
+        _gpu_opts = [l_set.get("rtt_gpu_default", "GPU 0 (デフォルト)"), l_set.get("rtt_gpu_cpu_only", "CPU のみ (-1)")]
+        _gpu_val_map = {l_set.get("rtt_gpu_default", "GPU 0 (デフォルト)"): 0, l_set.get("rtt_gpu_cpu_only", "CPU のみ (-1)"): -1}
     _gpu_val_map_rev = {v: k for k, v in _gpu_val_map.items()}
 
     # 使用GPU選択
@@ -959,12 +966,16 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     # Paddle専門言語
     tk.Label(rtt_gpu_group, text=l_set.get("rtt_label_paddle_lang", "Paddle専門言語:"), anchor="w").grid(row=3, column=0, sticky="w", padx=8, pady=4)
     rtt_paddle_lang_map = {
-        "日本語 (JA/EN)": "japan", "英語 (EN)": "en", "韓国語 (KO)": "korean",
-        "中国語 (ZH)": "ch", "ロシア語 (RU)": "cyrillic", "欧州諸語 (Latin)": "latin"
+        l_set.get("rtt_paddle_lang_ja_en", "日本語 (JA/EN)"): "japan", 
+        l_set.get("rtt_paddle_lang_en", "英語 (EN)"): "en", 
+        l_set.get("rtt_paddle_lang_ko", "韓国語 (KO)"): "korean",
+        l_set.get("rtt_paddle_lang_zh", "中国語 (ZH)"): "ch", 
+        l_set.get("rtt_paddle_lang_ru", "ロシア語 (RU)"): "cyrillic", 
+        l_set.get("rtt_paddle_lang_latin", "欧州諸語 (Latin)"): "latin"
     }
     rtt_paddle_lang_map_rev = {v: k for k, v in rtt_paddle_lang_map.items()}
     saved_p_lang = config.get("rtt_paddle_language", "japan")
-    rtt_paddle_lang_var = tk.StringVar(value=rtt_paddle_lang_map_rev.get(saved_p_lang, "日本語 (JA/EN)"))
+    rtt_paddle_lang_var = tk.StringVar(value=rtt_paddle_lang_map_rev.get(saved_p_lang, l_set.get("rtt_paddle_lang_ja_en", "日本語 (JA/EN)")))
     tk.OptionMenu(rtt_gpu_group, rtt_paddle_lang_var, *rtt_paddle_lang_map.keys()).grid(row=3, column=1, sticky="w", padx=8, pady=4)
 
     # ── キャプチャ / パフォーマンスグループ ──
@@ -973,10 +984,15 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     # キャプチャ方式の選択
     tk.Label(rtt_perf_group, text=l_set.get("rtt_label_capture_engine", "キャプチャ方式:"), anchor="w").grid(row=0, column=0, sticky="w", padx=8, pady=4)
-    rtt_engine_map = {"高速キャプチャ (WGC / DXCAM) (推奨)": "wgc", "BitBlt (高精細)": "bitblt", "PrintWindow (互換/高精細)": "printwindow", "mss (標準)": "mss"}
+    rtt_engine_map = {
+        l_set.get("rtt_capture_wgc", "高速キャプチャ (WGC / DXCAM) (推奨)"): "wgc", 
+        l_set.get("rtt_capture_bitblt", "BitBlt (高精細)"): "bitblt", 
+        l_set.get("rtt_capture_printwindow", "PrintWindow (互換/高精細)"): "printwindow", 
+        l_set.get("rtt_capture_mss", "mss (標準)"): "mss"
+    }
     rtt_engine_map_rev = {v: k for k, v in rtt_engine_map.items()}
     saved_engine = config.get("rtt_capture_mode", "wgc")
-    rtt_engine_var = tk.StringVar(value=rtt_engine_map_rev.get(saved_engine, "高速キャプチャ (WGC / DXCAM) (推奨)"))
+    rtt_engine_var = tk.StringVar(value=rtt_engine_map_rev.get(saved_engine, l_set.get("rtt_capture_wgc", "高速キャプチャ (WGC / DXCAM) (推奨)")))
     tk.OptionMenu(rtt_perf_group, rtt_engine_var, *rtt_engine_map.keys()).grid(row=0, column=1, sticky="w", padx=8, pady=4)
 
     # 相互排他制御の関数
@@ -1008,7 +1024,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     # 処理の反応感度スライダー（直感的なラベル）
     tk.Label(rtt_perf_group, text=l_set.get("rtt_label_sens", "読取反応感度:"), anchor="w").grid(row=2, column=0, sticky="w", padx=8, pady=4)
-    _SENS_LABELS = ["最低", "2", "3", "4", "5", "最大"]
+    _SENS_LABELS = [l_set.get("rtt_sens_lowest", "最低"), "2", "3", "4", "5", l_set.get("rtt_sens_highest", "最大")]
     _SENS_VALUES = [6000, 4800, 2400, 1200, 600, 400]   # 内部値（数値が大きいほど低感度/低負荷）
     saved_sens = config.get("rtt_ocr_skip_sensitivity", 2400)
     # 値がリストにない場合は最も近いインデックスを探す（またはデフォルト）

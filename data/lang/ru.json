@@ -26,7 +26,10 @@
     "rtt_stop": "Остановить перевод",
     "rtt_eco_mode": "Эко-режим",
     "rtt_single_mode": "Режим моментального перевода",
-    "rtt_settings": "Открыть настройки RTT"
+    "rtt_settings": "Открыть настройки RTT",
+    "reset_memory_confirm_title": "Подтверждение",
+    "reset_memory_confirm_msg": "Вы хотите сбросить историю разговоров (краткосрочную память)?",
+    "status_memory_reset": "Краткосрочная память была сброшена."
   },
   "gui": {
     "log_header": "Транскрипция ИИ и системный журнал",
@@ -161,7 +164,26 @@
     "search_limit_notice": "* Месячный лимит бесплатного использования Tavily — 1000 запросов. При выборе Google Search фиксируется модель «gemini-2.5-flash-lite».",
     "search_usage_grounding": "{date} {count} раз выполнил Google Поиск",
     "search_usage_grounding_short": "Google (Сегодня): {count} раз",
-    "search_usage_tavily_short": "Tavily (в этом месяце): {count} раз"
+    "search_usage_tavily_short": "Tavily (в этом месяце): {count} раз",
+    "rtt_ocr_en_us": "Английский (en-US)",
+    "rtt_ocr_ja_jp": "Японский (ja-JP)",
+    "rtt_ocr_ru_ru": "Русский (ru-RU)",
+    "rtt_ocr_ko_kr": "Корейский (ko-KR)",
+    "rtt_ocr_zh_hans": "Китайский (zh-Hans)",
+    "rtt_gpu_cpu_only": "Только CPU (-1)",
+    "rtt_gpu_default": "GPU 0 (По умолчанию)",
+    "rtt_paddle_lang_ja_en": "Японский (JA/EN)",
+    "rtt_paddle_lang_en": "Английский (EN)",
+    "rtt_paddle_lang_ko": "Корейский (KO)",
+    "rtt_paddle_lang_zh": "Китайский (ZH)",
+    "rtt_paddle_lang_ru": "Русский (RU)",
+    "rtt_paddle_lang_latin": "Латинские языки",
+    "rtt_capture_wgc": "Быстрый захват (WGC / DXCAM) (Рекомендуется)",
+    "rtt_capture_bitblt": "BitBlt (Высокая детализация)",
+    "rtt_capture_printwindow": "PrintWindow (Совместимо/Высокая детализация)",
+    "rtt_capture_mss": "mss (Стандартный)",
+    "rtt_sens_lowest": "Минимум",
+    "rtt_sens_highest": "Максимум"
   },
   "log_messages": {
     "module_loaded": "Система: Модуль обновления памяти загружен.",
