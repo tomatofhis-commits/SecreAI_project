@@ -1,7 +1,10 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import chromadb
-from .chromadb_pool import get_chroma_collection
+try:
+    from .chromadb_pool import get_chroma_collection
+except ImportError:
+    from chromadb_pool import get_chroma_collection
 import os
 import json
 import threading
@@ -195,7 +198,10 @@ class MemoryViewer:
         """統計情報を更新表示"""
         p = self.parent.lang.get("performance", {})
         try:
-            from .api_cache_system import APICache
+            try:
+                from .api_cache_system import APICache
+            except ImportError:
+                from api_cache_system import APICache
             cache_dir = os.path.join(self.base_dir, "data", "api_cache")
             ttl_hours = self.config.get("API_CACHE_TTL_HOURS", 24)
             cache = APICache(cache_dir, ttl_hours=ttl_hours)
@@ -354,7 +360,7 @@ class MemoryViewer:
                     response = client_oa.chat.completions.create(**openai_kwargs)
                     new_content = response.choices[0].message.content.strip()
                 elif db_provider == "gemini":
-                    import google.genai as genai
+                    from google import genai
                     client_ge = genai.Client(api_key=self.config.get("GEMINI_API_KEY"))
                     gemini_config_obj = {}
                     if level is None:
@@ -419,6 +425,14 @@ class MemoryViewer:
         else:
             messagebox.showerror(title, msg)
 
+    def finish_bulk_summarize(self, success, msg):
+        self.btn_bulk.config(state="normal", text=self.l_set.get("btn_bulk_summarize", "Bulk Summarize"))
+        self.load_data()
+        if success:
+            messagebox.showinfo("Success", msg)
+        else:
+            messagebox.showerror("Error", msg)
+
     def run_bulk_summarize(self):
         # 500文字以上、または日付データがないデータを抽出
         to_process = [entry for entry in self.all_data if entry[2] >= 500 or entry[1] == 'N/A' or not entry[1]]
@@ -467,7 +481,7 @@ class MemoryViewer:
                         response = client_oa.chat.completions.create(**openai_kwargs)
                         new_content = response.choices[0].message.content.strip()
                     elif db_provider == "gemini":
-                        import google.genai as genai
+                        from google import genai
                         client_ge = genai.Client(api_key=self.config.get("GEMINI_API_KEY"))
                         gemini_config_obj = {}
                         if level is None:
@@ -514,12 +528,9 @@ class MemoryViewer:
                         metadatas=[{"timestamp": final_ts}]
                     )
                 
-                self.root.after(0, lambda: messagebox.showinfo("Success", "Bulk summarization completed."))
+                self.root.after(0, lambda: self.finish_bulk_summarize(True, "Bulk summarization completed."))
             except Exception as e:
-                self.root.after(0, lambda ex=e: messagebox.showerror("Error", f"Bulk process failed: {ex}"))
-            finally:
-                self.root.after(0, self.load_data)
-                self.root.after(0, lambda: self.btn_bulk.config(state="normal", text=self.l_set.get("btn_bulk_summarize", "Bulk Summarize")))
+                self.root.after(0, lambda ex=e: self.finish_bulk_summarize(False, f"Bulk process failed: {ex}"))
 
         threading.Thread(target=process, daemon=True).start()
 

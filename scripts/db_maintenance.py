@@ -43,10 +43,16 @@ def get_ai_response(prompt, config):
             res = requests.post(f"{url.rstrip('/')}/chat/completions", json={
                 "model": actual_model_id,
                 "messages": [{"role": "user", "content": prompt}],
-                "format": "json",
+                "response_format": {"type": "json_object"},
                 "temperature": 0.2
             }, timeout=120)
-            return res.json()['choices'][0]['message']['content']
+            res_json = res.json()
+            if 'choices' in res_json:
+                return res_json['choices'][0]['message']['content']
+            elif 'error' in res_json:
+                return f"Error: Ollama error: {res_json['error']}"
+            else:
+                return f"Error: Invalid Ollama response: {res_json}"
 
         else: # Gemini
             api_key = config.get("GEMINI_API_KEY")
@@ -81,86 +87,89 @@ def get_ai_response(prompt, config):
 # --- db_maintenance.py の clean_up_database 内にプロンプトを追加 ---
 
 def clean_up_database(db_path, config_path):
-    if config_manager:
-        config = config_manager.load_config(config_path)
-    else:
+    try:
+        if config_manager:
+            config = config_manager.load_config(config_path)
+        else:
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+            except Exception as e:
+                return f"Error: Failed to load config. {str(e)}"
+
+        #  --- 1. ChromaDBへの接続とデータ取得 (改善: 接続プールで3-5倍高速化) ---
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-        except Exception as e:
-            return f"Error: Failed to load config. {str(e)}"
-
-    #  --- 1. ChromaDBへの接続とデータ取得 (改善: 接続プールで3-5倍高速化) ---
-    try:
-        collection = get_chroma_collection(db_path)
-        
-        results = collection.get()
-        ids = results.get('ids', [])
-        documents = results.get('documents', [])
-    except Exception as e:
-        return f"Error: DB Connection failed. {str(e)}"
-
-    # --- 2. エラー行（空データ）の削除 ---
-    error_ids = [ids[i] for i, doc in enumerate(documents) if not doc or doc.strip() == ""]
-    if error_ids:
-        collection.delete(ids=error_ids)
-
-    # --- 3. AIに渡すための target_docs を作成 (ここで定義！) ---
-    # 全件送るとトークン制限に触れるため、直近の50件などに絞るのが安全です
-    target_docs = []
-    for i in range(len(ids)):
-        if ids[i] not in error_ids:
-            target_docs.append({"id": ids[i], "content": documents[i]})
-    
-    # 逆順（新しい順）にして最新の30-50件程度にする（推奨）
-    target_docs = target_docs[::-1][:50]
-
-    if not target_docs:
-        return f"Cleanup Done: No data to process. Removed {len(error_ids)} errors."
-
-    # --- 4. プロンプトの定義 (target_docs が定義された後なので安全) ---
-    prompt = f"""
-    You are a database maintenance assistant. 
-    Below are the latest memory entries from a long-term database.
-    Please identify redundant information or duplicate entries and suggest which ones to delete.
-    
-    {json.dumps(target_docs, ensure_ascii=False)}
-    
-    Respond strictly in JSON format:
-    {{
-      "merge_plans": [
-        {{ "keep_id": "ID_TO_KEEP", "delete_ids": ["ID_TO_DELETE_1", "ID_TO_DELETE_2"] }}
-      ]
-    }}
-    """
-    
-    ai_res = get_ai_response(prompt, config)
-    
-    # AIがエラーを返した場合はそのまま返す
-    if ai_res.startswith("Error:"):
-        return f"Error removed ({len(error_ids)}), but AI failed: {ai_res}"
-
-    if "```json" in ai_res:
-        ai_res = ai_res.split("```json")[1].split("```")[0].strip()
-    elif "```" in ai_res:
-        ai_res = ai_res.split("```")[1].split("```")[0].strip()
-    
-    try:
-        plan = json.loads(ai_res)
-        merged_count = 0
-        for item in plan.get("merge_plans", []):
-            keep_id = item.get("keep_id")
-            delete_ids = item.get("delete_ids", [])
-            valid_deletes = [d_id for d_id in delete_ids if d_id != keep_id and d_id in ids]
-            if valid_deletes:
-                collection.delete(ids=valid_deletes)
-                merged_count += len(valid_deletes)
+            collection = get_chroma_collection(db_path)
             
-        return f"Cleanup Done: Removed {len(error_ids)} errors and merged {merged_count} duplicates."
-    except Exception as e:
-        # 変数 e を 文字列として明示的に保持する
-        error_msg = str(e)
-        return f"Errors removed ({len(error_ids)}), but AI parse failed: {error_msg}\nResponse: {ai_res[:100]}"
+            results = collection.get()
+            ids = results.get('ids', [])
+            documents = results.get('documents', [])
+        except Exception as e:
+            return f"Error: DB Connection failed. {str(e)}"
+
+        # --- 2. エラー行（空データ）の削除 ---
+        error_ids = [ids[i] for i, doc in enumerate(documents) if not doc or doc.strip() == ""]
+        if error_ids:
+            collection.delete(ids=error_ids)
+
+        # --- 3. AIに渡すための target_docs を作成 (ここで定義！) ---
+        # 全件送るとトークン制限に触れるため、直近の50件などに絞るのが安全です
+        target_docs = []
+        for i in range(len(ids)):
+            if ids[i] not in error_ids:
+                target_docs.append({"id": ids[i], "content": documents[i]})
+        
+        # 逆順（新しい順）にして最新の30-50件程度にする（推奨）
+        target_docs = target_docs[::-1][:50]
+
+        if not target_docs:
+            return f"Cleanup Done: No data to process. Removed {len(error_ids)} errors."
+
+        # --- 4. プロンプトの定義 (target_docs が定義された後なので安全) ---
+        prompt = f"""
+        You are a database maintenance assistant. 
+        Below are the latest memory entries from a long-term database.
+        Please identify redundant information or duplicate entries and suggest which ones to delete.
+        
+        {json.dumps(target_docs, ensure_ascii=False)}
+        
+        Respond strictly in JSON format:
+        {{
+          "merge_plans": [
+            {{ "keep_id": "ID_TO_KEEP", "delete_ids": ["ID_TO_DELETE_1", "ID_TO_DELETE_2"] }}
+          ]
+        }}
+        """
+        
+        ai_res = get_ai_response(prompt, config)
+        
+        # AIがエラーを返した場合はそのまま返す
+        if ai_res.startswith("Error:"):
+            return f"Error removed ({len(error_ids)}), but AI failed: {ai_res}"
+
+        if "```json" in ai_res:
+            ai_res = ai_res.split("```json")[1].split("```")[0].strip()
+        elif "```" in ai_res:
+            ai_res = ai_res.split("```")[1].split("```")[0].strip()
+        
+        try:
+            plan = json.loads(ai_res)
+            merged_count = 0
+            for item in plan.get("merge_plans", []):
+                keep_id = item.get("keep_id")
+                delete_ids = item.get("delete_ids", [])
+                valid_deletes = [d_id for d_id in delete_ids if d_id != keep_id and d_id in ids]
+                if valid_deletes:
+                    collection.delete(ids=valid_deletes)
+                    merged_count += len(valid_deletes)
+                
+            return f"Cleanup Done: Removed {len(error_ids)} errors and merged {merged_count} duplicates."
+        except Exception as e:
+            # 変数 e を 文字列として明示的に保持する
+            error_msg = str(e)
+            return f"Errors removed ({len(error_ids)}), but AI parse failed: {error_msg}\nResponse: {ai_res[:100]}"
+    except Exception as ex:
+        return f"Error: Database cleanup crashed: {str(ex)}"
 
 def get_db_stats(db_path):
     """
