@@ -283,7 +283,7 @@ class MemoryViewer:
             self.filter_data()
             
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load DB: {e}")
+            messagebox.showerror("Error", f"Failed to load DB: {e}", parent=self.root)
 
     def filter_data(self):
         search_txt = self.search_var.get().lower()
@@ -310,7 +310,7 @@ class MemoryViewer:
         selected = self.tree.selection()
         if not selected: return
         
-        if not messagebox.askyesno("Confirm", "Delete selected entry?"):
+        if not messagebox.askyesno("Confirm", "Delete selected entry?", parent=self.root):
             return
             
         try:
@@ -323,9 +323,9 @@ class MemoryViewer:
                 collection.delete(ids=[entry_id])
                 
             self.load_data()
-            messagebox.showinfo("Success", "Deleted successfully.")
+            messagebox.showinfo("Success", "Deleted successfully.", parent=self.root)
         except Exception as e:
-            messagebox.showerror("Error", f"Delete failed: {e}")
+            messagebox.showerror("Error", f"Delete failed: {e}", parent=self.root)
 
     def summarize_selected(self):
         selected = self.tree.selection()
@@ -387,26 +387,26 @@ class MemoryViewer:
         self.btn_summarize.config(state="normal", text=self.l_set.get("btn_summarize", "Summarize Selected"))
         if title == "Success":
             self.load_data()
-            messagebox.showinfo(title, msg)
+            messagebox.showinfo(title, msg, parent=self.root)
         else:
-            messagebox.showerror(title, msg)
+            messagebox.showerror(title, msg, parent=self.root)
 
     def finish_bulk_summarize(self, success, msg):
         self.btn_bulk.config(state="normal", text=self.l_set.get("btn_bulk_summarize", "Bulk Summarize"))
         self.load_data()
         if success:
-            messagebox.showinfo("Success", msg)
+            messagebox.showinfo("Success", msg, parent=self.root)
         else:
-            messagebox.showerror("Error", msg)
+            messagebox.showerror("Error", msg, parent=self.root)
 
     def run_bulk_summarize(self):
         # 500文字以上、または日付データがないデータを抽出
         to_process = [entry for entry in self.all_data if entry[2] >= 500 or entry[1] == 'N/A' or not entry[1]]
         if not to_process:
-            messagebox.showinfo("Info", "No entries needing summarization found (500+ chars or no date).")
+            messagebox.showinfo("Info", "No entries needing summarization found (500+ chars or no date).", parent=self.root)
             return
 
-        if not messagebox.askyesno("Confirm", f"Summarize {len(to_process)} entries?"):
+        if not messagebox.askyesno("Confirm", f"Summarize {len(to_process)} entries?", parent=self.root):
             return
 
         self.btn_bulk.config(state="disabled")
@@ -481,7 +481,7 @@ class MemoryViewer:
 
     def finish_cleanup(self, res):
         self.btn_cleanup.config(state="normal", text=self.l_set.get("btn_db_cleanup", "Cleanup DB"))
-        messagebox.showinfo("Result", res)
+        messagebox.showinfo("Result", res, parent=self.root)
         self.load_data()
 
 def open_memory_viewer(parent, config):
