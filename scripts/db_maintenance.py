@@ -17,7 +17,7 @@ except ImportError:
         get_chroma_collection = None
         config_manager = None
 
-def get_ai_response(prompt, config):
+def get_ai_response(prompt, config, response_json=False):
     provider = config.get("DB_PROVIDER", config.get("AI_PROVIDER", "gemini")).lower()
     model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-2.5-flash"))
 
@@ -29,10 +29,12 @@ def get_ai_response(prompt, config):
             client = OpenAI(api_key=config.get("OPENAI_API_KEY"))
             openai_kwargs = {
                 "model": actual_model_id,
-                "messages": [{"role": "system", "content": "You are a database expert. Respond ONLY with JSON."},
-                             {"role": "user", "content": prompt}],
-                "response_format": { "type": "json_object" }
+                "messages": [{"role": "system", "content": "You are a database expert. Respond ONLY with JSON."} if response_json else
+                             {"role": "system", "content": "You are a helpful assistant."},
+                             {"role": "user", "content": prompt}]
             }
+            if response_json:
+                openai_kwargs["response_format"] = { "type": "json_object" }
             if actual_model_id in ("o1", "o3-mini") and level:
                 openai_kwargs["reasoning_effort"] = level
             res = client.chat.completions.create(**openai_kwargs)
@@ -40,12 +42,14 @@ def get_ai_response(prompt, config):
 
         elif provider == "local":
             url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
-            res = requests.post(f"{url.rstrip('/')}/chat/completions", json={
+            payload = {
                 "model": actual_model_id,
                 "messages": [{"role": "user", "content": prompt}],
-                "response_format": {"type": "json_object"},
                 "temperature": 0.2
-            }, timeout=120)
+            }
+            if response_json:
+                payload["response_format"] = {"type": "json_object"}
+            res = requests.post(f"{url.rstrip('/')}/chat/completions", json=payload, timeout=120)
             res_json = res.json()
             if 'choices' in res_json:
                 return res_json['choices'][0]['message']['content']
@@ -59,7 +63,9 @@ def get_ai_response(prompt, config):
             if not api_key: return "Error: Gemini API Key is missing."
             client = genai.Client(api_key=api_key)
 
-            gen_config = {'response_mime_type': 'application/json'}
+            gen_config = {}
+            if response_json:
+                gen_config['response_mime_type'] = 'application/json'
 
             if level is None:
                 thinking_budget = config.get("THINKING_BUDGET", "medium").lower()
@@ -78,7 +84,7 @@ def get_ai_response(prompt, config):
             res = client.models.generate_content(
                 model=actual_model_id,
                 contents=prompt,
-                config=gen_config
+                config=gen_config if gen_config else None
             )
             return res.text
     except Exception as e:
@@ -141,7 +147,7 @@ def clean_up_database(db_path, config_path):
         }}
         """
         
-        ai_res = get_ai_response(prompt, config)
+        ai_res = get_ai_response(prompt, config, response_json=True)
         
         # AIがエラーを返した場合はそのまま返す
         if ai_res.startswith("Error:"):
