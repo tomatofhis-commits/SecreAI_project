@@ -41,22 +41,25 @@ def get_ai_response(prompt, config, response_json=False):
             return res.choices[0].message.content
 
         elif provider == "local":
-            url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
-            payload = {
-                "model": actual_model_id,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.2
-            }
-            if response_json:
-                payload["response_format"] = {"type": "json_object"}
-            res = requests.post(f"{url.rstrip('/')}/chat/completions", json=payload, timeout=120)
-            res_json = res.json()
-            if 'choices' in res_json:
-                return res_json['choices'][0]['message']['content']
-            elif 'error' in res_json:
-                return f"Error: Ollama error: {res_json['error']}"
-            else:
-                return f"Error: Invalid Ollama response: {res_json}"
+            try:
+                import ollama
+                raw_url = config.get("OLLAMA_URL", "http://127.0.0.1:11434")
+                # localhost を 127.0.0.1 に置換し、末尾の /v1 を削除して公式ライブラリに渡す
+                host_url = raw_url.replace("/v1", "").replace("localhost", "127.0.0.1")
+                
+                client = ollama.Client(host=host_url)
+                chat_kwargs = {
+                    "model": actual_model_id,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "options": {"temperature": 0.2}
+                }
+                if response_json:
+                    chat_kwargs["format"] = "json"
+                
+                res = client.chat(**chat_kwargs)
+                return res['message']['content']
+            except Exception as ollama_err:
+                return f"Error: Ollama client failed: {ollama_err}"
 
         else: # Gemini
             api_key = config.get("GEMINI_API_KEY")

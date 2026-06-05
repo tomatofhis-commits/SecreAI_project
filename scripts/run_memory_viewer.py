@@ -44,9 +44,15 @@ if __name__ == "__main__":
     
     # Configure cleanup
     def on_close():
-        win_inst.root.destroy()
-        parent.destroy()
+        try:
+            win_inst.root.destroy()
+        except:
+            pass
+        try:
+            parent.destroy()
+        except:
+            pass
         sys.exit(0)
 
     win_inst.root.protocol("WM_DELETE_WINDOW", on_close)
-    parent.wait_window(win_inst.root)
+    parent.mainloop()
