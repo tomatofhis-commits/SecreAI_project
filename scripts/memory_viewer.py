@@ -5,6 +5,10 @@ try:
     from .chromadb_pool import get_chroma_collection
 except ImportError:
     from chromadb_pool import get_chroma_collection
+try:
+    from .db_maintenance import get_ai_response
+except ImportError:
+    from db_maintenance import get_ai_response
 import os
 import json
 import threading
@@ -345,48 +349,10 @@ class MemoryViewer:
                     f"内容: {content}"
                 )
 
-                new_content = ""
-                from config_manager import parse_model_name
-                actual_model, level = parse_model_name(db_model_id)
-                if db_provider == "openai":
-                    from openai import OpenAI
-                    client_oa = OpenAI(api_key=self.config.get("OPENAI_API_KEY"))
-                    openai_kwargs = {
-                        "model": actual_model,
-                        "messages": [{"role": "user", "content": prompt}]
-                    }
-                    if actual_model in ("o1", "o3-mini") and level:
-                        openai_kwargs["reasoning_effort"] = level
-                    response = client_oa.chat.completions.create(**openai_kwargs)
-                    new_content = response.choices[0].message.content.strip()
-                elif db_provider == "gemini":
-                    from google import genai
-                    client_ge = genai.Client(api_key=self.config.get("GEMINI_API_KEY"))
-                    gemini_config_obj = {}
-                    if level is None:
-                        thinking_budget = self.config.get("THINKING_BUDGET", "medium").lower()
-                        level = thinking_budget
-                    is_thinking_supported = (
-                        actual_model in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
-                    )
-                    if is_thinking_supported and level:
-                        if actual_model == "gemini-3.5-flash":
-                            if level not in ("medium", "high"):
-                                level = "medium"
-                        gemini_config_obj["thinking_config"] = {"thinking_level": level.upper()}
-                    res = client_ge.models.generate_content(
-                        model=actual_model,
-                        contents=prompt,
-                        config=gemini_config_obj if gemini_config_obj else None
-                    )
-                    new_content = res.text.strip()
-                else: # local (ollama)
-                    import ollama
-                    response = ollama.chat(
-                        model=db_model_id,
-                        messages=[{'role': 'user', 'content': prompt}]
-                    )
-                    new_content = response['message']['content'].strip()
+                new_content = get_ai_response(prompt, self.config)
+                if new_content.startswith("Error:"):
+                    raise Exception(new_content)
+                new_content = new_content.strip()
                 
                 # 日付推測ロジック
                 def infer_date(eid, current_ts):
@@ -466,48 +432,10 @@ class MemoryViewer:
                         f"内容: {content}"
                     )
                     
-                    new_content = ""
-                    from config_manager import parse_model_name
-                    actual_model, level = parse_model_name(db_model_id)
-                    if db_provider == "openai":
-                        from openai import OpenAI
-                        client_oa = OpenAI(api_key=self.config.get("OPENAI_API_KEY"))
-                        openai_kwargs = {
-                            "model": actual_model,
-                            "messages": [{"role": "user", "content": prompt}]
-                        }
-                        if actual_model in ("o1", "o3-mini") and level:
-                            openai_kwargs["reasoning_effort"] = level
-                        response = client_oa.chat.completions.create(**openai_kwargs)
-                        new_content = response.choices[0].message.content.strip()
-                    elif db_provider == "gemini":
-                        from google import genai
-                        client_ge = genai.Client(api_key=self.config.get("GEMINI_API_KEY"))
-                        gemini_config_obj = {}
-                        if level is None:
-                            thinking_budget = self.config.get("THINKING_BUDGET", "medium").lower()
-                            level = thinking_budget
-                        is_thinking_supported = (
-                            actual_model in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
-                        )
-                        if is_thinking_supported and level:
-                            if actual_model == "gemini-3.5-flash":
-                                if level not in ("medium", "high"):
-                                    level = "medium"
-                            gemini_config_obj["thinking_config"] = {"thinking_level": level.upper()}
-                        res = client_ge.models.generate_content(
-                            model=actual_model,
-                            contents=prompt,
-                            config=gemini_config_obj if gemini_config_obj else None
-                        )
-                        new_content = res.text.strip()
-                    else: # local (ollama)
-                        import ollama
-                        response = ollama.chat(
-                            model=db_model_id,
-                            messages=[{'role': 'user', 'content': prompt}]
-                        )
-                        new_content = response['message']['content'].strip()
+                    new_content = get_ai_response(prompt, self.config)
+                    if new_content.startswith("Error:"):
+                        raise Exception(new_content)
+                    new_content = new_content.strip()
                     
                     # 日付推測ロジックを適用
                     final_ts = ts
