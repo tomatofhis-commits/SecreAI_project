@@ -1,7 +1,7 @@
 @echo off
 title SecreAI Integrated Build Script (C# WPF Single-out)
 echo ========================================================
-echo  SecreAI v1.2.0 - Integrated Build System
+echo  SecreAI v1.2.1 - Integrated Build System
 echo ========================================================
 echo.
 
