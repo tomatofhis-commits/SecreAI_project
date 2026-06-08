@@ -113,4 +113,4 @@ if __name__ == "__main__":
         sys.exit(0)
 
     win.protocol("WM_DELETE_WINDOW", on_close)
-    parent.wait_window(win)
+    parent.mainloop()

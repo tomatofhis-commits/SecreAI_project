@@ -95,7 +95,7 @@ namespace SecreAI_Hub
             LoadLanguage();
 
             // Window Settings
-            Title = "SecreAI Hub v1.2.1 - Controller";
+            Title = "SecreAI Hub v1.2.2 - Controller";
             Width = 1150;
             Height = 880;
             Background = new SolidColorBrush(Color.FromRgb(18, 18, 20));
@@ -165,6 +165,46 @@ namespace SecreAI_Hub
             {
                 _configData = new Dictionary<string, object>();
             }
+        }
+
+        private void ApplyWindowOpacityAndFont()
+        {
+            try
+            {
+                if (_configData == null) return;
+
+                // 1. Font Size
+                double fontSize = 13;
+                object fontObj;
+                if (_configData.TryGetValue("LOG_FONT_SIZE", out fontObj) && fontObj != null)
+                {
+                    double.TryParse(fontObj.ToString(), out fontSize);
+                }
+                if (_logTextBox != null)
+                {
+                    _logTextBox.FontSize = fontSize;
+                }
+
+                // 2. Window Opacity
+                object alphaObj;
+                if (_configData.TryGetValue("WINDOW_ALPHA", out alphaObj) && alphaObj != null)
+                {
+                    string alphaStr = alphaObj.ToString();
+                    if (alphaStr == "OFF")
+                    {
+                        this.Opacity = 1.0;
+                    }
+                    else
+                    {
+                        double opacity;
+                        if (double.TryParse(alphaStr, out opacity))
+                        {
+                            this.Opacity = opacity;
+                        }
+                    }
+                }
+            }
+            catch { }
         }
 
         private void LoadLanguage()
@@ -451,6 +491,7 @@ namespace SecreAI_Hub
 
             // Apply translation strings
             UpdateUiText();
+            ApplyWindowOpacityAndFont();
         }
 
         private Button CreateStyledButton(string text, string hexColor, RoutedEventHandler clickHandler, double sidePadding = 0)
@@ -1037,6 +1078,8 @@ namespace SecreAI_Hub
                     Dispatcher.BeginInvoke(new Action(() => {
                         LoadConfig();
                         LoadLanguage();
+                        ApplyWindowOpacityAndFont();
+                        RegisterGlobalHotkeys();
                         UpdateUiText();
                         SyncRttSettings();
                         UpdateLogArea(GetLangString("log_messages", "settings_applied", "Settings applied."));
@@ -1085,6 +1128,8 @@ namespace SecreAI_Hub
                     Dispatcher.BeginInvoke(new Action(() => {
                         LoadConfig();
                         LoadLanguage();
+                        ApplyWindowOpacityAndFont();
+                        RegisterGlobalHotkeys();
                         UpdateUiText();
                         AutoStartVoiceVoxAndRtt();
                     }));
@@ -1872,7 +1917,7 @@ namespace SecreAI_Hub
                         if (data != null && data.TryGetValue("tag_name", out tagObj))
                         {
                             string latestV = tagObj.ToString().TrimStart('v');
-                            string currentV = "1.2.1";
+                            string currentV = "1.2.2";
                             
                             if (string.Compare(latestV, currentV) > 0)
                             {
