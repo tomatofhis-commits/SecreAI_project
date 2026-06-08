@@ -167,45 +167,7 @@ namespace SecreAI_Hub
             }
         }
 
-        private void ApplyWindowOpacityAndFont()
-        {
-            try
-            {
-                if (_configData == null) return;
 
-                // 1. Font Size
-                double fontSize = 13;
-                object fontObj;
-                if (_configData.TryGetValue("LOG_FONT_SIZE", out fontObj) && fontObj != null)
-                {
-                    double.TryParse(fontObj.ToString(), out fontSize);
-                }
-                if (_logTextBox != null)
-                {
-                    _logTextBox.FontSize = fontSize;
-                }
-
-                // 2. Window Opacity
-                object alphaObj;
-                if (_configData.TryGetValue("WINDOW_ALPHA", out alphaObj) && alphaObj != null)
-                {
-                    string alphaStr = alphaObj.ToString();
-                    if (alphaStr == "OFF")
-                    {
-                        this.Opacity = 1.0;
-                    }
-                    else
-                    {
-                        double opacity;
-                        if (double.TryParse(alphaStr, out opacity))
-                        {
-                            this.Opacity = opacity;
-                        }
-                    }
-                }
-            }
-            catch { }
-        }
 
         private void LoadLanguage()
         {
@@ -286,6 +248,17 @@ namespace SecreAI_Hub
             leftGrid.Children.Add(_indicatorBorder);
             Grid.SetRow(_indicatorBorder, 1);
 
+            // Get Font Size from config
+            double initFontSize = 13;
+            if (_configData != null)
+            {
+                object fontObj;
+                if (_configData.TryGetValue("LOG_FONT_SIZE", out fontObj) && fontObj != null)
+                {
+                    double.TryParse(fontObj.ToString(), out initFontSize);
+                }
+            }
+
             // Log Text Box
             _logTextBox = new TextBox
             {
@@ -294,7 +267,7 @@ namespace SecreAI_Hub
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 Background = new SolidColorBrush(Color.FromRgb(26, 26, 26)),
                 Foreground = Brushes.White,
-                FontSize = 13,
+                FontSize = initFontSize,
                 FontFamily = new FontFamily("MS Gothic"),
                 FontWeight = FontWeights.Bold,
                 Margin = new Thickness(10, 0, 10, 5),
@@ -491,7 +464,6 @@ namespace SecreAI_Hub
 
             // Apply translation strings
             UpdateUiText();
-            ApplyWindowOpacityAndFont();
         }
 
         private Button CreateStyledButton(string text, string hexColor, RoutedEventHandler clickHandler, double sidePadding = 0)
@@ -1074,15 +1046,9 @@ namespace SecreAI_Hub
                     var p = Process.Start(psi);
                     p.WaitForExit();
 
-                    // Reload configurations and synchronize
+                    // Restart Hub to apply all changes cleanly
                     Dispatcher.BeginInvoke(new Action(() => {
-                        LoadConfig();
-                        LoadLanguage();
-                        ApplyWindowOpacityAndFont();
-                        RegisterGlobalHotkeys();
-                        UpdateUiText();
-                        SyncRttSettings();
-                        UpdateLogArea(GetLangString("log_messages", "settings_applied", "Settings applied."));
+                        RestartHub();
                     }));
                 }
                 catch (Exception ex)
@@ -1125,13 +1091,9 @@ namespace SecreAI_Hub
                     var p = Process.Start(psi);
                     p.WaitForExit();
 
+                    // Restart Hub to apply all changes cleanly
                     Dispatcher.BeginInvoke(new Action(() => {
-                        LoadConfig();
-                        LoadLanguage();
-                        ApplyWindowOpacityAndFont();
-                        RegisterGlobalHotkeys();
-                        UpdateUiText();
-                        AutoStartVoiceVoxAndRtt();
+                        RestartHub();
                     }));
                 }
                 catch (Exception ex)
