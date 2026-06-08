@@ -50,7 +50,9 @@ def get_ollama_models(ollama_url):
     default_models = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:1b", "gemma3:4b", "gemma3:12b"]
     try:
         # e.g. "http://localhost:11434/v1" -> "http://localhost:11434/api/tags"
-        base_url = ollama_url.split("/v1")[0].rstrip("/")
+        # localhost を 127.0.0.1 に置換し、IPv6競合を回避
+        url_resolved = ollama_url.replace("localhost", "127.0.0.1")
+        base_url = url_resolved.split("/v1")[0].rstrip("/")
         api_tags_url = f"{base_url}/api/tags"
         resp = requests.get(api_tags_url, timeout=2.0)
         if resp.status_code == 200:
@@ -745,8 +747,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         original_text = btn_fetch_ollama.cget("text")
         btn_fetch_ollama.config(text=l_set.get("btn_fetching", "取得中..."), state="disabled")
         
+        # メインスレッド側でURLを取得（スレッドセーフ）
+        current_url = ollama_url_entry.get()
+        
         def _task():
-            current_url = ollama_url_entry.get()
             fetched = get_ollama_models(current_url)
             
             def _update_ui():
