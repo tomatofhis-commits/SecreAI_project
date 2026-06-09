@@ -107,10 +107,20 @@ if __name__ == "__main__":
     win = settings_ui.open_settings_window(parent, config_path, parent.config_data, save_callback)
     
     # Configure cleanup
-    def on_close():
-        win.destroy()
-        parent.destroy()
+    def on_close(event=None):
+        if getattr(on_close, "_done", False):
+            return
+        on_close._done = True
+        try:
+            win.destroy()
+        except:
+            pass
+        try:
+            parent.destroy()
+        except:
+            pass
         sys.exit(0)
 
     win.protocol("WM_DELETE_WINDOW", on_close)
+    win.bind("<Destroy>", lambda e: on_close() if e.widget == win else None)
     parent.mainloop()
