@@ -167,7 +167,25 @@ namespace SecreAI_Hub
             }
         }
 
+        private void ApplyLogFontSize()
+        {
+            try
+            {
+                if (_configData == null) return;
 
+                double fontSize = 13;
+                object fontObj;
+                if (_configData.TryGetValue("LOG_FONT_SIZE", out fontObj) && fontObj != null)
+                {
+                    double.TryParse(fontObj.ToString(), out fontSize);
+                }
+                if (_logTextBox != null)
+                {
+                    _logTextBox.FontSize = fontSize;
+                }
+            }
+            catch { }
+        }
 
         private void LoadLanguage()
         {
@@ -1046,9 +1064,15 @@ namespace SecreAI_Hub
                     var p = Process.Start(psi);
                     p.WaitForExit();
 
-                    // Restart Hub to apply all changes cleanly
+                    // Reload configurations and synchronize without restarting
                     Dispatcher.BeginInvoke(new Action(() => {
-                        RestartHub();
+                        LoadConfig();
+                        LoadLanguage();
+                        ApplyLogFontSize();
+                        RegisterGlobalHotkeys();
+                        UpdateUiText();
+                        SyncRttSettings();
+                        UpdateLogArea(GetLangString("log_messages", "settings_applied", "Settings applied."));
                     }));
                 }
                 catch (Exception ex)
@@ -1091,9 +1115,14 @@ namespace SecreAI_Hub
                     var p = Process.Start(psi);
                     p.WaitForExit();
 
-                    // Restart Hub to apply all changes cleanly
+                    // Reload configurations and synchronize without restarting
                     Dispatcher.BeginInvoke(new Action(() => {
-                        RestartHub();
+                        LoadConfig();
+                        LoadLanguage();
+                        ApplyLogFontSize();
+                        RegisterGlobalHotkeys();
+                        UpdateUiText();
+                        AutoStartVoiceVoxAndRtt();
                     }));
                 }
                 catch (Exception ex)
