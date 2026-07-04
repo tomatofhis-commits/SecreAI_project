@@ -125,6 +125,9 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     notebook.add(tab_extensions, text=l_set.get("tab_extensions", "Extensions"))
     notebook.add(tab_rtt, text=l_set.get("tab_rtt", "RTトランスレーター"))
 
+    # RTTモデル OptionMenu 更新用の参照オブジェクト（NameError回避のため関数上部で初期化）
+    rtt_model_menu_ref = [None]
+
     def add_label(parent_widget, text, pady=(10,0)):
         lbl = tk.Label(parent_widget, text=text)
         lbl.pack(pady=pady)
@@ -814,9 +817,6 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     extensions_group = tk.LabelFrame(tab_extensions, text=l_set.get("extensions_group_api", " API / WebSockets "), padx=10, pady=10)
     extensions_group.pack(pady=10, fill="x", padx=20)
     
-    # RTTモデル OptionMenu 更新用の参照オブジェクト
-    rtt_model_menu_ref = [None]
-
     # --- New Button for Local LLM Model Fetch ---
     def fetch_local_models_async():
         original_text = btn_fetch_ollama.cget("text")
