@@ -203,15 +203,25 @@ def main(base_path=None):
                 return response.choices[0].message.content.strip()
 
             elif db_provider == "local":
-                url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+                provider_local = config.get("LOCAL_LLM_PROVIDER", "ollama")
+                if provider_local == "ollama":
+                    url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+                    payload = {
+                        "model": local_db_model_id,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "options": {"num_ctx": 8192, "temperature": 0.3}
+                    }
+                else: # lmstudio
+                    url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                    payload = {
+                        "model": local_db_model_id,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.3
+                    }
                 try:
                     res = requests.post(
                         f"{url.rstrip('/')}/chat/completions",
-                        json={
-                            "model": local_db_model_id,
-                            "messages": [{"role": "user", "content": prompt}],
-                            "options": {"num_ctx": 8192, "temperature": 0.3}
-                        },
+                        json=payload,
                         timeout=180
                     )
                     return res.json()['choices'][0]['message']['content'].strip()
@@ -268,15 +278,25 @@ def main(base_path=None):
                 return response.choices[0].message.content.strip()
 
             elif db_provider == "local":
-                url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+                provider_local = config.get("LOCAL_LLM_PROVIDER", "ollama")
+                if provider_local == "ollama":
+                    url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+                    payload = {
+                        "model": local_db_model_id,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "options": {"num_ctx": 8192, "temperature": 0.3}
+                    }
+                else: # lmstudio
+                    url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                    payload = {
+                        "model": local_db_model_id,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.3
+                    }
                 try:
                     res = requests.post(
                         f"{url.rstrip('/')}/chat/completions",
-                        json={
-                            "model": local_db_model_id,
-                            "messages": [{"role": "user", "content": prompt}],
-                            "options": {"num_ctx": 8192, "temperature": 0.3}
-                        },
+                        json=payload,
                         timeout=180
                     )
                     return res.json()['choices'][0]['message']['content'].strip()

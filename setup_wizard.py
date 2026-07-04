@@ -282,7 +282,7 @@ class SetupWizard(ctk.CTkToplevel):
 
     def step_ollama_info(self):
         w = self.current_lang.get("setup_wizard", {})
-        title = ctk.CTkLabel(self.content_frame, text=w.get("step_ollama_title", "About Ollama"), font=("Arial", 20, "bold"))
+        title = ctk.CTkLabel(self.content_frame, text=w.get("step_ollama_title", "About Local AI (Ollama / LM Studio)"), font=("Arial", 20, "bold"))
         title.pack(pady=10)
         
         # アイコン的なダミー
@@ -294,7 +294,7 @@ class SetupWizard(ctk.CTkToplevel):
 
         # おすすめ設定への誘導（もし local が選ばれていなければ）
         if self.config_data.get("DB_PROVIDER") != "local":
-            btn_use_local = ctk.CTkButton(self.content_frame, text="Use Ollama for Memory (Recommended)", 
+            btn_use_local = ctk.CTkButton(self.content_frame, text=w.get("btn_use_local_llm", "Use Local LLM for Memory (Recommended)"), 
                                           command=lambda: (self.update_config("DB_PROVIDER", "local"), self.show_step()))
             btn_use_local.pack(pady=20)
 

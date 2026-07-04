@@ -26,12 +26,14 @@ class Translator:
         ollama_url: str = "http://localhost:11434",
         target_lang: str = "ja",
         source_lang: str = "auto",
+        local_llm_provider: str = "ollama"
     ):
         self.model = model
         self.target_lang = target_lang
         self.source_lang = source_lang
         self.last_error = "" # 接続エラー等の詳細を保持
         self.ollama_url = ollama_url.rstrip("/")
+        self.local_llm_provider = local_llm_provider
         
         # 優先順位ベースのバックグラウンドキューシステム
         self._pqueue = queue.PriorityQueue()
@@ -159,29 +161,51 @@ class Translator:
                             if has_image:
                                 msg["images"] = [chunk["image_b64"]]
                                 
-                            payload = {
-                                "model": self.model,
-                                "messages": [msg],
-                                "stream": False,
-                                "options": {"temperature": 0.2},
-                            }
-                            # /v1 など OpenAI互換パスを除いてベースURLを取得
-                            base_url = self.ollama_url.split("/v1")[0].rstrip("/")
-                            response = requests.post(f"{base_url}/api/chat", json=payload, timeout=30)
+                            provider = self.local_llm_provider
+                            if provider == "ollama":
+                                payload = {
+                                    "model": self.model,
+                                    "messages": [msg],
+                                    "stream": False,
+                                    "options": {"temperature": 0.2},
+                                }
+                                base_url = self.ollama_url.split("/v1")[0].rstrip("/")
+                                req_url = f"{base_url}/api/chat"
+                            else: # lmstudio
+                                payload = {
+                                    "model": self.model,
+                                    "messages": [msg],
+                                    "stream": False,
+                                    "temperature": 0.2
+                                }
+                                base_url = self.ollama_url
+                                req_url = f"{base_url.rstrip('/')}/chat/completions"
+
+                            response = requests.post(req_url, json=payload, timeout=30)
                             
                             if response.status_code == 200:
                                 res_json = response.json()
-                                translated = res_json.get("message", {}).get("content", "").strip()
+                                if provider == "ollama":
+                                    translated = res_json.get("message", {}).get("content", "").strip()
+                                else:
+                                    translated = res_json.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                                 
                                 # --- 1.1.2 強化: 翻訳結果のバリデーション ---
                                 preambles = ["はい、", "もちろん、", "翻訳案", "翻訳結果"]
                                 if translated and any(p in translated[:10] for p in preambles):
                                     print(f"[Translator] 前置き混入を検知。リトライします: '{translated[:20]}...'")
-                                    payload["options"]["temperature"] = 0.4
+                                    if provider == "ollama":
+                                        payload["options"]["temperature"] = 0.4
+                                    else:
+                                        payload["temperature"] = 0.4
                                     try:
-                                        retry_resp = requests.post(f"{base_url}/api/chat", json=payload, timeout=30)
+                                        retry_resp = requests.post(req_url, json=payload, timeout=30)
                                         if retry_resp.status_code == 200:
-                                            translated = retry_resp.json().get("message", {}).get("content", "").strip()
+                                            res_retry_json = retry_resp.json()
+                                            if provider == "ollama":
+                                                translated = res_retry_json.get("message", {}).get("content", "").strip()
+                                            else:
+                                                translated = res_retry_json.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                                     except Exception as retry_e:
                                         print(f"[Translator] リトライ中にエラー: {retry_e}")
 
@@ -265,36 +289,40 @@ class Translator:
             return self._pqueue.qsize() + self._active_requests
 
     def test_connection(self) -> bool:
-        """Ollamaへの接続をテストする。"""
+        """ローカルLLMへの接続をテストする。"""
         try:
-            # /v1 など OpenAI互換パスを除いてベースURLを取得
-            base_url = self.ollama_url.split("/v1")[0].rstrip("/")
-            response = requests.get(f"{base_url}/api/tags", timeout=5)
-            response.raise_for_status()
-            models = response.json().get("models", [])
-            model_names = [m.get("name", "") for m in models]
-            if self.model in model_names:
+            provider = self.local_llm_provider
+            models = Translator.get_available_models(self.ollama_url, provider=provider)
+            if self.model in models:
                 return True
             # 部分一致チェック
-            for name in model_names:
-                if self.model.split(":")[0] in name:
+            for name in models:
+                if self.model.split(":")[0] in name or name.split(":")[0] in self.model:
                     return True
-            print(f"[Translator Warning] モデル '{self.model}' が見つかりません。利用可能: {model_names}")
+            print(f"[Translator Warning] モデル '{self.model}' が見つかりません。利用可能: {models}")
             return False
         except Exception as e:
             self.last_error = str(e)
-            print(f"[Translator Error] Ollama接続テスト失敗 (URL: {self.ollama_url}): {e}")
+            print(f"[Translator Error] 接続テスト失敗 (URL: {self.ollama_url}, Provider: {self.local_llm_provider}): {e}")
             return False
 
     @staticmethod
-    def get_available_models(ollama_url: str = "http://localhost:11434") -> list[str]:
-        """Ollama APIから利用可能なモデルのリストを取得する"""
+    def get_available_models(ollama_url: str = "http://localhost:11434", provider: str = "ollama") -> list[str]:
+        """APIから利用可能なモデルのリストを取得する"""
         try:
-            url = ollama_url.split("/v1")[0].rstrip("/")
-            response = requests.get(f"{url}/api/tags", timeout=3)
-            response.raise_for_status()
-            models = response.json().get("models", [])
-            return [m.get("name", "") for m in models]
+            if provider == "ollama":
+                url = ollama_url.split("/v1")[0].rstrip("/")
+                response = requests.get(f"{url}/api/tags", timeout=3)
+                response.raise_for_status()
+                models = response.json().get("models", [])
+                return [m.get("name", "") for m in models]
+            else: # lmstudio
+                # URLに /v1 が含まれていなければ追加
+                url = ollama_url.rstrip("/")
+                response = requests.get(f"{url}/models", timeout=3)
+                response.raise_for_status()
+                models = response.json().get("data", [])
+                return [m.get("id", "") for m in models]
         except Exception as e:
-            print(f"[Translator Error] モデルの取得に失敗しました: {e}")
+            print(f"[Translator Error] モデルの取得に失敗しました (Provider: {provider}): {e}")
             return []

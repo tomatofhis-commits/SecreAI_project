@@ -8,6 +8,12 @@ import shutil
 RUNTIME_DIR = "python_runtime"
 # Detect host python version dynamically to ensure binary compatibility
 PYTHON_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+STABLE_PATCH_VERSIONS = {
+    (3, 11): "3.11.9",
+    (3, 10): "3.10.11",
+    (3, 9): "3.9.13",
+    (3, 12): "3.12.8"
+}
 ZIP_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
 ZIP_PATH = "python_embed.zip"
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
@@ -105,8 +111,16 @@ def main():
         try:
             urllib.request.urlretrieve(ZIP_URL, ZIP_PATH)
         except Exception as e:
-            print(f"Failed to download python embed zip: {e}")
-            sys.exit(1)
+            print(f"Failed to download python embed zip for version {PYTHON_VERSION}: {e}")
+            major_minor = (sys.version_info.major, sys.version_info.minor)
+            stable_ver = STABLE_PATCH_VERSIONS.get(major_minor, f"{sys.version_info.major}.{sys.version_info.minor}.9")
+            fallback_url = f"https://www.python.org/ftp/python/{stable_ver}/python-{stable_ver}-embed-amd64.zip"
+            print(f"Retrying download with stable fallback version {stable_ver} from {fallback_url}...")
+            try:
+                urllib.request.urlretrieve(fallback_url, ZIP_PATH)
+            except Exception as e2:
+                print(f"Failed to download stable fallback python embed zip: {e2}")
+                sys.exit(1)
             
         print("Extracting Python embeddable zip...")
         with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:

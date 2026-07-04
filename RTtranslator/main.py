@@ -418,6 +418,7 @@ class TranslationController:
             ollama_url=config.get("ollama_url", "http://localhost:11434"),
             target_lang=config.get("target_language", "ja"),
             source_lang=config.get("source_language", "auto"),
+            local_llm_provider=config.get("local_llm_provider", "ollama"),
         )
 
         # UI初期化 (まだ表示しない)
@@ -585,6 +586,9 @@ class TranslationController:
             # モデルとURLを更新
             new_model = new_config.get("ollama_model", "translategemma:4b")
             new_url = new_config.get("ollama_url", "http://localhost:11434")
+            new_provider = new_config.get("local_llm_provider", "ollama")
+            
+            self.translator.local_llm_provider = new_provider
             
             if self.translator.model != new_model:
                 self.translator.model = new_model
@@ -2654,7 +2658,8 @@ class ControlPanel(QMainWindow):
         
         # モデルリスト取得して追加
         ollama_url = self.config.get("ollama_url", "http://localhost:11434")
-        models = Translator.get_available_models(ollama_url)
+        provider = self.config.get("local_llm_provider", "ollama")
+        models = Translator.get_available_models(ollama_url, provider=provider)
         if not models:
             models = ["translategemma:4b"] # 取得失敗時のフォールバック
             

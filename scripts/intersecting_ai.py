@@ -180,12 +180,25 @@ async def generate_intersecting_response(query, image_path, config, root, lang_d
 
     # STEP 3: ローカルモデルで最終集約
     try:
-        client = OllamaClient()
-        response = await client.chat(
-            model=local_model,
-            messages=[{'role': 'user', 'content': final_prompt}]
-        )
-        answer_text = response['message']['content']
+        provider = config.get("LOCAL_LLM_PROVIDER", "ollama")
+        if provider == "ollama":
+            raw_url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+            base_url = raw_url.split("/v1")[0].rstrip("/")
+            client = OllamaClient(host=base_url)
+            response = await client.chat(
+                model=local_model,
+                messages=[{'role': 'user', 'content': final_prompt}]
+            )
+            answer_text = response['message']['content']
+        else: # lmstudio
+            lmstudio_url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+            client = AsyncOpenAI(base_url=lmstudio_url, api_key="lm-studio")
+            response = await client.chat.completions.create(
+                model=local_model,
+                messages=[{'role': 'user', 'content': final_prompt}],
+                temperature=0.3
+            )
+            answer_text = response.choices[0].message.content
         if answer_text:
             # AIの返答からハッシュ記号（#、＃）を除去（読み上げや表示のバグ防止）
             answer_text = answer_text.replace('#', '').replace('＃', '')
