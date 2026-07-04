@@ -41,25 +41,45 @@ def get_ai_response(prompt, config, response_json=False):
             return res.choices[0].message.content
 
         elif provider == "local":
-            try:
-                import ollama
-                raw_url = config.get("OLLAMA_URL", "http://127.0.0.1:11434")
-                # localhost を 127.0.0.1 に置換し、末尾の /v1 を削除して公式ライブラリに渡す
-                host_url = raw_url.replace("/v1", "").replace("localhost", "127.0.0.1")
-                
-                client = ollama.Client(host=host_url)
-                chat_kwargs = {
-                    "model": actual_model_id,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "options": {"temperature": 0.2}
-                }
-                if response_json:
-                    chat_kwargs["format"] = "json"
-                
-                res = client.chat(**chat_kwargs)
-                return res['message']['content']
-            except Exception as ollama_err:
-                return f"Error: Ollama client failed: {ollama_err}"
+            provider_local = config.get("LOCAL_LLM_PROVIDER", "ollama")
+            if provider_local == "ollama":
+                try:
+                    import ollama
+                    raw_url = config.get("OLLAMA_URL", "http://127.0.0.1:11434")
+                    # localhost を 127.0.0.1 に置換し、末尾の /v1 を削除して公式ライブラリに渡す
+                    host_url = raw_url.replace("/v1", "").replace("localhost", "127.0.0.1")
+                    
+                    client = ollama.Client(host=host_url)
+                    chat_kwargs = {
+                        "model": actual_model_id,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "options": {"temperature": 0.2}
+                    }
+                    if response_json:
+                        chat_kwargs["format"] = "json"
+                    
+                    res = client.chat(**chat_kwargs)
+                    return res['message']['content']
+                except Exception as ollama_err:
+                    return f"Error: Ollama client failed: {ollama_err}"
+            else: # lmstudio
+                try:
+                    from openai import OpenAI
+                    lmstudio_url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                    client = OpenAI(base_url=lmstudio_url, api_key="lm-studio")
+                    
+                    openai_kwargs = {
+                        "model": actual_model_id,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.2
+                    }
+                    if response_json:
+                        openai_kwargs["response_format"] = { "type": "json_object" }
+                        
+                    res = client.chat.completions.create(**openai_kwargs)
+                    return res.choices[0].message.content
+                except Exception as lm_err:
+                    return f"Error: LM Studio client failed: {lm_err}"
 
         else: # Gemini
             api_key = config.get("GEMINI_API_KEY")

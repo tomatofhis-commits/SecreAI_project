@@ -1427,12 +1427,24 @@ namespace SecreAI_Hub
 
         private Dictionary<string, object> BuildRttConfig()
         {
+            string provider = _configData.ContainsKey("LOCAL_LLM_PROVIDER") ? _configData["LOCAL_LLM_PROVIDER"].ToString() : "ollama";
+            string localUrl = "http://localhost:11434/v1";
+            if (provider == "lmstudio")
+            {
+                localUrl = _configData.ContainsKey("LMSTUDIO_URL") ? _configData["LMSTUDIO_URL"].ToString() : "http://localhost:1234/v1";
+            }
+            else
+            {
+                localUrl = _configData.ContainsKey("OLLAMA_URL") ? _configData["OLLAMA_URL"].ToString() : "http://localhost:11434/v1";
+            }
+
             var rttCfg = new Dictionary<string, object>
             {
                 { "target_window_title", _configData.ContainsKey("TARGET_GAME_TITLE") ? _configData["TARGET_GAME_TITLE"] : "" },
                 { "target_language", _configData.ContainsKey("rtt_target_language") ? _configData["rtt_target_language"] : "ja" },
-                { "ollama_url", _configData.ContainsKey("OLLAMA_URL") ? _configData["OLLAMA_URL"] : "http://localhost:11434/v1" },
+                { "ollama_url", localUrl },
                 { "ollama_model", _configData.ContainsKey("rtt_ollama_model") ? _configData["rtt_ollama_model"] : "translategemma:4b" },
+                { "local_llm_provider", provider },
                 { "ocr_engine_mode", "dual_scout_hybrid" }
             };
 
@@ -1446,10 +1458,7 @@ namespace SecreAI_Hub
             }
 
             // Force global OLLAMA_URL prioritizing
-            if (_configData.ContainsKey("OLLAMA_URL"))
-            {
-                rttCfg["ollama_url"] = _configData["OLLAMA_URL"];
-            }
+            rttCfg["ollama_url"] = localUrl;
 
             return rttCfg;
         }

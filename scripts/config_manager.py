@@ -15,7 +15,9 @@ DEFAULT_CONFIG = {
     "MODEL_ID": "gemini-3.5-flash",
     "MODEL_ID_PRO": "gemini-3.5-flash（中）",
     "MODEL_ID_GPT": "gpt-5.4-mini",
+    "LOCAL_LLM_PROVIDER": "ollama",
     "OLLAMA_URL": "http://localhost:11434/v1",
+    "LMSTUDIO_URL": "http://localhost:11435/v1",
     "MODEL_ID_LOCAL": "gemma3:12b",
     "MODEL_ID_SUMMARY": "gemma3:4b",
     "DB_PROVIDER": "gemini",
@@ -23,9 +25,9 @@ DEFAULT_CONFIG = {
     "search_switch": False,
     "SEARCH_PROVIDER": "tavily",
     # SEARCH_PROVIDER の選択肢:
-    #   "grounding"     - gemini-2.5-flash-lite の Grounding
-    #   "tavily"        - Tavilyで検索しollamaで要約
-    #   "integrated"    - grounding + tavily をollamaで統合要約
+    #   "grounding"     - gemini-3.1-flash-lite の Grounding
+    #   "tavily"        - Tavilyで検索しローカルAIで要約
+    #   "integrated"    - grounding + tavily をローカルAIで統合要約
     #   "grounding_3_1" - gemini-3.1-flash-lite の Grounding（思考レベル最小）
     "THINKING_BUDGET": "medium",
     # THINKING_BUDGET: gemini-3.1-flash-lite 選択時のみ有効

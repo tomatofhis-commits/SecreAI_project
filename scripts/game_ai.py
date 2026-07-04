@@ -400,7 +400,7 @@ def increment_tavily_count(root):
             return 0
 
 def increment_grounding_count(root):
-    """Groundingの検索回数をインクリメントする。日が変わっていたらリセットする。"""
+    """Groundingの検索回数をインクリメントする。月が変わっていたらリセットする。"""
     conf_path = os.path.join(root, "data", "config.json")
     if not os.path.exists(conf_path):
         conf_path = os.path.join(root, "config", "config.json")
@@ -413,13 +413,13 @@ def increment_grounding_count(root):
                     current_conf = json.load(f)
             
             now = datetime.now() 
-            now_date = now.strftime("%Y-%m-%d")
-            saved_date = current_conf.get("GROUNDING_DATE", "")
+            now_month = now.strftime("%Y-%m")
+            saved_month = current_conf.get("GROUNDING_MONTH", "")
             count = current_conf.get("GROUNDING_COUNT", 0)
 
-            if saved_date != now_date:
+            if saved_month != now_month:
                 count = 1
-                current_conf["GROUNDING_DATE"] = now_date
+                current_conf["GROUNDING_MONTH"] = now_month
             else:
                 count += 1
             
@@ -435,10 +435,48 @@ def increment_grounding_count(root):
             send_log_to_hub(f"Grounding Count Increment Error: {e}", is_error=True)
             return 0
 
+def local_llm_chat(config, model, messages, format_type=None, options=None):
+    """LOCAL_LLM_PROVIDER に応じて Ollama または LM Studio を呼び出す共通関数"""
+    provider = config.get("LOCAL_LLM_PROVIDER", "ollama")
+    
+    if provider == "ollama":
+        import ollama
+        raw_url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+        base_url = raw_url.split("/v1")[0].rstrip("/")
+        client = ollama.Client(host=base_url)
+        
+        chat_kwargs = {
+            "model": model,
+            "messages": messages
+        }
+        if format_type == "json":
+            chat_kwargs["format"] = "json"
+        if options:
+            chat_kwargs["options"] = options
+            
+        response = client.chat(**chat_kwargs)
+        return response['message']['content']
+    else: # lmstudio
+        lmstudio_url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.3 if not options else options.get("temperature", 0.3)
+        }
+        if format_type == "json":
+            payload["response_format"] = {"type": "json_object"}
+            
+        res = requests.post(
+            f"{lmstudio_url.rstrip('/')}/chat/completions",
+            json=payload,
+            timeout=120
+        )
+        res.raise_for_status()
+        return res.json()['choices'][0]['message']['content']
+
 def should_execute_search(query, config, log_m):
     """案1: 検索が本当に必要かAI（軽量モデル）で事前判定する"""
     try:
-        import ollama
         summary_model = config.get("MODEL_ID_SUMMARY", "gemma2:9b")
         
         prompt = (
@@ -456,22 +494,16 @@ def should_execute_search(query, config, log_m):
             f"判定対象のクエリ: {query}"
         )
         
-        response = ollama.chat(
-            model=summary_model,
-            messages=[{'role': 'user', 'content': prompt}],
-            format='json'
-        )
-        
-        res_data = json.loads(response['message']['content'])
+        response_content = local_llm_chat(config, summary_model, [{'role': 'user', 'content': prompt}], format_type='json')
+        res_data = json.loads(response_content)
         return res_data
-    except ImportError:
-        return {"necessary": True, "optimized_query": query, "reason": "Ollama library not installed"}
     except Exception as e:
-        # 接続エラーの詳細判定
+        provider = config.get("LOCAL_LLM_PROVIDER", "ollama")
+        provider_name = "Ollama" if provider == "ollama" else "LM Studio"
         err_str = str(e).lower()
         if "connection" in err_str or "refused" in err_str:
-             send_log_to_hub(f"Gatekeeper Warning: Ollama connection failed. Falling back to search. (Ensure Ollama is running)", is_error=True)
-             return {"necessary": True, "optimized_query": query, "reason": "Ollama not running"}
+             send_log_to_hub(f"Gatekeeper Warning: {provider_name} connection failed. Falling back to search. (Ensure local LLM server is running)", is_error=True)
+             return {"necessary": True, "optimized_query": query, "reason": f"{provider_name} not running"}
         
         send_log_to_hub(f"Gatekeeper Error: {e}", is_error=True)
         return {"necessary": True, "optimized_query": query, "reason": f"Gatekeeper failed: {e}"}
@@ -613,11 +645,11 @@ def execute_background_search(search_query, config, root, session_data):
             ctx = res_tavily
             role = ai_p.get("search_tavily_summary", "Tavily要約プロンプト").format(max_chars=max_chars)
 
-        response = ollama.chat(
-            model=summary_model,
-            messages=[{'role': 'user', 'content': f"{role}\n\n検索結果クエリ: {search_query}\n情報ソース:\n{ctx}"}]
+        summary = local_llm_chat(
+            config,
+            summary_model,
+            [{'role': 'user', 'content': f"{role}\n\n検索結果クエリ: {search_query}\n情報ソース:\n{ctx}"}]
         )
-        summary = response['message']['content']
 
         if summary:
             # キャッシュ保存
@@ -660,11 +692,12 @@ def save_search_to_db(full_summary, query, config, root):
         role = ai_p.get("search_save_db_role", "以下の検索結果を、将来参照する知識として【200文字以内】で極限まで簡潔にまとめてください。").format(max_chars=200)
         save_prompt = f"{role}\n内容: {full_summary}"
         
-        response = ollama.chat(
-            model=summary_model,
-            messages=[{'role': 'user', 'content': save_prompt}]
+        response_content = local_llm_chat(
+            config,
+            summary_model,
+            [{'role': 'user', 'content': save_prompt}]
         )
-        short_summary = response['message']['content'][:200].strip()
+        short_summary = response_content[:200].strip()
 
         # ChromaDBへ接続（改善: プール使用）
         db_path = os.path.join(root, "memory_db")
@@ -812,7 +845,24 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
 
     try:
         if provider == "local":
-            url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+            provider_local = config.get("LOCAL_LLM_PROVIDER", "ollama")
+            if provider_local == "ollama":
+                url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+                payload = {
+                    "model": model_id, "messages": messages,
+                    "options": {
+                        "num_ctx": 4096, "temperature": 0.7, "repeat_penalty": 1.2, 
+                        "num_predict": 400, "stop": ["\n\n", "###"]
+                    }
+                }
+            else: # lmstudio
+                url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                payload = {
+                    "model": model_id, "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 400,
+                    "stop": ["\n\n", "###"]
+                }
             model_id = config.get("MODEL_ID_LOCAL", "llama3.2-vision:11b")
             messages = [{"role": "system", "content": system_instr}]
             for h in history[-10:]:
@@ -824,15 +874,14 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
                 base64_image = base64.b64encode(image_bytes).decode('utf-8')
                 user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}})
             messages.append({"role": "user", "content": user_content})  # 常に "user" で追加
+            
+            # ペイロード内のモデルIDとメッセージを最新に上書きして送信
+            payload["model"] = model_id
+            payload["messages"] = messages
+            
             res = requests.post(
                 f"{url.rstrip('/')}/chat/completions",
-                json={
-                    "model": model_id, "messages": messages,
-                    "options": {
-                        "num_ctx": 4096, "temperature": 0.7, "repeat_penalty": 1.2, 
-                        "num_predict": 400, "stop": ["\n\n", "###"]
-                    }
-                },
+                json=payload,
                 timeout=(10, 600)
             )
             res.raise_for_status()
@@ -1463,7 +1512,9 @@ def run_api_server():
     # 起動時の事前キャッシュ
     cached_info = {
         "speakers": {"ずんだもん": 3, "四国めたん": 2, "春日部つむぎ": 8, "雨晴はう": 10},
-        "ollama_models": []
+        "ollama_models": [],
+        "lmstudio_models": [],
+        "local_llm_provider": "ollama"
     }
 
     def load_cache_async():
@@ -1481,13 +1532,32 @@ def run_api_server():
                 config_path = os.path.join(root, "config", "config.json")
             with open(config_path, "r", encoding="utf-8") as f:
                 conf = json.load(f)
+            
+            provider = conf.get("LOCAL_LLM_PROVIDER", "ollama")
+            cached_info["local_llm_provider"] = provider
+            
+            # Ollamaのモデル取得
             url = conf.get("OLLAMA_URL", "http://localhost:11434/v1")
             base_url = url.split("/v1")[0].rstrip("/")
-            resp = requests.get(f"{base_url}/api/tags", timeout=2.0)
-            if resp.status_code == 200:
-                models = [m.get("name", "") for m in resp.json().get("models", [])]
-                if models:
-                    cached_info["ollama_models"] = models
+            try:
+                resp = requests.get(f"{base_url}/api/tags", timeout=2.0)
+                if resp.status_code == 200:
+                    models = [m.get("name", "") for m in resp.json().get("models", [])]
+                    if models:
+                        cached_info["ollama_models"] = models
+            except:
+                pass
+                
+            # LM Studioのモデル取得
+            lm_url = conf.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+            try:
+                resp = requests.get(f"{lm_url.rstrip('/')}/models", timeout=2.0)
+                if resp.status_code == 200:
+                    models = [m.get("id", "") for m in resp.json().get("data", [])]
+                    if models:
+                        cached_info["lmstudio_models"] = models
+            except:
+                pass
         except Exception:
             pass
 
