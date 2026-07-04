@@ -95,7 +95,7 @@ namespace SecreAI_Hub
             LoadLanguage();
 
             // Window Settings
-            Title = "SecreAI Hub v1.2.2 - Controller";
+            Title = "SecreAI Hub v1.3.0 - Controller";
             Width = 1150;
             Height = 880;
             Background = new SolidColorBrush(Color.FromRgb(18, 18, 20));
@@ -1917,7 +1917,7 @@ namespace SecreAI_Hub
                         if (data != null && data.TryGetValue("tag_name", out tagObj))
                         {
                             string latestV = tagObj.ToString().TrimStart('v');
-                            string currentV = "1.2.2";
+                            string currentV = "1.3.0";
                             
                             if (string.Compare(latestV, currentV) > 0)
                             {

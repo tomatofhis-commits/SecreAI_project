@@ -122,5 +122,5 @@ if __name__ == "__main__":
         sys.exit(0)
 
     win.protocol("WM_DELETE_WINDOW", on_close)
-    win.bind("<Destroy>", lambda e: on_close() if e.widget == win else None)
+    win.bind("<Destroy>", lambda e: on_close() if str(e.widget) == str(win) else None)
     parent.mainloop()
