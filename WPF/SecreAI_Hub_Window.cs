@@ -687,7 +687,7 @@ namespace SecreAI_Hub
                 {
                     WorkingDirectory = _baseDir,
                     UseShellExecute = false,
-                    CreateNoWindow = true
+                    CreateNoWindow = false
                 };
                 ConfigureProcessEnvironment(psi);
 
@@ -956,7 +956,7 @@ namespace SecreAI_Hub
                         ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
                         {
                             WorkingDirectory = _baseDir,
-                            CreateNoWindow = true,
+                            CreateNoWindow = false,
                             UseShellExecute = false
                         };
                         ConfigureProcessEnvironment(psi);
@@ -1079,7 +1079,7 @@ namespace SecreAI_Hub
                     {
                         WorkingDirectory = _baseDir,
                         UseShellExecute = false,
-                        CreateNoWindow = true
+                        CreateNoWindow = false
                     };
                     ConfigureProcessEnvironment(psi);
                     
@@ -1131,7 +1131,7 @@ namespace SecreAI_Hub
                     {
                         WorkingDirectory = _baseDir,
                         UseShellExecute = false,
-                        CreateNoWindow = true
+                        CreateNoWindow = false
                     };
                     ConfigureProcessEnvironment(psi);
                     
@@ -1514,7 +1514,7 @@ namespace SecreAI_Hub
                 {
                     WorkingDirectory = _baseDir,
                     UseShellExecute = false,
-                    CreateNoWindow = true,
+                    CreateNoWindow = false,
                     RedirectStandardInput = true
                 };
                 ConfigureProcessEnvironment(psi);
@@ -1622,7 +1622,7 @@ namespace SecreAI_Hub
                     psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + rttScript + "\" --headless --config \"" + rttConfigPath + "\"")
                     {
                         WorkingDirectory = rttScriptDir,
-                        CreateNoWindow = true,
+                        CreateNoWindow = false,
                         UseShellExecute = false
                     };
                     ConfigureProcessEnvironment(psi);
