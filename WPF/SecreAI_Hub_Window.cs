@@ -646,6 +646,25 @@ namespace SecreAI_Hub
             return "python"; // Fallback to global python
         }
 
+        private void ConfigureProcessEnvironment(ProcessStartInfo psi)
+        {
+            psi.UseShellExecute = false;
+            string runtimeDir = Path.Combine(_baseDir, "python_runtime");
+            if (Directory.Exists(runtimeDir))
+            {
+                string oldPath = psi.EnvironmentVariables.ContainsKey("PATH") ? psi.EnvironmentVariables["PATH"] : Environment.GetEnvironmentVariable("PATH");
+                psi.EnvironmentVariables["PATH"] = runtimeDir + Path.PathSeparator + oldPath;
+            }
+            if (psi.EnvironmentVariables.ContainsKey("PYTHONPATH"))
+            {
+                psi.EnvironmentVariables.Remove("PYTHONPATH");
+            }
+            if (psi.EnvironmentVariables.ContainsKey("PYTHONHOME"))
+            {
+                psi.EnvironmentVariables.Remove("PYTHONHOME");
+            }
+        }
+
         private void RunScriptFallback(string scriptName, string[] args, bool isAiScript)
         {
             bool started = false;
@@ -670,6 +689,7 @@ namespace SecreAI_Hub
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                ConfigureProcessEnvironment(psi);
 
                 Process p = Process.Start(psi);
                 if (p != null)
@@ -939,6 +959,7 @@ namespace SecreAI_Hub
                             CreateNoWindow = true,
                             UseShellExecute = false
                         };
+                        ConfigureProcessEnvironment(psi);
                         Process.Start(psi);
                     }
                     catch (Exception ex)
@@ -1060,6 +1081,7 @@ namespace SecreAI_Hub
                         UseShellExecute = false,
                         CreateNoWindow = true
                     };
+                    ConfigureProcessEnvironment(psi);
                     
                     var p = Process.Start(psi);
                     p.WaitForExit();
@@ -1111,6 +1133,7 @@ namespace SecreAI_Hub
                         UseShellExecute = false,
                         CreateNoWindow = true
                     };
+                    ConfigureProcessEnvironment(psi);
                     
                     var p = Process.Start(psi);
                     p.WaitForExit();
@@ -1494,6 +1517,7 @@ namespace SecreAI_Hub
                     CreateNoWindow = true,
                     RedirectStandardInput = true
                 };
+                ConfigureProcessEnvironment(psi);
 
                 _gameAiServerProcess = Process.Start(psi);
                 Dispatcher.BeginInvoke(new Action(() => {
@@ -1601,6 +1625,7 @@ namespace SecreAI_Hub
                         CreateNoWindow = true,
                         UseShellExecute = false
                     };
+                    ConfigureProcessEnvironment(psi);
                 }
                 else
                 {
