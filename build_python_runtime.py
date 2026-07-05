@@ -91,15 +91,15 @@ def main():
 
     runtime_path = os.path.join(script_dir, RUNTIME_DIR)
 
-    # 1. Clear old runtime if Python version changed to prevent dll mismatches
     python_exe = os.path.join(runtime_path, "python.exe")
+
+    # 1. Force clear existing runtime folder to guarantee a clean build without DLL mixing (conflicts)
     if os.path.exists(runtime_path):
-        # Check if the extracted python DLL matches host major.minor
-        dll_name = f"python{sys.version_info.major}{sys.version_info.minor}.dll"
-        dll_path = os.path.join(runtime_path, dll_name)
-        if not os.path.exists(dll_path) and os.path.exists(python_exe):
-            print("Python version mismatch detected in existing runtime. Re-creating runtime...")
+        print("Clearing existing python_runtime directory to guarantee a clean, unmixed build...")
+        try:
             shutil.rmtree(runtime_path)
+        except Exception as e:
+            print(f"Warning: Failed to clean python_runtime directory: {e}")
 
     if not os.path.exists(runtime_path):
         print(f"Creating directory: {runtime_path}")
