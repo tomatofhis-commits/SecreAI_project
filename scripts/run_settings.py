@@ -1,11 +1,23 @@
-import json
 import os
 import sys
+
+# Add root directory and runtime path to prevent DLL conflicts (DLL Hell)
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+runtime_dir = os.path.join(base_dir, "python_runtime")
+if os.path.exists(runtime_dir):
+    if hasattr(os, "add_dll_directory"):
+        try:
+            os.add_dll_directory(runtime_dir)
+        except Exception:
+            pass
+    os.environ["PATH"] = runtime_dir + os.pathsep + os.environ.get("PATH", "")
+    os.environ.pop("PYTHONPATH", None)
+    os.environ.pop("PYTHONHOME", None)
+
+import json
 import tkinter as tk
 import requests
 
-# Add root directory to path
-base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if base_dir not in sys.path:
     sys.path.insert(0, base_dir)
 
