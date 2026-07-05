@@ -683,7 +683,8 @@ namespace SecreAI_Hub
                     argBuilder.Append(" \"" + arg + "\"");
                 }
 
-                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), argBuilder.ToString())
+                string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" " + argBuilder.ToString() + " & pause\"";
+                ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                 {
                     WorkingDirectory = _baseDir,
                     UseShellExecute = false,
@@ -953,7 +954,8 @@ namespace SecreAI_Hub
                     try
                     {
                         string scriptPath = Path.Combine(_baseDir, "scripts", "run_memory_viewer.py");
-                        ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
+                        string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" \"" + scriptPath + "\" & pause\"";
+                        ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                         {
                             WorkingDirectory = _baseDir,
                             CreateNoWindow = false,
@@ -1075,7 +1077,8 @@ namespace SecreAI_Hub
                 try
                 {
                     string scriptPath = Path.Combine(_baseDir, "scripts", "run_settings.py");
-                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
+                    string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" \"" + scriptPath + "\" & pause\"";
+                    ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                     {
                         WorkingDirectory = _baseDir,
                         UseShellExecute = false,
@@ -1127,7 +1130,8 @@ namespace SecreAI_Hub
                 try
                 {
                     string scriptPath = Path.Combine(_baseDir, "scripts", "run_setup_wizard.py");
-                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
+                    string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" \"" + scriptPath + "\" & pause\"";
+                    ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                     {
                         WorkingDirectory = _baseDir,
                         UseShellExecute = false,
@@ -1510,7 +1514,8 @@ namespace SecreAI_Hub
                 StringBuilder argBuilder = new StringBuilder();
                 argBuilder.Append("\"" + scriptPath + "\" server");
 
-                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), argBuilder.ToString())
+                string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" " + argBuilder.ToString() + " & pause\"";
+                ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                 {
                     WorkingDirectory = _baseDir,
                     UseShellExecute = false,
@@ -1619,7 +1624,8 @@ namespace SecreAI_Hub
                 else if (rttScript != null)
                 {
                     UpdateLogArea("[RTT] EXEが見つかりません。Pythonスクリプトで代替起動します（開発モード）。");
-                    psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + rttScript + "\" --headless --config \"" + rttConfigPath + "\"")
+                    string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" \"" + rttScript + "\" --headless --config \"" + rttConfigPath + "\" & pause\"";
+                    psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                     {
                         WorkingDirectory = rttScriptDir,
                         CreateNoWindow = false,
