@@ -93,34 +93,42 @@ class DummyParent(tk.Tk):
         self.config_data = new_config
 
 if __name__ == "__main__":
-    parent = DummyParent()
-    config_path = os.path.join(base_dir, "data", "config.json")
-    
-    def save_callback(new_config):
-        parent.on_settings_saved(new_config)
-        # Notify WPF if running
-        try:
-            requests.post("http://127.0.0.1:5000/api/log", json={"message": "[Hub] 設定が変更され、保存されました。", "is_error": False})
-        except:
-            pass
+    import traceback
+    try:
+        parent = DummyParent()
+        config_path = os.path.join(base_dir, "data", "config.json")
+        
+        def save_callback(new_config):
+            parent.on_settings_saved(new_config)
+            # Notify WPF if running
+            try:
+                requests.post("http://127.0.0.1:5000/api/log", json={"message": "[Hub] 設定が変更され、保存されました。", "is_error": False})
+            except:
+                pass
 
-    win = settings_ui.open_settings_window(parent, config_path, parent.config_data, save_callback)
-    
-    # Configure cleanup
-    def on_close(event=None):
-        if getattr(on_close, "_done", False):
-            return
-        on_close._done = True
-        try:
-            win.destroy()
-        except:
-            pass
-        try:
-            parent.destroy()
-        except:
-            pass
-        sys.exit(0)
+        win = settings_ui.open_settings_window(parent, config_path, parent.config_data, save_callback)
+        
+        # Configure cleanup
+        def on_close(event=None):
+            if getattr(on_close, "_done", False):
+                return
+            on_close._done = True
+            try:
+                win.destroy()
+            except:
+                pass
+            try:
+                parent.destroy()
+            except:
+                pass
+            sys.exit(0)
 
-    win.protocol("WM_DELETE_WINDOW", on_close)
-    win.bind("<Destroy>", lambda e: on_close() if str(e.widget) == str(win) else None)
-    parent.mainloop()
+        win.protocol("WM_DELETE_WINDOW", on_close)
+        win.bind("<Destroy>", lambda e: on_close() if str(e.widget) == str(win) else None)
+        parent.mainloop()
+    except Exception as e:
+        log_path = os.path.join(base_dir, "settings_error.log")
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write("Settings UI Launch Error:\n")
+            traceback.print_exc(file=f)
+        sys.exit(1)
