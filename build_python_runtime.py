@@ -112,15 +112,7 @@ def main():
             urllib.request.urlretrieve(ZIP_URL, ZIP_PATH)
         except Exception as e:
             print(f"Failed to download python embed zip for version {PYTHON_VERSION}: {e}")
-            major_minor = (sys.version_info.major, sys.version_info.minor)
-            stable_ver = STABLE_PATCH_VERSIONS.get(major_minor, f"{sys.version_info.major}.{sys.version_info.minor}.9")
-            fallback_url = f"https://www.python.org/ftp/python/{stable_ver}/python-{stable_ver}-embed-amd64.zip"
-            print(f"Retrying download with stable fallback version {stable_ver} from {fallback_url}...")
-            try:
-                urllib.request.urlretrieve(fallback_url, ZIP_PATH)
-            except Exception as e2:
-                print(f"Failed to download stable fallback python embed zip: {e2}")
-                sys.exit(1)
+            sys.exit(1)
             
         print("Extracting Python embeddable zip...")
         with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:
@@ -176,72 +168,76 @@ def main():
             print(f"Failed to install {pkg}: {e}")
             sys.exit(1)
 
-    # 6. Download and extract Tkinter/Tcl/Tk dependencies from official NuGet package (independent of host)
-    print("Downloading Tkinter/Tcl/Tk dependencies from NuGet python.3.11.9...")
-    nupkg_url = "https://globalcdn.nuget.org/packages/python.3.11.9.nupkg"
-    nupkg_path = "python_nuget.zip"
+    # 6. Obtain official Tkinter/Tcl/Tk dependencies by extracting them from official installer
+    print("Obtaining official Tkinter/Tcl/Tk dependencies...")
+    installer_url = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+    installer_path = "python-3.11.9-amd64.exe"
+    temp_install_dir = os.path.abspath("temp_python_install")
+    
     try:
-        # Download NuGet package
-        urllib.request.urlretrieve(nupkg_url, nupkg_path)
-        print("NuGet package downloaded successfully.")
+        # Download official installer
+        if not os.path.exists(installer_path):
+            print(f"Downloading official Python installer from {installer_url}...")
+            urllib.request.urlretrieve(installer_url, installer_path)
+            print("Downloaded successfully.")
+            
+        # Run silent installation to a temp local folder (UAC-free)
+        print(f"Installing Python temporarily to extract files at {temp_install_dir}...")
+        if os.path.exists(temp_install_dir):
+            shutil.rmtree(temp_install_dir)
+        os.makedirs(temp_install_dir, exist_ok=True)
         
-        # Extract files
-        with zipfile.ZipFile(nupkg_path, 'r') as zip_ref:
-            # 6.1 Copy DLLs
-            dll_mapping = {
-                "tools/tcl86t.dll": "tcl86t.dll",
-                "tools/tk86t.dll": "tk86t.dll",
-                "tools/zlib1.dll": "zlib1.dll",
-                "tools/DLLs/_tkinter.pyd": "_tkinter.pyd"
-            }
-            for src_in_zip, dest_name in dll_mapping.items():
-                try:
-                    data = zip_ref.read(src_in_zip)
-                    dest_file_path = os.path.join(runtime_path, dest_name)
-                    with open(dest_file_path, 'wb') as df:
-                        df.write(data)
-                    print(f"Extracted {dest_name} from NuGet package.")
-                except KeyError:
-                    print(f"Warning: {src_in_zip} not found in NuGet package.")
-            
-            # 6.2 Extract tcl directory
-            dest_tcl_dir = os.path.join(runtime_path, "tcl")
-            if os.path.exists(dest_tcl_dir):
-                shutil.rmtree(dest_tcl_dir)
-            os.makedirs(dest_tcl_dir, exist_ok=True)
-            
-            # 6.3 Extract Lib/tkinter directory
-            dest_tkinter_dir = os.path.join(runtime_path, "Lib", "tkinter")
-            if os.path.exists(dest_tkinter_dir):
-                shutil.rmtree(dest_tkinter_dir)
-            os.makedirs(dest_tkinter_dir, exist_ok=True)
-            
-            # Walk and extract matching files
-            for file_info in zip_ref.infolist():
-                # tcl extraction
-                if file_info.filename.startswith("tools/tcl/") and not file_info.is_dir():
-                    rel_path = file_info.filename[len("tools/tcl/"):]
-                    dest_path = os.path.join(dest_tcl_dir, rel_path)
-                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-                    with open(dest_path, 'wb') as df:
-                        df.write(zip_ref.read(file_info.filename))
-                # tkinter library extraction
-                elif file_info.filename.startswith("tools/Lib/tkinter/") and not file_info.is_dir():
-                    rel_path = file_info.filename[len("tools/Lib/tkinter/"):]
-                    dest_path = os.path.join(dest_tkinter_dir, rel_path)
-                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-                    with open(dest_path, 'wb') as df:
-                        df.write(zip_ref.read(file_info.filename))
-                        
-            print("Extracted tcl and tkinter library folders from NuGet package.")
-            
+        subprocess.run([
+            installer_path,
+            "/quiet",
+            "InstallAllUsers=0",
+            f"TargetDir={temp_install_dir}",
+            "AssociateFiles=0",
+            "Shortcuts=0",
+            "Include_doc=0",
+            "Include_launcher=0",
+            "InstallLauncherAllUsers=0"
+        ], check=True)
+        
+        # Copy Tkinter files to runtime
+        print("Extracting Tkinter/Tcl/Tk files from temp installation...")
+        
+        # Copy DLLs and PYD (from DLLs subfolder)
+        shutil.copy2(os.path.join(temp_install_dir, "DLLs", "tcl86t.dll"), runtime_path)
+        shutil.copy2(os.path.join(temp_install_dir, "DLLs", "tk86t.dll"), runtime_path)
+        shutil.copy2(os.path.join(temp_install_dir, "DLLs", "_tkinter.pyd"), runtime_path)
+        
+        # Copy tcl directory
+        dest_tcl_dir = os.path.join(runtime_path, "tcl")
+        if os.path.exists(dest_tcl_dir):
+            shutil.rmtree(dest_tcl_dir)
+        shutil.copytree(os.path.join(temp_install_dir, "tcl"), dest_tcl_dir)
+        
+        # Copy tkinter library directory
+        dest_tkinter_dir = os.path.join(runtime_path, "Lib", "tkinter")
+        if os.path.exists(dest_tkinter_dir):
+            shutil.rmtree(dest_tkinter_dir)
+        shutil.copytree(os.path.join(temp_install_dir, "Lib", "tkinter"), dest_tkinter_dir)
+        
+        print("Tkinter extraction completed successfully.")
+        
     except Exception as e:
-        print(f"Error: Failed to obtain Tkinter/Tcl/Tk dependencies from NuGet: {e}")
+        print(f"Error: Failed to obtain Tkinter dependencies from installer: {e}")
         sys.exit(1)
+        
     finally:
-        if os.path.exists(nupkg_path):
+        # Uninstall and clean up
+        print("Cleaning up temporary installation...")
+        if os.path.exists(installer_path):
             try:
-                os.remove(nupkg_path)
+                subprocess.run([installer_path, "/uninstall", "/quiet"], check=True)
+                os.remove(installer_path)
+                print("Temporary installer uninstalled and removed.")
+            except Exception as e:
+                print(f"Warning during uninstall: {e}")
+        if os.path.exists(temp_install_dir):
+            try:
+                shutil.rmtree(temp_install_dir)
             except Exception:
                 pass
 
@@ -250,6 +246,10 @@ def main():
     sitecustomize_path = os.path.join(runtime_path, "Lib", "site-packages", "sitecustomize.py")
     sitecustomize_content = """import os
 import sys
+import site
+
+# Enforce complete isolation from any system/user global site-packages
+site.ENABLE_USER_SITE = False
 
 # Dynamically add the python_runtime root directory to DLL search paths
 # site-packages is at python_runtime/Lib/site-packages
