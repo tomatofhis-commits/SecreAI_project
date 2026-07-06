@@ -4,7 +4,6 @@ from tkinter import messagebox, filedialog
 import json
 import os
 import requests
-import sounddevice as sd
 from datetime import datetime
 import sys
 import threading # 追加
@@ -475,6 +474,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     # 2. 出力デバイス (MMEに限定)
     def get_mme_devices():
         try:
+            import sounddevice as sd
             apis = sd.query_hostapis()
             mme_idx = next((i for i, a in enumerate(apis) if a['name'] == 'MME'), None)
             devices = sd.query_devices()
