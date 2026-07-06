@@ -37,8 +37,13 @@ try:
         # 開発時のフォールバック
         import game_ai
         from scripts import config_manager
-        get_db_stats = db_maintenance.get_db_stats
-        clean_up_database = db_maintenance.clean_up_database
+        try:
+            import db_maintenance
+            get_db_stats = db_maintenance.get_db_stats
+            clean_up_database = db_maintenance.clean_up_database
+        except ImportError:
+            get_db_stats = None
+            clean_up_database = None
         print("DEBUG: db_maintenance, game_ai and config_manager loaded via direct import")
 except Exception as e:
     print(f"DEBUG: Import failed. Error: {e}")
@@ -94,15 +99,16 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     root = tk.Toplevel(parent)
     root.title(l_set.get("win_title", "Settings"))
-    root.geometry("600x850") 
+    root.geometry("600x700") 
     # root.attributes("-topmost", True) # Removed to allow normal window behavior
 
-    # メインコンテナ（Notebook用）とフッター（保存ボタン用）
-    main_container = tk.Frame(root)
-    main_container.pack(expand=True, fill="both")
-
+    # フッター（保存ボタン用）を先にpackして最下部への固定を保証
     footer_frame = tk.Frame(root)
     footer_frame.pack(side="bottom", fill="x")
+
+    # メインコンテナ（Notebook用）
+    main_container = tk.Frame(root)
+    main_container.pack(expand=True, fill="both")
 
     notebook = ttk.Notebook(main_container)
     notebook.pack(expand=True, fill="both", padx=10, pady=10)
