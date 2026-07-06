@@ -6,8 +6,8 @@ import subprocess
 import shutil
 
 RUNTIME_DIR = "python_runtime"
-# Detect host python version dynamically to ensure binary compatibility
-PYTHON_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+# Fixed python version to 3.11.9 to prevent version mix/compatibility issues
+PYTHON_VERSION = "3.11.9"
 STABLE_PATCH_VERSIONS = {
     (3, 11): "3.11.9",
     (3, 10): "3.10.11",
@@ -130,13 +130,13 @@ def main():
         print("Python runtime already extracted.")
 
     # 3. Modify ._pth file to enable site-packages loading and include Lib directory
-    pth_filename = f"python{sys.version_info.major}{sys.version_info.minor}._pth"
+    pth_filename = "python311._pth"
     pth_file = os.path.join(runtime_path, pth_filename)
     if os.path.exists(pth_file):
         print(f"Modifying {pth_file} to import site and include Lib...")
         # Write exact required path configuration
         pth_lines = [
-            f"python{sys.version_info.major}{sys.version_info.minor}.zip",
+            "python311.zip",
             ".",
             "Lib",
             "import site"
@@ -176,54 +176,74 @@ def main():
             print(f"Failed to install {pkg}: {e}")
             sys.exit(1)
 
-    # 6. Copy Tkinter/Tcl/Tk dependencies from host Python
-    print("Copying Tkinter/Tcl/Tk dependencies from host Python...")
-    host_python_dir = sys.base_exec_prefix
-    
-    # 6.1 Copy DLLs from host root or DLLs folder (including Tcl/Tk and zlib dependencies)
-    for dll in ["tcl86t.dll", "tk86t.dll", "zlib1.dll"]:
-        src_dll = os.path.join(host_python_dir, dll)
-        if os.path.exists(src_dll):
-            shutil.copy2(src_dll, runtime_path)
-            print(f"Copied {dll} to runtime root.")
-        else:
-            # Try DLLs folder as fallback
-            src_dll_fallback = os.path.join(host_python_dir, "DLLs", dll)
-            if os.path.exists(src_dll_fallback):
-                shutil.copy2(src_dll_fallback, runtime_path)
-                print(f"Copied {dll} from DLLs to runtime root.")
+    # 6. Download and extract Tkinter/Tcl/Tk dependencies from official NuGet package (independent of host)
+    print("Downloading Tkinter/Tcl/Tk dependencies from NuGet python.3.11.9...")
+    nupkg_url = "https://globalcdn.nuget.org/packages/python.3.11.9.nupkg"
+    nupkg_path = "python_nuget.zip"
+    try:
+        # Download NuGet package
+        urllib.request.urlretrieve(nupkg_url, nupkg_path)
+        print("NuGet package downloaded successfully.")
+        
+        # Extract files
+        with zipfile.ZipFile(nupkg_path, 'r') as zip_ref:
+            # 6.1 Copy DLLs
+            dll_mapping = {
+                "tools/tcl86t.dll": "tcl86t.dll",
+                "tools/tk86t.dll": "tk86t.dll",
+                "tools/zlib1.dll": "zlib1.dll",
+                "tools/DLLs/_tkinter.pyd": "_tkinter.pyd"
+            }
+            for src_in_zip, dest_name in dll_mapping.items():
+                try:
+                    data = zip_ref.read(src_in_zip)
+                    dest_file_path = os.path.join(runtime_path, dest_name)
+                    with open(dest_file_path, 'wb') as df:
+                        df.write(data)
+                    print(f"Extracted {dest_name} from NuGet package.")
+                except KeyError:
+                    print(f"Warning: {src_in_zip} not found in NuGet package.")
             
-    # 6.2 Copy _tkinter.pyd from DLLs folder
-    src_pyd = os.path.join(host_python_dir, "DLLs", "_tkinter.pyd")
-    if os.path.exists(src_pyd):
-        shutil.copy2(src_pyd, runtime_path)
-        print("Copied _tkinter.pyd to runtime root.")
-    else:
-        # Fallback to root
-        src_pyd_fallback = os.path.join(host_python_dir, "_tkinter.pyd")
-        if os.path.exists(src_pyd_fallback):
-            shutil.copy2(src_pyd_fallback, runtime_path)
-            print("Copied _tkinter.pyd from root to runtime root.")
-        
-    # 6.3 Copy tcl folder from host root to runtime root
-    src_tcl_dir = os.path.join(host_python_dir, "tcl")
-    dest_tcl_dir = os.path.join(runtime_path, "tcl")
-    if os.path.exists(src_tcl_dir):
-        if os.path.exists(dest_tcl_dir):
-            shutil.rmtree(dest_tcl_dir)
-        shutil.copytree(src_tcl_dir, dest_tcl_dir)
-        print("Copied tcl directory to runtime.")
-        
-    # 6.4 Copy tkinter library folder from host Lib to runtime Lib
-    src_tkinter_dir = os.path.join(host_python_dir, "Lib", "tkinter")
-    dest_tkinter_dir = os.path.join(runtime_path, "Lib", "tkinter")
-    if os.path.exists(src_tkinter_dir):
-        if os.path.exists(dest_tkinter_dir):
-            shutil.rmtree(dest_tkinter_dir)
-        shutil.copytree(src_tkinter_dir, dest_tkinter_dir)
-        print("Copied tkinter library directory to runtime Lib.")
-    else:
-        print("Warning: tkinter library directory not found in host Python.")
+            # 6.2 Extract tcl directory
+            dest_tcl_dir = os.path.join(runtime_path, "tcl")
+            if os.path.exists(dest_tcl_dir):
+                shutil.rmtree(dest_tcl_dir)
+            os.makedirs(dest_tcl_dir, exist_ok=True)
+            
+            # 6.3 Extract Lib/tkinter directory
+            dest_tkinter_dir = os.path.join(runtime_path, "Lib", "tkinter")
+            if os.path.exists(dest_tkinter_dir):
+                shutil.rmtree(dest_tkinter_dir)
+            os.makedirs(dest_tkinter_dir, exist_ok=True)
+            
+            # Walk and extract matching files
+            for file_info in zip_ref.infolist():
+                # tcl extraction
+                if file_info.filename.startswith("tools/tcl/") and not file_info.is_dir():
+                    rel_path = file_info.filename[len("tools/tcl/"):]
+                    dest_path = os.path.join(dest_tcl_dir, rel_path)
+                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                    with open(dest_path, 'wb') as df:
+                        df.write(zip_ref.read(file_info.filename))
+                # tkinter library extraction
+                elif file_info.filename.startswith("tools/Lib/tkinter/") and not file_info.is_dir():
+                    rel_path = file_info.filename[len("tools/Lib/tkinter/"):]
+                    dest_path = os.path.join(dest_tkinter_dir, rel_path)
+                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                    with open(dest_path, 'wb') as df:
+                        df.write(zip_ref.read(file_info.filename))
+                        
+            print("Extracted tcl and tkinter library folders from NuGet package.")
+            
+    except Exception as e:
+        print(f"Error: Failed to obtain Tkinter/Tcl/Tk dependencies from NuGet: {e}")
+        sys.exit(1)
+    finally:
+        if os.path.exists(nupkg_path):
+            try:
+                os.remove(nupkg_path)
+            except Exception:
+                pass
 
     # 6.5 Create sitecustomize.py to handle DLL path automatically
     print("Creating sitecustomize.py in site-packages...")
