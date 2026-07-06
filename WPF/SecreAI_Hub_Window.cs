@@ -655,14 +655,6 @@ namespace SecreAI_Hub
                 string oldPath = psi.EnvironmentVariables.ContainsKey("PATH") ? psi.EnvironmentVariables["PATH"] : Environment.GetEnvironmentVariable("PATH");
                 psi.EnvironmentVariables["PATH"] = runtimeDir + Path.PathSeparator + oldPath;
             }
-            if (psi.EnvironmentVariables.ContainsKey("PYTHONPATH"))
-            {
-                psi.EnvironmentVariables.Remove("PYTHONPATH");
-            }
-            if (psi.EnvironmentVariables.ContainsKey("PYTHONHOME"))
-            {
-                psi.EnvironmentVariables.Remove("PYTHONHOME");
-            }
         }
 
         private void RunScriptFallback(string scriptName, string[] args, bool isAiScript)
@@ -683,7 +675,7 @@ namespace SecreAI_Hub
                     argBuilder.Append(" \"" + arg + "\"");
                 }
 
-                string cmdArgs = "/c \"set PYTHONPATH=& set PYTHONHOME=& \"" + GetPythonExecutablePath() + "\" " + argBuilder.ToString() + " & pause\"";
+                string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I " + argBuilder.ToString() + " & pause\"";
                 ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                 {
                     WorkingDirectory = _baseDir,
@@ -954,7 +946,7 @@ namespace SecreAI_Hub
                     try
                     {
                         string scriptPath = Path.Combine(_baseDir, "scripts", "run_memory_viewer.py");
-                        string cmdArgs = "/c \"set PYTHONPATH=& set PYTHONHOME=& \"" + GetPythonExecutablePath() + "\" \"" + scriptPath + "\" & pause\"";
+                        string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I \"" + scriptPath + "\" & pause\"";
                         ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                         {
                             WorkingDirectory = _baseDir,
@@ -1077,7 +1069,7 @@ namespace SecreAI_Hub
                 try
                 {
                     string scriptPath = Path.Combine(_baseDir, "scripts", "run_settings.py");
-                    string cmdArgs = "/c \"set PYTHONPATH=& set PYTHONHOME=& \"" + GetPythonExecutablePath() + "\" \"" + scriptPath + "\" & pause\"";
+                    string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I \"" + scriptPath + "\" & pause\"";
                     ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                     {
                         WorkingDirectory = _baseDir,
@@ -1130,7 +1122,7 @@ namespace SecreAI_Hub
                 try
                 {
                     string scriptPath = Path.Combine(_baseDir, "scripts", "run_setup_wizard.py");
-                    string cmdArgs = "/c \"set PYTHONPATH=& set PYTHONHOME=& \"" + GetPythonExecutablePath() + "\" \"" + scriptPath + "\" & pause\"";
+                    string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I \"" + scriptPath + "\" & pause\"";
                     ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                     {
                         WorkingDirectory = _baseDir,
@@ -1514,7 +1506,7 @@ namespace SecreAI_Hub
                 StringBuilder argBuilder = new StringBuilder();
                 argBuilder.Append("\"" + scriptPath + "\" server");
 
-                string cmdArgs = "/c \"set PYTHONPATH=& set PYTHONHOME=& \"" + GetPythonExecutablePath() + "\" " + argBuilder.ToString() + " & pause\"";
+                string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I " + argBuilder.ToString() + " & pause\"";
                 ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                 {
                     WorkingDirectory = _baseDir,
@@ -1624,7 +1616,7 @@ namespace SecreAI_Hub
                 else if (rttScript != null)
                 {
                     UpdateLogArea("[RTT] EXEが見つかりません。Pythonスクリプトで代替起動します（開発モード）。");
-                    string cmdArgs = "/c \"set PYTHONPATH=& set PYTHONHOME=& \"" + GetPythonExecutablePath() + "\" \"" + rttScript + "\" --headless --config \"" + rttConfigPath + "\" & pause\"";
+                    string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I \"" + rttScript + "\" --headless --config \"" + rttConfigPath + "\" & pause\"";
                     psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                     {
                         WorkingDirectory = rttScriptDir,
