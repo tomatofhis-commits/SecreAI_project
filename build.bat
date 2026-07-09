@@ -37,13 +37,13 @@ echo WPF Build Done!
 echo ========================================================
 echo  2. Checking/Building Portable Python Runtime...
 echo ========================================================
-:: python d:\SecreAI_Build\build_python_runtime.py
-:: if %ERRORLEVEL% neq 0 (
-::     echo.
-::     echo [ERROR] Portable Python Runtime setup failed.
-::     pause
-::     exit /b 1
-:: )
+python d:\SecreAI_Build\build_python_runtime.py
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo [ERROR] Portable Python Runtime setup failed.
+    pause
+    exit /b 1
+)
 
 :: 3. Run Inno Setup Compiler
 echo ========================================================
