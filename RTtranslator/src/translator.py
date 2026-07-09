@@ -303,10 +303,10 @@ class Translator:
             if self.model in model_names:
                 return True
             # 部分一致チェック
-            for name in model_names:
-                if self.model.split(":")[0] in name:
+            for name in models:
+                if self.model.split(":")[0] in name or name.split(":")[0] in self.model:
                     return True
-            print(f"[Translator Warning] モデル '{self.model}' が見つかりません。利用可能: {model_names}")
+            print(f"[Translator Warning] モデル '{self.model}' が見つかりません。利用可能: {models}")
             return False
         except Exception as e:
             self.last_error = str(e)

@@ -1,92 +1,17 @@
 {
-  "system": {
-    "single_instance_title": "Ejecución Duplicada",
-    "single_instance_msg": "SecreAI ya se está ejecutando.\nPor favor, verifique la bandeja del sistema.",
-    "restart": "Reiniciar",
-    "restart_failed": "Reinicio fallido: {e}",
-    "exit": "Salir",
-    "show": "Mostrar",
-    "save_success": "Configuración guardada y aplicada.",
-    "save_fail": "Error al guardar: {e}",
-    "ai_stop_signal": "Señal de parada de IA enviada.",
-    "error": "Error",
-    "you_prefix": "Tú: ",
-    "ai_prefix": "IA: "
-  },
-  "menu": {
-    "system_cascade": "Sistema",
-    "refresh_windows": "Actualizar lista de ventanas",
-    "reset_memory": "Restablecer memoria a corto plazo",
-    "open_memory": "Gestión de memoria (Memory)",
-    "restart": "Reiniciar",
-    "exit": "Salir",
-    "tray_show": "Mostrar",
-    "rtt_cascade": "Traductor RT",
-    "rtt_start": "Iniciar traducción",
-    "rtt_stop": "Detener traducción",
-    "rtt_eco_mode": "Modo Eco",
-    "rtt_single_mode": "Modo de traducción de captura única",
-    "rtt_settings": "Abrir configuración RTT",
-    "reset_memory_confirm_title": "Confirmar",
-    "reset_memory_confirm_msg": "¿Desea restablecer el historial de conversación (memoria a corto plazo)?",
-    "status_memory_reset": "La memoria a corto plazo ha sido restablecida."
-  },
-  "gui": {
-    "log_header": "Transcripción de IA y Registro del Sistema",
-    "placeholder_chat": "Habla con la IA por texto...",
-    "btn_voice_mode": "🎙 Modo Voz",
-    "btn_vision_mode": "👁 Modo Visión",
-    "btn_stop_ai": "🛑 Detener chat",
-    "btn_fix": "⚠ Corregir",
-    "btn_clear_log": "🧹 Borrar registro",
-    "btn_toggle_theme": "Cambiar color de fondo",
-    "label_target_window": "Ventana objetivo:",
-    "label_voice_speed": "Velocidad de voz:",
-    "label_context": "Contexto de hoy:",
-    "btn_quick_save": "Guardado rápido",
-    "btn_open_settings": "Configuración avanzada",
-    "default_capture": "Predeterminado",
-    "op_operations": "-- Operaciones --",
-    "btn_good": "👍 Bien",
-    "btn_bad": "👎 Mal",
-    "op_display_settings": "-- Configuración de pantalla --",
-    "window_get_fail": "Fallo al obtener ventana"
-  },
-  "settings": {
-    "win_title": "SecreAI - Configuración Avanzada",
-    "tab_general": "  General  ",
-    "tab_hotkey": "  Teclas de acceso rápido  ",
-    "browse": "Examinar",
-    "model_normal": "Modelo IA (Normal):",
-    "model_pro": "Modelo para tareas complejas (MODEL_ID_PRO):",
-    "max_chars": "Límite de longitud de texto:",
-    "voicevox_speaker": "Voz VOICEVOX:",
-    "audio_device": "Dispositivo de salida de audio:",
-    "font_size": "Tamaño de fuente del registro:",
-    "display_time": "Tiempo de visualización del mensaje (seg):",
-    "window_alpha": "Opacidad de la ventana de subtítulos:",
-    "label_voice_volume": "Volumen de voz:",
-    "label_input_device": "Dispositivo de entrada (Micrófono):",
-    "btn_test_audio": "Reproducir audio de prueba",
-    "btn_stop_test": "Detener reproducción",
-    "test_audio_text": "Iniciando prueba de audio. Hace mucho tiempo, un anciano encontró a una niña diminuta y brillante dentro de un tallo de bambú y la crió con amor. Llamada Kaguya-hime, se convirtió en una belleza radiante en solo tres meses. Cinco nobles pretendientes buscaron su mano, pero ella les dio desafíos imposibles y ninguno tuvo éxito. Incluso el Emperador le propuso matrimonio, pero ella lo rechazó. En una noche de luna llena en agosto, reveló que era una habitante de la Luna. A pesar de los esfuerzos de los ancianos por retenerla, mensajeros celestiales llegaron para llevársela. Dejó atrás un elixir de vida, que el Emperador ordenó quemar en la cima de la montaña más alta. Esa montaña se conoció como el Monte Fuji, la montaña de la inmortalidad.",
-    "btn_refresh_devices": "Actualizar lista de dispositivos",
-    "msg_device_refreshed": "Lista de dispositivos actualizada.",
-    "btn_save": "Guardar",
-    "btn_cancel": "Cancelar",
-    "btn_save_close": "Guardar y cerrar",
-    "msg_save_success": "Configuración guardada.",
-    "max_chars_options": {
-      "labels": [
-        "Hasta 1000 caracteres",
-        "Hasta 2000 caracteres",
-        "Hasta 3000 caracteres"
-      ],
-      "values": [
-        1000,
-        2000,
-        3000
-      ]
+    "system": {
+        "single_instance_title": "Ejecución Duplicada",
+        "single_instance_msg": "SecreAI ya se está ejecutando.\nPor favor, verifique la bandeja del sistema.",
+        "restart": "Reiniciar",
+        "restart_failed": "Reinicio fallido: {e}",
+        "exit": "Salir",
+        "show": "Mostrar",
+        "save_success": "Configuración guardada y aplicada.",
+        "save_fail": "Error al guardar: {e}",
+        "ai_stop_signal": "Señal de parada de IA enviada.",
+        "error": "Error",
+        "you_prefix": "Tú: ",
+        "ai_prefix": "IA: "
     },
     "hotkey_title": "\n【Configuración de teclas de acceso rápido globales】",
     "hotkey_voice": "Iniciar modo voz:",
@@ -363,5 +288,4 @@
         "doc_link": ""
       }
     }
-  }
 }

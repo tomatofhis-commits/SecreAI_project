@@ -6,8 +6,14 @@ import subprocess
 import shutil
 
 RUNTIME_DIR = "python_runtime"
-# Detect host python version dynamically to ensure binary compatibility
-PYTHON_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+# Fixed python version to 3.11.9 to prevent version mix/compatibility issues
+PYTHON_VERSION = "3.11.9"
+STABLE_PATCH_VERSIONS = {
+    (3, 11): "3.11.9",
+    (3, 10): "3.10.11",
+    (3, 9): "3.9.13",
+    (3, 12): "3.12.8"
+}
 ZIP_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
 ZIP_PATH = "python_embed.zip"
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
@@ -85,15 +91,15 @@ def main():
 
     runtime_path = os.path.join(script_dir, RUNTIME_DIR)
 
-    # 1. Clear old runtime if Python version changed to prevent dll mismatches
     python_exe = os.path.join(runtime_path, "python.exe")
+
+    # 1. Force clear existing runtime folder to guarantee a clean build without DLL mixing (conflicts)
     if os.path.exists(runtime_path):
-        # Check if the extracted python DLL matches host major.minor
-        dll_name = f"python{sys.version_info.major}{sys.version_info.minor}.dll"
-        dll_path = os.path.join(runtime_path, dll_name)
-        if not os.path.exists(dll_path) and os.path.exists(python_exe):
-            print("Python version mismatch detected in existing runtime. Re-creating runtime...")
+        print("Clearing existing python_runtime directory to guarantee a clean, unmixed build...")
+        try:
             shutil.rmtree(runtime_path)
+        except Exception as e:
+            print(f"Warning: Failed to clean python_runtime directory: {e}")
 
     if not os.path.exists(runtime_path):
         print(f"Creating directory: {runtime_path}")
@@ -105,7 +111,7 @@ def main():
         try:
             urllib.request.urlretrieve(ZIP_URL, ZIP_PATH)
         except Exception as e:
-            print(f"Failed to download python embed zip: {e}")
+            print(f"Failed to download python embed zip for version {PYTHON_VERSION}: {e}")
             sys.exit(1)
             
         print("Extracting Python embeddable zip...")
@@ -116,13 +122,13 @@ def main():
         print("Python runtime already extracted.")
 
     # 3. Modify ._pth file to enable site-packages loading and include Lib directory
-    pth_filename = f"python{sys.version_info.major}{sys.version_info.minor}._pth"
+    pth_filename = "python311._pth"
     pth_file = os.path.join(runtime_path, pth_filename)
     if os.path.exists(pth_file):
         print(f"Modifying {pth_file} to import site and include Lib...")
         # Write exact required path configuration
         pth_lines = [
-            f"python{sys.version_info.major}{sys.version_info.minor}.zip",
+            "python311.zip",
             ".",
             "Lib",
             "import site"
@@ -162,60 +168,88 @@ def main():
             print(f"Failed to install {pkg}: {e}")
             sys.exit(1)
 
-    # 6. Copy Tkinter/Tcl/Tk dependencies from host Python
-    print("Copying Tkinter/Tcl/Tk dependencies from host Python...")
-    host_python_dir = sys.base_exec_prefix
+    # 6. Obtain official Tkinter/Tcl/Tk dependencies by extracting them from official installer
+    print("Obtaining official Tkinter/Tcl/Tk dependencies...")
+    installer_url = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+    installer_path = "python-3.11.9-amd64.exe"
+    temp_install_dir = os.path.abspath("temp_python_install")
     
-    # 6.1 Copy DLLs from host root or DLLs folder (including Tcl/Tk and zlib dependencies)
-    for dll in ["tcl86t.dll", "tk86t.dll", "zlib1.dll"]:
-        src_dll = os.path.join(host_python_dir, dll)
-        if os.path.exists(src_dll):
-            shutil.copy2(src_dll, runtime_path)
-            print(f"Copied {dll} to runtime root.")
-        else:
-            # Try DLLs folder as fallback
-            src_dll_fallback = os.path.join(host_python_dir, "DLLs", dll)
-            if os.path.exists(src_dll_fallback):
-                shutil.copy2(src_dll_fallback, runtime_path)
-                print(f"Copied {dll} from DLLs to runtime root.")
+    try:
+        # Download official installer
+        if not os.path.exists(installer_path):
+            print(f"Downloading official Python installer from {installer_url}...")
+            urllib.request.urlretrieve(installer_url, installer_path)
+            print("Downloaded successfully.")
             
-    # 6.2 Copy _tkinter.pyd from DLLs folder
-    src_pyd = os.path.join(host_python_dir, "DLLs", "_tkinter.pyd")
-    if os.path.exists(src_pyd):
-        shutil.copy2(src_pyd, runtime_path)
-        print("Copied _tkinter.pyd to runtime root.")
-    else:
-        # Fallback to root
-        src_pyd_fallback = os.path.join(host_python_dir, "_tkinter.pyd")
-        if os.path.exists(src_pyd_fallback):
-            shutil.copy2(src_pyd_fallback, runtime_path)
-            print("Copied _tkinter.pyd from root to runtime root.")
+        # Run silent installation to a temp local folder (UAC-free)
+        print(f"Installing Python temporarily to extract files at {temp_install_dir}...")
+        if os.path.exists(temp_install_dir):
+            shutil.rmtree(temp_install_dir)
+        os.makedirs(temp_install_dir, exist_ok=True)
         
-    # 6.3 Copy tcl folder from host root to runtime root
-    src_tcl_dir = os.path.join(host_python_dir, "tcl")
-    dest_tcl_dir = os.path.join(runtime_path, "tcl")
-    if os.path.exists(src_tcl_dir):
+        subprocess.run([
+            installer_path,
+            "/quiet",
+            "InstallAllUsers=0",
+            f"TargetDir={temp_install_dir}",
+            "AssociateFiles=0",
+            "Shortcuts=0",
+            "Include_doc=0",
+            "Include_launcher=0",
+            "InstallLauncherAllUsers=0"
+        ], check=True)
+        
+        # Copy Tkinter files to runtime
+        print("Extracting Tkinter/Tcl/Tk files from temp installation...")
+        
+        # Copy DLLs and PYD (from DLLs subfolder)
+        shutil.copy2(os.path.join(temp_install_dir, "DLLs", "tcl86t.dll"), runtime_path)
+        shutil.copy2(os.path.join(temp_install_dir, "DLLs", "tk86t.dll"), runtime_path)
+        shutil.copy2(os.path.join(temp_install_dir, "DLLs", "_tkinter.pyd"), runtime_path)
+        
+        # Copy tcl directory
+        dest_tcl_dir = os.path.join(runtime_path, "tcl")
         if os.path.exists(dest_tcl_dir):
             shutil.rmtree(dest_tcl_dir)
-        shutil.copytree(src_tcl_dir, dest_tcl_dir)
-        print("Copied tcl directory to runtime.")
+        shutil.copytree(os.path.join(temp_install_dir, "tcl"), dest_tcl_dir)
         
-    # 6.4 Copy tkinter library folder from host Lib to runtime Lib
-    src_tkinter_dir = os.path.join(host_python_dir, "Lib", "tkinter")
-    dest_tkinter_dir = os.path.join(runtime_path, "Lib", "tkinter")
-    if os.path.exists(src_tkinter_dir):
+        # Copy tkinter library directory
+        dest_tkinter_dir = os.path.join(runtime_path, "Lib", "tkinter")
         if os.path.exists(dest_tkinter_dir):
             shutil.rmtree(dest_tkinter_dir)
-        shutil.copytree(src_tkinter_dir, dest_tkinter_dir)
-        print("Copied tkinter library directory to runtime Lib.")
-    else:
-        print("Warning: tkinter library directory not found in host Python.")
+        shutil.copytree(os.path.join(temp_install_dir, "Lib", "tkinter"), dest_tkinter_dir)
+        
+        print("Tkinter extraction completed successfully.")
+        
+    except Exception as e:
+        print(f"Error: Failed to obtain Tkinter dependencies from installer: {e}")
+        sys.exit(1)
+        
+    finally:
+        # Uninstall and clean up
+        print("Cleaning up temporary installation...")
+        if os.path.exists(installer_path):
+            try:
+                subprocess.run([installer_path, "/uninstall", "/quiet"], check=True)
+                os.remove(installer_path)
+                print("Temporary installer uninstalled and removed.")
+            except Exception as e:
+                print(f"Warning during uninstall: {e}")
+        if os.path.exists(temp_install_dir):
+            try:
+                shutil.rmtree(temp_install_dir)
+            except Exception:
+                pass
 
     # 6.5 Create sitecustomize.py to handle DLL path automatically
     print("Creating sitecustomize.py in site-packages...")
     sitecustomize_path = os.path.join(runtime_path, "Lib", "site-packages", "sitecustomize.py")
     sitecustomize_content = """import os
 import sys
+import site
+
+# Enforce complete isolation from any system/user global site-packages
+site.ENABLE_USER_SITE = False
 
 # Dynamically add the python_runtime root directory to DLL search paths
 # site-packages is at python_runtime/Lib/site-packages

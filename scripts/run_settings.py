@@ -1,11 +1,23 @@
-import json
 import os
 import sys
+
+# Add root directory and runtime path to prevent DLL conflicts (DLL Hell)
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+runtime_dir = os.path.join(base_dir, "python_runtime")
+if os.path.exists(runtime_dir):
+    if hasattr(os, "add_dll_directory"):
+        try:
+            os.add_dll_directory(runtime_dir)
+        except Exception:
+            pass
+    os.environ["PATH"] = runtime_dir + os.pathsep + os.environ.get("PATH", "")
+    os.environ.pop("PYTHONPATH", None)
+    os.environ.pop("PYTHONHOME", None)
+
+import json
 import tkinter as tk
 import requests
 
-# Add root directory to path
-base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if base_dir not in sys.path:
     sys.path.insert(0, base_dir)
 
@@ -93,16 +105,18 @@ class DummyParent(tk.Tk):
         self.config_data = new_config
 
 if __name__ == "__main__":
-    parent = DummyParent()
-    config_path = os.path.join(base_dir, "data", "config.json")
-    
-    def save_callback(new_config):
-        parent.on_settings_saved(new_config)
-        # Notify WPF if running
-        try:
-            requests.post("http://127.0.0.1:5000/api/log", json={"message": "[Hub] 設定が変更され、保存されました。", "is_error": False})
-        except:
-            pass
+    import traceback
+    try:
+        parent = DummyParent()
+        config_path = os.path.join(base_dir, "data", "config.json")
+        
+        def save_callback(new_config):
+            parent.on_settings_saved(new_config)
+            # Notify WPF if running
+            try:
+                requests.post("http://127.0.0.1:5000/api/log", json={"message": "[Hub] 設定が変更され、保存されました。", "is_error": False})
+            except:
+                pass
 
     win = settings_ui.open_settings_window(parent, config_path, parent.config_data, save_callback)
     

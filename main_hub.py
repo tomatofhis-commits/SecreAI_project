@@ -1,11 +1,22 @@
 import sys
 import os
 
-# --- 1. 最優先で scripts へのパスを通す ---
+# Prevent DLL conflicts (DLL Hell) with system-wide python installations
 if getattr(sys, 'frozen', False):
     base_dir = os.path.dirname(os.path.abspath(sys.executable))
 else:
     base_dir = os.path.dirname(os.path.abspath(__file__))
+
+runtime_dir = os.path.join(base_dir, "python_runtime")
+if os.path.exists(runtime_dir):
+    if hasattr(os, "add_dll_directory"):
+        try:
+            os.add_dll_directory(runtime_dir)
+        except Exception:
+            pass
+    os.environ["PATH"] = runtime_dir + os.pathsep + os.environ.get("PATH", "")
+    os.environ.pop("PYTHONPATH", None)
+    os.environ.pop("PYTHONHOME", None)
 
 scripts_path = os.path.join(base_dir, "scripts")
 if os.path.exists(scripts_path) and scripts_path not in sys.path:
@@ -55,7 +66,7 @@ except ImportError:
 # ------------------------
 # 🔹 GLOBAL CONFIGURATION 🔹
 # ------------------------
-VERSION = "1.2.2"
+VERSION = "1.3.0"
 CONFIG_VERSION = "2.0"
 APP_NAME = f"SecreAI - NextGen {VERSION}"
 

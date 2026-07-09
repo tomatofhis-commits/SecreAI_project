@@ -167,13 +167,12 @@ namespace SecreAI_Hub
             }
         }
 
-        private void ApplyWindowOpacityAndFont()
+        private void ApplyLogFontSize()
         {
             try
             {
                 if (_configData == null) return;
 
-                // 1. Font Size
                 double fontSize = 13;
                 object fontObj;
                 if (_configData.TryGetValue("LOG_FONT_SIZE", out fontObj) && fontObj != null)
@@ -270,6 +269,17 @@ namespace SecreAI_Hub
             leftGrid.Children.Add(_indicatorBorder);
             Grid.SetRow(_indicatorBorder, 1);
 
+            // Get Font Size from config
+            double initFontSize = 13;
+            if (_configData != null)
+            {
+                object fontObj;
+                if (_configData.TryGetValue("LOG_FONT_SIZE", out fontObj) && fontObj != null)
+                {
+                    double.TryParse(fontObj.ToString(), out initFontSize);
+                }
+            }
+
             // Log Text Box
             _logTextBox = new TextBox
             {
@@ -278,7 +288,7 @@ namespace SecreAI_Hub
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 Background = new SolidColorBrush(Color.FromRgb(26, 26, 26)),
                 Foreground = Brushes.White,
-                FontSize = 13,
+                FontSize = initFontSize,
                 FontFamily = new FontFamily("MS Gothic"),
                 FontWeight = FontWeights.Bold,
                 Margin = new Thickness(10, 0, 10, 5),
@@ -475,7 +485,6 @@ namespace SecreAI_Hub
 
             // Apply translation strings
             UpdateUiText();
-            ApplyWindowOpacityAndFont();
         }
 
         private Button CreateStyledButton(string text, string hexColor, RoutedEventHandler clickHandler, double sidePadding = 0)
@@ -640,6 +649,17 @@ namespace SecreAI_Hub
             return "python"; // Fallback to global python
         }
 
+        private void ConfigureProcessEnvironment(ProcessStartInfo psi)
+        {
+            psi.UseShellExecute = false;
+            string runtimeDir = Path.Combine(_baseDir, "python_runtime");
+            if (Directory.Exists(runtimeDir))
+            {
+                string oldPath = psi.EnvironmentVariables.ContainsKey("PATH") ? psi.EnvironmentVariables["PATH"] : Environment.GetEnvironmentVariable("PATH");
+                psi.EnvironmentVariables["PATH"] = runtimeDir + Path.PathSeparator + oldPath;
+            }
+        }
+
         private void RunScriptFallback(string scriptName, string[] args, bool isAiScript)
         {
             bool started = false;
@@ -658,12 +678,14 @@ namespace SecreAI_Hub
                     argBuilder.Append(" \"" + arg + "\"");
                 }
 
-                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), argBuilder.ToString())
+                string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I " + argBuilder.ToString() + " & pause\"";
+                ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                 {
                     WorkingDirectory = _baseDir,
                     UseShellExecute = false,
-                    CreateNoWindow = true
+                    CreateNoWindow = false
                 };
+                ConfigureProcessEnvironment(psi);
 
                 Process p = Process.Start(psi);
                 if (p != null)
@@ -927,12 +949,14 @@ namespace SecreAI_Hub
                     try
                     {
                         string scriptPath = Path.Combine(_baseDir, "scripts", "run_memory_viewer.py");
-                        ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
+                        string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I \"" + scriptPath + "\" & pause\"";
+                        ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                         {
                             WorkingDirectory = _baseDir,
-                            CreateNoWindow = true,
+                            CreateNoWindow = false,
                             UseShellExecute = false
                         };
+                        ConfigureProcessEnvironment(psi);
                         Process.Start(psi);
                     }
                     catch (Exception ex)
@@ -1048,21 +1072,23 @@ namespace SecreAI_Hub
                 try
                 {
                     string scriptPath = Path.Combine(_baseDir, "scripts", "run_settings.py");
-                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
+                    string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I \"" + scriptPath + "\" & pause\"";
+                    ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                     {
                         WorkingDirectory = _baseDir,
                         UseShellExecute = false,
-                        CreateNoWindow = true
+                        CreateNoWindow = false
                     };
+                    ConfigureProcessEnvironment(psi);
                     
                     var p = Process.Start(psi);
                     p.WaitForExit();
 
-                    // Reload configurations and synchronize
+                    // Reload configurations and synchronize without restarting
                     Dispatcher.BeginInvoke(new Action(() => {
                         LoadConfig();
                         LoadLanguage();
-                        ApplyWindowOpacityAndFont();
+                        ApplyLogFontSize();
                         RegisterGlobalHotkeys();
                         UpdateUiText();
                         SyncRttSettings();
@@ -1099,20 +1125,23 @@ namespace SecreAI_Hub
                 try
                 {
                     string scriptPath = Path.Combine(_baseDir, "scripts", "run_setup_wizard.py");
-                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
+                    string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I \"" + scriptPath + "\" & pause\"";
+                    ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                     {
                         WorkingDirectory = _baseDir,
                         UseShellExecute = false,
-                        CreateNoWindow = true
+                        CreateNoWindow = false
                     };
+                    ConfigureProcessEnvironment(psi);
                     
                     var p = Process.Start(psi);
                     p.WaitForExit();
 
+                    // Reload configurations and synchronize without restarting
                     Dispatcher.BeginInvoke(new Action(() => {
                         LoadConfig();
                         LoadLanguage();
-                        ApplyWindowOpacityAndFont();
+                        ApplyLogFontSize();
                         RegisterGlobalHotkeys();
                         UpdateUiText();
                         AutoStartVoiceVoxAndRtt();
@@ -1490,13 +1519,15 @@ namespace SecreAI_Hub
                 StringBuilder argBuilder = new StringBuilder();
                 argBuilder.Append("\"" + scriptPath + "\" server");
 
-                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), argBuilder.ToString())
+                string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I " + argBuilder.ToString() + " & pause\"";
+                ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                 {
                     WorkingDirectory = _baseDir,
                     UseShellExecute = false,
-                    CreateNoWindow = true,
+                    CreateNoWindow = false,
                     RedirectStandardInput = true
                 };
+                ConfigureProcessEnvironment(psi);
 
                 _gameAiServerProcess = Process.Start(psi);
                 Dispatcher.BeginInvoke(new Action(() => {
@@ -1598,12 +1629,14 @@ namespace SecreAI_Hub
                 else if (rttScript != null)
                 {
                     UpdateLogArea("[RTT] EXEが見つかりません。Pythonスクリプトで代替起動します（開発モード）。");
-                    psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + rttScript + "\" --headless --config \"" + rttConfigPath + "\"")
+                    string cmdArgs = "/c \"\"" + GetPythonExecutablePath() + "\" -I \"" + rttScript + "\" --headless --config \"" + rttConfigPath + "\" & pause\"";
+                    psi = new ProcessStartInfo("cmd.exe", cmdArgs)
                     {
                         WorkingDirectory = rttScriptDir,
-                        CreateNoWindow = true,
+                        CreateNoWindow = false,
                         UseShellExecute = false
                     };
+                    ConfigureProcessEnvironment(psi);
                 }
                 else
                 {
