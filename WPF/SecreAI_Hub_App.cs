@@ -15,9 +15,11 @@ namespace SecreAI_Hub
         [STAThread]
         public static void Main()
         {
-            // 1. Single Instance Check
+            // 1. Single Instance Check based on installation path
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory.ToLower().TrimEnd('\\');
+            string uniqueMutexName = MutexName + "_" + baseDir.GetHashCode().ToString("X");
             bool createdNew;
-            _mutex = new Mutex(true, MutexName, out createdNew);
+            _mutex = new Mutex(true, uniqueMutexName, out createdNew);
 
             if (!createdNew)
             {

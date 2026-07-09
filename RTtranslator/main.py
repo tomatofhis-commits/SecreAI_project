@@ -569,6 +569,9 @@ class TranslationController:
             # モデルとURLを更新
             new_model = new_config.get("ollama_model", "translategemma:4b")
             new_url = new_config.get("ollama_url", "http://localhost:11434")
+            new_provider = new_config.get("local_llm_provider", "ollama")
+            
+            self.translator.local_llm_provider = new_provider
             
             if self.translator.model != new_model:
                 self.translator.model = new_model
@@ -2618,7 +2621,7 @@ class ControlPanel(QMainWindow):
 
         
     def _setup_window(self):
-        self.setWindowTitle("Real Time Translate - Control Panel v1.2.2")
+        self.setWindowTitle("Real Time Translate - Control Panel v1.3.0")
         self.setFixedSize(560, 640)
         
     def _setup_ui(self):

@@ -144,8 +144,14 @@ def main():
                     response = client_oa.chat.completions.create(**openai_kwargs)
                     return response.choices[0].message.content.strip()
                 elif db_provider == "local":
-                    url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
-                    res = requests.post(f"{url.rstrip('/')}/chat/completions", json={"model": local_db_model_id, "messages": [{"role": "user", "content": prompt}], "options": {"num_ctx": 8192, "temperature": 0.3}}, timeout=240)
+                    provider_local = config.get("LOCAL_LLM_PROVIDER", "ollama")
+                    if provider_local == "ollama":
+                        url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+                        payload = {"model": local_db_model_id, "messages": [{"role": "user", "content": prompt}], "options": {"num_ctx": 8192, "temperature": 0.3}}
+                    else: # lmstudio
+                        url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                        payload = {"model": local_db_model_id, "messages": [{"role": "user", "content": prompt}], "temperature": 0.3}
+                    res = requests.post(f"{url.rstrip('/')}/chat/completions", json=payload, timeout=240)
                     res.raise_for_status()
                     return res.json()['choices'][0]['message']['content'].strip()
                 else: # Gemini
@@ -214,8 +220,14 @@ def main():
                         response = client_oa.chat.completions.create(model=main_model_id, messages=[{"role": "user", "content": prompt}])
                         return response.choices[0].message.content.strip()
                     elif main_provider == "local":
-                        url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
-                        res = requests.post(f"{url.rstrip('/')}/chat/completions", json={"model": main_model_id, "messages": [{"role": "user", "content": prompt}], "options": {"num_ctx": 8192, "temperature": 0.3}}, timeout=240)
+                        provider_local = config.get("LOCAL_LLM_PROVIDER", "ollama")
+                        if provider_local == "ollama":
+                            url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+                            payload = {"model": main_model_id, "messages": [{"role": "user", "content": prompt}], "options": {"num_ctx": 8192, "temperature": 0.3}}
+                        else: # lmstudio
+                            url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                            payload = {"model": main_model_id, "messages": [{"role": "user", "content": prompt}], "temperature": 0.3}
+                        res = requests.post(f"{url.rstrip('/')}/chat/completions", json=payload, timeout=240)
                         res.raise_for_status()
                         return res.json()['choices'][0]['message']['content'].strip()
                     else: # Gemini

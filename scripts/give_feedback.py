@@ -96,7 +96,7 @@ def generate_ai_text(prompt, config, system_instr=None, is_json=False):
 
     # --- B. Llama (Local Ollama) プロバイダー ---
     elif provider == "local":
-        url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+        provider_local = config.get("LOCAL_LLM_PROVIDER", "ollama")
         model_id = config.get("MODEL_ID_LOCAL", "llama4:scout")
         
         # システム命令とユーザープロンプトを統合
@@ -104,17 +104,30 @@ def generate_ai_text(prompt, config, system_instr=None, is_json=False):
         if is_json:
             full_prompt += "\nOutput in JSON format."
 
+        if provider_local == "ollama":
+            url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+            payload = {
+                "model": model_id,
+                "messages": [{"role": "user", "content": full_prompt}],
+                "options": {
+                    "num_ctx": 8192,
+                    "temperature": 0.5
+                }
+            }
+        else: # lmstudio
+            url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+            payload = {
+                "model": model_id,
+                "messages": [{"role": "user", "content": full_prompt}],
+                "temperature": 0.5
+            }
+            if is_json:
+                payload["response_format"] = {"type": "json_object"}
+
         try:
             res = requests.post(
                 f"{url.rstrip('/')}/chat/completions",
-                json={
-                    "model": model_id,
-                    "messages": [{"role": "user", "content": full_prompt}],
-                    "options": {
-                        "num_ctx": 8192,
-                        "temperature": 0.5 # 分析と生成のバランスをとる
-                    }
-                },
+                json=payload,
                 timeout=120
             )
             res.raise_for_status()

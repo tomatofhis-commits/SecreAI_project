@@ -4,7 +4,6 @@ from tkinter import messagebox, filedialog
 import json
 import os
 import requests
-import sounddevice as sd
 from datetime import datetime
 import sys
 import threading # 追加
@@ -38,8 +37,13 @@ try:
         # 開発時のフォールバック
         import game_ai
         from scripts import config_manager
-        get_db_stats = db_maintenance.get_db_stats
-        clean_up_database = db_maintenance.clean_up_database
+        try:
+            import db_maintenance
+            get_db_stats = db_maintenance.get_db_stats
+            clean_up_database = db_maintenance.clean_up_database
+        except ImportError:
+            get_db_stats = None
+            clean_up_database = None
         print("DEBUG: db_maintenance, game_ai and config_manager loaded via direct import")
 except Exception as e:
     print(f"DEBUG: Import failed. Error: {e}")
@@ -105,15 +109,16 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     root = tk.Toplevel(parent)
     root.title(l_set.get("win_title", "Settings"))
-    root.geometry("600x850") 
+    root.geometry("600x700") 
     # root.attributes("-topmost", True) # Removed to allow normal window behavior
 
-    # メインコンテナ（Notebook用）とフッター（保存ボタン用）
-    main_container = tk.Frame(root)
-    main_container.pack(expand=True, fill="both")
-
+    # フッター（保存ボタン用）を先にpackして最下部への固定を保証
     footer_frame = tk.Frame(root)
     footer_frame.pack(side="bottom", fill="x")
+
+    # メインコンテナ（Notebook用）
+    main_container = tk.Frame(root)
+    main_container.pack(expand=True, fill="both")
 
     notebook = ttk.Notebook(main_container)
     notebook.pack(expand=True, fill="both", padx=10, pady=10)
@@ -134,6 +139,9 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     notebook.add(tab_database, text=l_set.get("tab_database", "Database"))
     notebook.add(tab_extensions, text=l_set.get("tab_extensions", "Extensions"))
     notebook.add(tab_rtt, text=l_set.get("tab_rtt", "RTトランスレーター"))
+
+    # RTTモデル OptionMenu 更新用の参照オブジェクト（NameError回避のため関数上部で初期化）
+    rtt_model_menu_ref = [None]
 
     def add_label(parent_widget, text, pady=(10,0)):
         lbl = tk.Label(parent_widget, text=text)
@@ -497,6 +505,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     # 2. 出力デバイス (MMEに限定)
     def get_mme_devices():
         try:
+            import sounddevice as sd
             apis = sd.query_hostapis()
             mme_idx = next((i for i, a in enumerate(apis) if a['name'] == 'MME'), None)
             devices = sd.query_devices()
@@ -720,7 +729,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     usage_label.pack(pady=15)
     refresh_search_usage_text()
     
-    lbl_search_limit = add_label(tab_search, l_set.get("search_limit_notice", "※無料枠の上限は月間1000回です。"), pady=0)
+    lbl_search_limit = add_label(tab_search, l_set.get("search_limit_notice", "※無料制限：Tavilyは月間1000回、Google Groundingは月間5000回（プロンプト回数）です。"), pady=0)
 
     # Google Grounding / Search Info Label (Searchタブ下部に移動)
     lbl_deprecation_notice = add_label(tab_search, l_set.get("grounding_info_notice", "Google Grounding (Google Search) は月 5,000 プロンプトまで無料で利用可能です。"), pady=(5, 0))
@@ -807,6 +816,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     # 変更監視と初期実行
     db_provider_var.trace_add("write", update_db_model_list)
+    local_llm_provider_var.trace_add("write", update_db_model_list)
     update_db_model_list()
 
     # 3. メンテナンスグループ
@@ -866,11 +876,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
                     ollama_dynamic_models.extend(fetched)
                 
                 # Local Model 更新
-                for widget in llama_model_menu_container.winfo_children():
-                    widget.destroy()
-                if llama_model_var.get() not in fetched:
-                    llama_model_var.set(fetched[0] if fetched else "")
-                tk.OptionMenu(llama_model_menu_container, llama_model_var, *fetched).pack()
+                update_local_model_menu()
 
                 # Summary Model 更新
                 for widget in summary_model_menu_container.winfo_children():
@@ -881,6 +887,18 @@ def open_settings_window(parent, config_path, current_config, save_callback):
                 
                 # DB Model (Local) 更新
                 update_db_model_list()
+
+                # RTトランスレーターのモデル OptionMenu も更新
+                if rtt_model_menu_ref[0] is not None:
+                    try:
+                        menu = rtt_model_menu_ref[0]['menu']
+                        menu.delete(0, 'end')
+                        for m in fetched:
+                            menu.add_command(label=m, command=tk._setit(rtt_model_var, m))
+                        if rtt_model_var.get() not in fetched:
+                            rtt_model_var.set(fetched[0] if fetched else "")
+                    except Exception as err:
+                        print(f"DEBUG: Failed to update RTT model menu: {err}")
 
                 btn_fetch_ollama.config(text=l_set.get("btn_fetch_success", "取得完了！"), state="disabled")
                 root.after(2000, lambda: btn_fetch_ollama.config(text=original_text, state="normal"))
@@ -962,7 +980,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         refresh_rtt_model_menu(models)
 
     tk.Button(rtt_ollama_group, text=l_set.get("btn_fetch_ollama", "モデルリストを取得"),
-              command=lambda: threading.Thread(target=fetch_rtt_ollama_models, daemon=True).start()
+              command=lambda: threading.Thread(target=fetch_rtt_local_models, daemon=True).start()
               ).grid(row=0, column=2, padx=8, pady=4)
 
     tk.Label(rtt_ollama_group, text="※ URLは「全般設定」タブで変更できます。", fg="gray",
@@ -1204,6 +1222,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["MODEL_ID"] = model_var.get()
         config["MODEL_ID_PRO"] = model_pro_var.get()
         config["MODEL_ID_GPT"] = gpt_model_var.get()
+        config["LOCAL_LLM_PROVIDER"] = local_llm_provider_var.get()
         config["MODEL_ID_LOCAL"] = llama_model_var.get()
         
         config["LOCAL_LLM_PROVIDER"] = local_provider_var.get()
