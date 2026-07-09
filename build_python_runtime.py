@@ -226,18 +226,18 @@ def main():
         sys.exit(1)
         
     finally:
-        # Uninstall and clean up
-        print("Cleaning up temporary installation...")
+        # Clean up files only, DO NOT run installer /uninstall to prevent wiping system Python
+        print("Cleaning up temporary installation files...")
         if os.path.exists(installer_path):
             try:
-                subprocess.run([installer_path, "/uninstall", "/quiet"], check=True)
                 os.remove(installer_path)
-                print("Temporary installer uninstalled and removed.")
+                print("Temporary installer file removed.")
             except Exception as e:
-                print(f"Warning during uninstall: {e}")
+                print(f"Warning during installer file removal: {e}")
         if os.path.exists(temp_install_dir):
             try:
                 shutil.rmtree(temp_install_dir)
+                print("Temporary installation directory removed.")
             except Exception:
                 pass
 
