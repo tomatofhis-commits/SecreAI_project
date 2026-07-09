@@ -95,7 +95,7 @@ namespace SecreAI_Hub
             LoadLanguage();
 
             // Window Settings
-            Title = "SecreAI Hub v1.2.2 - Controller";
+            Title = "SecreAI Hub v1.3.0 - Controller";
             Width = 1150;
             Height = 880;
             Background = new SolidColorBrush(Color.FromRgb(18, 18, 20));
@@ -186,23 +186,7 @@ namespace SecreAI_Hub
                 }
 
                 // 2. Window Opacity
-                object alphaObj;
-                if (_configData.TryGetValue("WINDOW_ALPHA", out alphaObj) && alphaObj != null)
-                {
-                    string alphaStr = alphaObj.ToString();
-                    if (alphaStr == "OFF")
-                    {
-                        this.Opacity = 1.0;
-                    }
-                    else
-                    {
-                        double opacity;
-                        if (double.TryParse(alphaStr, out opacity))
-                        {
-                            this.Opacity = opacity;
-                        }
-                    }
-                }
+                this.Opacity = 1.0;
             }
             catch { }
         }
@@ -1436,12 +1420,37 @@ namespace SecreAI_Hub
 
         private Dictionary<string, object> BuildRttConfig()
         {
+            // プロバイダーを取得
+            string localProv = "ollama";
+            if (_configData.ContainsKey("LOCAL_LLM_PROVIDER") && _configData["LOCAL_LLM_PROVIDER"] != null)
+            {
+                localProv = _configData["LOCAL_LLM_PROVIDER"].ToString().ToLower();
+            }
+
+            // プロバイダーに応じたURLを取得
+            string localUrl = "http://localhost:11434/v1";
+            if (localProv == "lmstudio")
+            {
+                if (_configData.ContainsKey("LMSTUDIO_URL") && _configData["LMSTUDIO_URL"] != null)
+                {
+                    localUrl = _configData["LMSTUDIO_URL"].ToString();
+                }
+            }
+            else
+            {
+                if (_configData.ContainsKey("OLLAMA_URL") && _configData["OLLAMA_URL"] != null)
+                {
+                    localUrl = _configData["OLLAMA_URL"].ToString();
+                }
+            }
+
             var rttCfg = new Dictionary<string, object>
             {
                 { "target_window_title", _configData.ContainsKey("TARGET_GAME_TITLE") ? _configData["TARGET_GAME_TITLE"] : "" },
                 { "target_language", _configData.ContainsKey("rtt_target_language") ? _configData["rtt_target_language"] : "ja" },
-                { "ollama_url", _configData.ContainsKey("OLLAMA_URL") ? _configData["OLLAMA_URL"] : "http://localhost:11434/v1" },
+                { "ollama_url", localUrl },
                 { "ollama_model", _configData.ContainsKey("rtt_ollama_model") ? _configData["rtt_ollama_model"] : "translategemma:4b" },
+                { "local_llm_provider", localProv },
                 { "ocr_engine_mode", "dual_scout_hybrid" }
             };
 
@@ -1452,12 +1461,6 @@ namespace SecreAI_Hub
                     string key = kp.Key.Substring(4).ToLower();
                     rttCfg[key] = kp.Value;
                 }
-            }
-
-            // Force global OLLAMA_URL prioritizing
-            if (_configData.ContainsKey("OLLAMA_URL"))
-            {
-                rttCfg["ollama_url"] = _configData["OLLAMA_URL"];
             }
 
             return rttCfg;
@@ -1917,7 +1920,7 @@ namespace SecreAI_Hub
                         if (data != null && data.TryGetValue("tag_name", out tagObj))
                         {
                             string latestV = tagObj.ToString().TrimStart('v');
-                            string currentV = "1.2.2";
+                            string currentV = "1.3.0";
                             
                             if (string.Compare(latestV, currentV) > 0)
                             {
