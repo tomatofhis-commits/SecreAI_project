@@ -4,7 +4,7 @@
 ; ============================================================
 
 #define MyAppName        "SecreAI"
-#define MyAppVersion     "1.2.2"
+#define MyAppVersion     "1.3.0"
 #define MyAppPublisher   "SecreAI Dev Team"
 #define MyAppExeName     "secreAI.exe"
 
@@ -14,12 +14,12 @@
 #define RTTSourceDir     "D:\SecreAI_Build\RTtranslator"
 
 [Setup]
-; 本番用IDを設定します
+; デバッグ版用の独立IDを設定
 AppId={{C12F4B7A-9E5C-4F3D-8A1B-2C3D4E5F6G7H}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-; インストール先を通常のSecreAIフォルダに設定します
+; インストール先を通常版のSecreAIフォルダに設定します
 DefaultDirName={localappdata}\SecreAI
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest

@@ -85,7 +85,7 @@ def main():
         config = json.load(f)
 
     db_provider = config.get("DB_PROVIDER", config.get("AI_PROVIDER", "gemini")).lower()
-    db_model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-2.5-flash"))
+    db_model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-3.5-flash"))
     lang_code = config.get("LANGUAGE", "ja")
     lang_data = load_lang_file(lang_code)
     if not lang_data: return
@@ -205,7 +205,7 @@ def main():
                 elif main_provider == "local":
                     main_model_id = config.get("MODEL_ID_LOCAL", "llama3.2-vision:11b")
                 else:  # gemini
-                    main_model_id = config.get("MODEL_ID", "gemini-2.5-flash")
+                    main_model_id = config.get("MODEL_ID", "gemini-3.5-flash")
                 
                 def generate_text_main(prompt):
                     """タグ生成用: メインAIモデルを使用"""

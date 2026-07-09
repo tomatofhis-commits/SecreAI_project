@@ -19,7 +19,7 @@ except ImportError:
 
 def get_ai_response(prompt, config, response_json=False):
     provider = config.get("DB_PROVIDER", config.get("AI_PROVIDER", "gemini")).lower()
-    model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-2.5-flash"))
+    model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-3.5-flash"))
 
     try:
         from config_manager import parse_model_name
@@ -41,25 +41,49 @@ def get_ai_response(prompt, config, response_json=False):
             return res.choices[0].message.content
 
         elif provider == "local":
-            try:
-                import ollama
-                raw_url = config.get("OLLAMA_URL", "http://127.0.0.1:11434")
-                # localhost を 127.0.0.1 に置換し、末尾の /v1 を削除して公式ライブラリに渡す
-                host_url = raw_url.replace("/v1", "").replace("localhost", "127.0.0.1")
-                
-                client = ollama.Client(host=host_url)
-                chat_kwargs = {
-                    "model": actual_model_id,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "options": {"temperature": 0.2}
-                }
-                if response_json:
-                    chat_kwargs["format"] = "json"
-                
-                res = client.chat(**chat_kwargs)
-                return res['message']['content']
-            except Exception as ollama_err:
-                return f"Error: Ollama client failed: {ollama_err}"
+            prov = config.get("LOCAL_LLM_PROVIDER", "ollama")
+            if prov == "lmstudio":
+                try:
+                    import requests
+                    raw_url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                    url_resolved = raw_url.replace("localhost", "127.0.0.1")
+                    
+                    post_data = {
+                        "model": actual_model_id,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.2
+                    }
+                    if response_json:
+                        post_data["response_format"] = { "type": "json_object" }
+                        
+                    res = requests.post(
+                        f"{url_resolved.rstrip('/')}/chat/completions",
+                        json=post_data,
+                        timeout=180
+                    )
+                    return res.json()['choices'][0]['message']['content']
+                except Exception as lm_err:
+                    return f"Error: LM Studio client failed: {lm_err}"
+            else:
+                try:
+                    import ollama
+                    raw_url = config.get("OLLAMA_URL", "http://127.0.0.1:11434")
+                    # localhost を 127.0.0.1 に置換し、末尾の /v1 を削除して公式ライブラリに渡す
+                    host_url = raw_url.replace("/v1", "").replace("localhost", "127.0.0.1")
+                    
+                    client = ollama.Client(host=host_url)
+                    chat_kwargs = {
+                        "model": actual_model_id,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "options": {"temperature": 0.2}
+                    }
+                    if response_json:
+                        chat_kwargs["format"] = "json"
+                    
+                    res = client.chat(**chat_kwargs)
+                    return res['message']['content']
+                except Exception as ollama_err:
+                    return f"Error: Ollama client failed: {ollama_err}"
 
         else: # Gemini
             api_key = config.get("GEMINI_API_KEY")

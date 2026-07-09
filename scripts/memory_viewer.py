@@ -159,7 +159,7 @@ class MemoryViewer:
         grounding_f = ttk.LabelFrame(stats_f, text=f" {p.get('grounding_usage', 'Google Search Usage')} ", padding=10)
         grounding_f.grid(row=0, column=2, sticky="nsew", padx=10, pady=10)
         
-        self.lbl_grounding_count = ttk.Label(grounding_f, text=p.get("search_usage_grounding", "Used: -- / 1000").replace("{count}", "--").replace("{month}", "--"))
+        self.lbl_grounding_count = ttk.Label(grounding_f, text=p.get("search_usage_grounding", "Google (今月): -- / 5000").replace("{count}", "--").replace("{month}", "--"))
         self.lbl_grounding_count.pack(anchor="w")
         
         # 3. リソース・データベース
@@ -238,7 +238,7 @@ class MemoryViewer:
             # Grounding (configから)
             now = datetime.now()
             g_count = self.config.get("GROUNDING_COUNT", 0)
-            g_text = p.get("search_usage_grounding", "Google Search: {count}").replace("{count}", str(g_count)).replace("{date}", now.strftime("%Y-%m-%d"))
+            g_text = p.get("search_usage_grounding", "Google (今月): {count} / 5000").replace("{count}", str(g_count)).replace("{month}", str(now.month))
             self.lbl_grounding_count.config(text=g_text)
             
             # DBサイズ

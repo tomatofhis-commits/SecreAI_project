@@ -8,24 +8,7 @@ import os
 from PIL import Image, ImageDraw
 
 # --- デバッグログ出力設定 ---
-# コンソールが見えない場合でも、実行フォルダの debug_rtt.log に判定記録を残す
-class Logger(object):
-    def __init__(self):
-        self.terminal = sys.stdout
-        self.log = open("debug_rtt.log", "a", encoding="utf-8")
-
-    def write(self, message):
-        self.terminal.write(message)
-        self.log.write(message)
-        self.log.flush()
-
-    def flush(self):
-        self.terminal.flush()
-        self.log.flush()
-
-sys.stdout = Logger()
-sys.stderr = Logger()
-print("\n--- SecreAI RTT Debug Log Start ---")
+# 正式リリース版では debug_rtt.log へのファイル出力を無効化します
 import psutil
 
 import time
@@ -418,6 +401,7 @@ class TranslationController:
             ollama_url=config.get("ollama_url", "http://localhost:11434"),
             target_lang=config.get("target_language", "ja"),
             source_lang=config.get("source_language", "auto"),
+            local_llm_provider=config.get("local_llm_provider", "ollama"),
         )
 
         # UI初期化 (まだ表示しない)
@@ -611,6 +595,8 @@ class TranslationController:
             if hasattr(self.translator, "ollama_url"):
                 # 末尾の / を除いて更新
                 self.translator.ollama_url = new_url.rstrip("/")
+            if hasattr(self.translator, "local_llm_provider"):
+                self.translator.local_llm_provider = self.config.get("local_llm_provider", "ollama").lower()
             
             # CPU制限を再適用（設定値に変更がある場合のみ）
             new_val = self.config.get("cpu_threads", 0)
@@ -2654,7 +2640,8 @@ class ControlPanel(QMainWindow):
         
         # モデルリスト取得して追加
         ollama_url = self.config.get("ollama_url", "http://localhost:11434")
-        models = Translator.get_available_models(ollama_url)
+        provider = self.config.get("local_llm_provider", "ollama")
+        models = Translator.get_available_models(ollama_url, provider=provider)
         if not models:
             models = ["translategemma:4b"] # 取得失敗時のフォールバック
             

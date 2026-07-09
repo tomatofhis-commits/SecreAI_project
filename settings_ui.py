@@ -67,6 +67,33 @@ def get_ollama_models(ollama_url):
     # APIエラーや接続不可の場合はフォールバックを返す
     return default_models
 
+def get_lmstudio_models(lmstudio_url):
+    """LM Studio API から利用可能なモデルの一覧を取得する"""
+    default_models = ["meta-llama-3-8b-instruct", "gemma-2-9b-it", "gemma-3-4b-it"]
+    try:
+        url_resolved = lmstudio_url.replace("localhost", "127.0.0.1")
+        if not url_resolved.endswith("/models") and not url_resolved.endswith("/models/"):
+            if url_resolved.endswith("/v1") or url_resolved.endswith("/v1/"):
+                api_url = url_resolved.rstrip("/") + "/models"
+            else:
+                api_url = url_resolved.rstrip("/") + "/v1/models"
+        else:
+            api_url = url_resolved
+            
+        resp = requests.get(api_url, timeout=5.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            models = []
+            if "data" in data:
+                for item in data["data"]:
+                    if "id" in item:
+                        models.append(item["id"])
+            if models:
+                return models
+    except Exception as e:
+        print(f"DEBUG: Failed to fetch LM Studio models: {e}")
+    return default_models
+
 def open_settings_window(parent, config_path, current_config, save_callback):
     config = current_config.copy()
     
@@ -180,10 +207,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         if 'lbl_search_provider' in locals() or 'lbl_search_provider' in globals():
             lbl_search_provider.config(text=l_set.get("search_provider_label", "Search Engine:"))
         if 'lbl_grounding_notice' in locals() or 'lbl_grounding_notice' in globals():
-            lbl_grounding_notice.config(text=l_set.get("search_provider_notice", "※Google Search選択時は「gemini-2.5-flash-lite」で固定されます。"))
+            lbl_grounding_notice.config(text=l_set.get("search_provider_notice", "※Google Search選択時は「gemini-3.1-flash-lite」で固定されます。"))
 
         try:
-            lbl_deprecation_notice.config(text=l_set.get("deprecation_notice", "⚠  Gemini 2.5 シリーズ 終了予定日       \nGemini 2.5 Flash: 2026年6月17日　／　Gemini 2.5 Flash-Lite: 2026年7月22日"))
+            lbl_deprecation_notice.config(text=l_set.get("grounding_info_notice", "Google Grounding (Google Search) は月 5,000 プロンプトまで無料で利用可能です。"))
             gemini_frame.config(text=l_set.get("setting_group_gemini", " Gemini Settings "))
             thinking_label.config(text=l_set.get("thinking_level_label", "思考レベル (3.1-flash-lite のみ):"))
             openai_frame.config(text=l_set.get("setting_group_openai", " OpenAI Settings "))
@@ -206,24 +233,16 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         t_count = config.get("TAVILY_COUNT", 0)
         
         # 個別ラベルを取得しつつ、連結して表示
-        g_tpl = l_set.get("search_usage_grounding_short", "Google (今日): {count}回")
+        g_tpl = l_set.get("search_usage_grounding_short", "Google (今月): {count}プロンプト")
         t_tpl = l_set.get("search_usage_tavily_short", "Tavily (今月): {count}回")
         
-        g_text = g_tpl.format(count=g_count, date=now.strftime("%Y-%m-%d"))
+        g_text = g_tpl.format(count=g_count, month=now.month)
         t_text = t_tpl.format(count=t_count, month=now.month)
         
         usage_label.config(text=f"{g_text}  /  {t_text}")
 
     # --- 1. 全般設定タブ ---
-    # --- Gemini 2.5 廃止予定日 警告ラベル ---
-    deprecation_frame = tk.Frame(tab_general, relief="ridge", bd=1, padx=8, pady=4)
-    deprecation_frame.pack(fill="x", padx=10, pady=(8, 0))
-    lbl_deprecation_notice = tk.Label(
-        deprecation_frame,
-        text=l_set.get("deprecation_notice", "⚠  Gemini 2.5 シリーズ 終了予定日       \nGemini 2.5 Flash: 2026年6月17日　／　Gemini 2.5 Flash-Lite: 2026年7月22日"),
-        fg="#cc4400", font=("MS Gothic", 9, "bold"), justify="left"
-    )
-    lbl_deprecation_notice.pack(anchor="w")
+
 
     lbl_ai_provider = add_label(tab_general, l_set.get("label_ai_provider", "AI Provider:"), pady=(5,0))
     provider_var = tk.StringVar(tab_general, config.get("AI_PROVIDER", "gemini"))
@@ -292,35 +311,95 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     gpt_model_var = tk.StringVar(openai_frame, config.get("MODEL_ID_GPT", "gpt-5.4-mini"))
     tk.OptionMenu(openai_frame, gpt_model_var, *gpt_models).pack(pady=2)
 
-    # Llama (Ollama) Frame
-    llama_frame = tk.LabelFrame(tab_general, text=l_set.get("setting_group_llama", " Llama (Local Ollama) Settings "), padx=10, pady=5)
+    # Llama (Ollama / LM Studio) Frame
+    llama_frame = tk.LabelFrame(tab_general, text=l_set.get("setting_group_llama", " Local LLM Settings (Ollama / LM Studio) "), padx=10, pady=5)
     llama_frame.pack(pady=5, fill="x", padx=20)
-    lbl_local_model_id = add_label(llama_frame, l_set.get("label_local_model_id", "Local Model ID:"), pady=0)
+
+    # 1. Ollama/LM Studio の切り替えドロップダウン & モデル選択（横並び一行）
+    local_provider_var = tk.StringVar(llama_frame, config.get("LOCAL_LLM_PROVIDER", "ollama"))
     
     # 前回取得したキャッシュモデルを使用（なければデフォルト）
     ollama_url_current = config.get("OLLAMA_URL", "http://localhost:11434/v1")
-    # 本体側で取得済みのキャッシュを優先
+    lmstudio_url_current = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+    
     ollama_dynamic_models = getattr(parent, "cached_ollama_models", [])
     if not ollama_dynamic_models:
         ollama_dynamic_models = config.get("CACHED_OLLAMA_MODELS", [])
-    
     if not ollama_dynamic_models:
-        ollama_dynamic_models = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:1b", "gemma3:4b", "gemma3:12b"]
-    
-    current_llama_val = config.get("MODEL_ID_LOCAL", ollama_dynamic_models[0] if ollama_dynamic_models else "")
-    if current_llama_val not in ollama_dynamic_models and ollama_dynamic_models:
-        ollama_dynamic_models.insert(0, current_llama_val)
+        ollama_dynamic_models = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:4b"]
         
-    llama_model_var = tk.StringVar(llama_frame, current_llama_val)
-    # tk.OptionMenu の再描画対応用コンテナ
-    llama_model_menu_container = tk.Frame(llama_frame)
-    llama_model_menu_container.pack(pady=2)
-    tk.OptionMenu(llama_model_menu_container, llama_model_var, *ollama_dynamic_models).pack()
+    lmstudio_dynamic_models = config.get("CACHED_LMSTUDIO_MODELS", [])
+    if not lmstudio_dynamic_models:
+        lmstudio_dynamic_models = ["meta-llama-3-8b-instruct", "gemma-2-9b-it", "gemma-3-4b-it"]
+
+    current_prov = local_provider_var.get()
+    active_models = lmstudio_dynamic_models.copy() if current_prov == "lmstudio" else ollama_dynamic_models.copy()
+    current_llama_val = config.get("MODEL_ID_LOCAL", active_models[0] if active_models else "")
+    if current_llama_val not in active_models and active_models:
+        active_models.insert(0, current_llama_val)
+
+    # 横並び一行用のフレーム
+    row_frame = tk.Frame(llama_frame)
+    row_frame.pack(pady=5)
+
+    # 左側：プロバイダ選択ドロップダウン
+    local_providers = ["Ollama", "LM Studio"]
+    prov_disp_map = {"ollama": "Ollama", "lmstudio": "LM Studio"}
+    prov_val_map = {"Ollama": "ollama", "LM Studio": "lmstudio"}
     
-    add_label(llama_frame, "Ollama Endpoint:", pady=0)
+    # 左側：プロバイダ選択ドロップダウン
+    local_provider_disp_var = tk.StringVar(row_frame, prov_disp_map.get(current_prov, "Ollama"))
+    
+    def on_provider_changed(selected_disp):
+        val = prov_val_map.get(selected_disp, "ollama")
+        local_provider_var.set(val)
+        refresh_all_local_model_menus()
+
+    provider_menu = tk.OptionMenu(row_frame, local_provider_disp_var, *local_providers, command=on_provider_changed)
+    provider_menu.pack(side="left", padx=10)
+
+    # 右側：モデル選択ドロップダウン
+    llama_model_var = tk.StringVar(row_frame, current_llama_val)
+    llama_model_menu_container = tk.Frame(row_frame)
+    llama_model_menu_container.pack(side="left", padx=10)
+    
+    def refresh_llama_model_menu():
+        for widget in llama_model_menu_container.winfo_children():
+            widget.destroy()
+        prov = local_provider_var.get()
+        models = lmstudio_dynamic_models.copy() if prov == "lmstudio" else ollama_dynamic_models.copy()
+        if models:
+            curr_val = llama_model_var.get()
+            if curr_val not in models:
+                llama_model_var.set(models[0])
+            tk.OptionMenu(llama_model_menu_container, llama_model_var, *models).pack()
+
+    def refresh_all_local_model_menus():
+        refresh_llama_model_menu()
+        if 'refresh_summary_model_menu' in globals() or 'refresh_summary_model_menu' in locals():
+            try:
+                refresh_summary_model_menu()
+            except:
+                pass
+        if 'refresh_rtt_model_menu' in globals() or 'refresh_rtt_model_menu' in locals():
+            try:
+                refresh_rtt_model_menu()
+            except:
+                pass
+
+    # 初回描画
+    refresh_llama_model_menu()
+
+    # その下に、個別の接続先入力欄
+    add_label(llama_frame, "Ollama Endpoint:", pady=(5,0))
     ollama_url_entry = tk.Entry(llama_frame, width=50)
     ollama_url_entry.insert(0, ollama_url_current)
     ollama_url_entry.pack(pady=2)
+
+    add_label(llama_frame, "LM Studio Endpoint:", pady=(5,0))
+    lmstudio_url_entry = tk.Entry(llama_frame, width=50)
+    lmstudio_url_entry.insert(0, lmstudio_url_current)
+    lmstudio_url_entry.pack(pady=2)
 
     # 言語設定（ここを1回だけにまとめます）
     lbl_lang = add_label(tab_general, l_set.get("label_lang_restart", "Language:"))
@@ -597,13 +676,12 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     lbl_search_provider = add_label(search_frame, l_set.get("search_provider_label", "Search Engine:"), pady=(5,0))
     search_provider_var = tk.StringVar(search_frame, config.get("SEARCH_PROVIDER", "tavily"))
     SEARCH_OPTIONS = {
-        l_set.get("search_opt_grounding_2_5", "gemini-2.5-flash-liteのgrounding"):                        "grounding",
-        l_set.get("search_opt_tavily", "tavilyで検索しollamaで要約"):                               "tavily",
-        l_set.get("search_opt_integrated", "grounding + tavily をollamaで統合要約"):                    "integrated",
-        l_set.get("search_opt_grounding_3_1", "gemini-3.1-flash-liteのgrounding (思考最小)"):     "grounding_3_1",
+        l_set.get("search_opt_grounding_3_1", "gemini-3.1-flash-liteのgroundingのみ"):             "grounding_3_1",
+        l_set.get("search_opt_tavily", "Tavilyのみ (ローカルAIで要約)"):                             "tavily",
+        l_set.get("search_opt_integrated", "両方 (grounding + Tavily) をローカルAIで統合要約"):      "integrated",
     }
     _sp_reverse = {v: k for k, v in SEARCH_OPTIONS.items()}
-    _initial_sp = _sp_reverse.get(config.get("SEARCH_PROVIDER", "tavily"), l_set.get("search_opt_tavily", "tavilyで検索しollamaで要約"))
+    _initial_sp = _sp_reverse.get(config.get("SEARCH_PROVIDER", "tavily"), l_set.get("search_opt_tavily", "Tavilyのみ (ローカルAIで要約)"))
     search_disp_var = tk.StringVar(search_frame, _initial_sp)
     search_provider_menu = tk.OptionMenu(search_frame, search_disp_var, *SEARCH_OPTIONS.keys(), command=lambda _: refresh_search_usage_text())
     search_provider_menu.pack(pady=5)
@@ -618,15 +696,24 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     tavily_key_entry.pack(pady=5)
 
     lbl_sm = add_label(search_frame, l_set.get("model_summary", "Summary Model (Local Ollama):"), pady=(10,0))
-    # 動的に取得したOllamaモデルリストを流用
     current_summary_val = config.get("MODEL_ID_SUMMARY", ollama_dynamic_models[0] if ollama_dynamic_models else "gemma2:9b")
-    if current_summary_val not in ollama_dynamic_models and ollama_dynamic_models:
-        ollama_dynamic_models.insert(0, current_summary_val)
-        
+    
     summary_model_var = tk.StringVar(search_frame, current_summary_val)
     summary_model_menu_container = tk.Frame(search_frame)
     summary_model_menu_container.pack(pady=5)
-    tk.OptionMenu(summary_model_menu_container, summary_model_var, *ollama_dynamic_models).pack()
+    
+    def refresh_summary_model_menu():
+        for widget in summary_model_menu_container.winfo_children():
+            widget.destroy()
+        prov = local_provider_var.get()
+        models = lmstudio_dynamic_models.copy() if prov == "lmstudio" else ollama_dynamic_models.copy()
+        if models:
+            curr_val = summary_model_var.get()
+            if curr_val not in models:
+                summary_model_var.set(models[0])
+            tk.OptionMenu(summary_model_menu_container, summary_model_var, *models).pack()
+
+    refresh_summary_model_menu()
 
     # 検索使用回数表示
     usage_label = tk.Label(tab_search, text="", font=("MS Gothic", 11, "bold"), fg="#2196F3")
@@ -634,6 +721,9 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     refresh_search_usage_text()
     
     lbl_search_limit = add_label(tab_search, l_set.get("search_limit_notice", "※無料枠の上限は月間1000回です。"), pady=0)
+
+    # Google Grounding / Search Info Label (Searchタブ下部に移動)
+    lbl_deprecation_notice = add_label(tab_search, l_set.get("grounding_info_notice", "Google Grounding (Google Search) は月 5,000 プロンプトまで無料で利用可能です。"), pady=(5, 0))
 
     # --- 5. Databaseタブ ---
     lbl_db_t = tk.Label(tab_database, text=l_set.get("db_title", "長期記憶設定 (ChromaDB)"), font=("MS Gothic", 12, "bold"))
@@ -688,14 +778,18 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         
         provider = db_provider_var.get()
         if provider == "gemini":
-            # 最新の gemini-2.5-flash-lite を筆頭に配置
+            # 最新の gemini-3.5-flash を筆頭に配置
             models = ["gemini-3.5-flash（中）", "gemini-3.5-flash（高）", "gemini-3.5-flash（最小）", "gemini-3.5-flash（低）", "gemini-3.1-flash-lite（中）", "gemini-3.1-flash-lite（高）", "gemini-3-flash-preview", "gemini-3.1-pro-preview"]
         elif provider == "openai":
             # 2/13に終了する旧モデルを排除し、あなたが最適化した最新モデルのみを配置
             models = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"]
         else: # local
-            # APIから取得した最新のOllamaリストを使用
-            models = ollama_dynamic_models.copy() if ollama_dynamic_models else ["gemma3:4b", "gemma3:1b", "gemma3:12b", "gemma2:9b", "llama3.2:3b"]
+            # APIから取得したプロバイダ別のリストを使用
+            loc_prov = local_provider_var.get()
+            if loc_prov == "lmstudio":
+                models = lmstudio_dynamic_models.copy() if lmstudio_dynamic_models else ["meta-llama-3-8b-instruct", "gemma-2-9b-it", "gemma-3-4b-it"]
+            else:
+                models = ollama_dynamic_models.copy() if ollama_dynamic_models else ["gemma3:4b", "gemma3:1b", "gemma3:12b", "gemma2:9b", "llama3.2:3b"]
         
         # 既存の設定値がリストにない場合は先頭を選択
         if db_model_var.get() not in models and models:
@@ -742,26 +836,34 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     extensions_group = tk.LabelFrame(tab_extensions, text=l_set.get("extensions_group_api", " API / WebSockets "), padx=10, pady=10)
     extensions_group.pack(pady=10, fill="x", padx=20)
     
-    # --- New Button for Ollama Model Fetch ---
-    def fetch_ollama_models_async():
+    # --- New Button for Local LLM (Ollama / LM Studio) Model Fetch ---
+    def fetch_local_models_async():
         original_text = btn_fetch_ollama.cget("text")
         btn_fetch_ollama.config(text=l_set.get("btn_fetching", "取得中..."), state="disabled")
         
-        # メインスレッド側でURLを取得（スレッドセーフ）
-        current_url = ollama_url_entry.get()
+        prov = local_provider_var.get()
+        current_url = lmstudio_url_entry.get() if prov == "lmstudio" else ollama_url_entry.get()
         
         def _task():
-            fetched = get_ollama_models(current_url)
+            if prov == "lmstudio":
+                fetched = get_lmstudio_models(current_url)
+            else:
+                fetched = get_ollama_models(current_url)
             
             def _update_ui():
                 nonlocal fetched
-                if not fetched:
-                    fetched = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:1b", "gemma3:4b", "gemma3:12b"]
-                
-                # キャッシュも更新
-                config["CACHED_OLLAMA_MODELS"] = fetched
-                ollama_dynamic_models.clear()
-                ollama_dynamic_models.extend(fetched)
+                if prov == "lmstudio":
+                    if not fetched:
+                        fetched = ["meta-llama-3-8b-instruct", "gemma-2-9b-it", "gemma-3-4b-it"]
+                    config["CACHED_LMSTUDIO_MODELS"] = fetched
+                    lmstudio_dynamic_models.clear()
+                    lmstudio_dynamic_models.extend(fetched)
+                else:
+                    if not fetched:
+                        fetched = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:4b"]
+                    config["CACHED_OLLAMA_MODELS"] = fetched
+                    ollama_dynamic_models.clear()
+                    ollama_dynamic_models.extend(fetched)
                 
                 # Local Model 更新
                 for widget in llama_model_menu_container.winfo_children():
@@ -789,8 +891,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     btn_fetch_ollama = tk.Button(
         extensions_group,
-        text=l_set.get("btn_fetch_ollama", "Ollamaのモデルリストを取得・更新"),
-        command=fetch_ollama_models_async,
+        text=l_set.get("btn_fetch_local_llm", "ローカルLLMのモデルリストを取得・更新"),
+        command=fetch_local_models_async,
         bg="#4CAF50",
         fg="white"
     )
@@ -824,26 +926,46 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     rtt_ollama_group.pack(fill="x", padx=8, pady=5)
 
     tk.Label(rtt_ollama_group, text=l_set.get("rtt_label_model", "使用モデル:"), anchor="w").grid(row=0, column=0, sticky="w", padx=8, pady=4)
-    rtt_ollama_models_default = config.get("CACHED_OLLAMA_MODELS", ["translategemma:4b"])
     rtt_model_var = tk.StringVar(value=config.get("rtt_ollama_model", "translategemma:4b"))
-    rtt_model_menu = tk.OptionMenu(rtt_ollama_group, rtt_model_var, *rtt_ollama_models_default)
-    rtt_model_menu.grid(row=0, column=1, sticky="ew", padx=8, pady=4)
+    
+    rtt_model_menu_container = tk.Frame(rtt_ollama_group)
+    rtt_model_menu_container.grid(row=0, column=1, sticky="ew", padx=8, pady=4)
+
+    def refresh_rtt_model_menu(new_models=None):
+        for widget in rtt_model_menu_container.winfo_children():
+            widget.destroy()
+        if new_models is not None:
+            models = new_models
+        else:
+            prov = local_provider_var.get()
+            if prov == "lmstudio":
+                models = config.get("CACHED_LMSTUDIO_MODELS", ["meta-llama-3-8b-instruct", "gemma-2-9b-it", "gemma-3-4b-it"])
+            else:
+                models = config.get("CACHED_OLLAMA_MODELS", ["translategemma:4b"])
+        if models:
+            curr_val = rtt_model_var.get()
+            if curr_val not in models:
+                rtt_model_var.set(models[0])
+            tk.OptionMenu(rtt_model_menu_container, rtt_model_var, *models).pack()
+
+    refresh_rtt_model_menu()
 
     def fetch_rtt_ollama_models():
-        ollama_url = config.get("OLLAMA_URL", "http://localhost:11434")
-        models = get_ollama_models(ollama_url)
-        menu = rtt_model_menu["menu"]
-        menu.delete(0, "end")
-        for m_name in models:
-            menu.add_command(label=m_name, command=lambda v=m_name: rtt_model_var.set(v))
-        if models:
-            rtt_model_var.set(models[0] if rtt_model_var.get() not in models else rtt_model_var.get())
+        prov = local_provider_var.get()
+        if prov == "lmstudio":
+            url = lmstudio_url_entry.get()
+            models = get_lmstudio_models(url)
+        else:
+            url = ollama_url_entry.get()
+            models = get_ollama_models(url)
+        
+        refresh_rtt_model_menu(models)
 
     tk.Button(rtt_ollama_group, text=l_set.get("btn_fetch_ollama", "モデルリストを取得"),
               command=lambda: threading.Thread(target=fetch_rtt_ollama_models, daemon=True).start()
               ).grid(row=0, column=2, padx=8, pady=4)
 
-    tk.Label(rtt_ollama_group, text="※ OllamaのURLは「全般設定」タブで変更できます。", fg="gray",
+    tk.Label(rtt_ollama_group, text="※ URLは「全般設定」タブで変更できます。", fg="gray",
              font=("", 9)).grid(row=1, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 6))
     rtt_ollama_group.columnconfigure(1, weight=1)
 
@@ -1066,6 +1188,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["search_switch"] = search_switch_var.get()
         config["ENABLE_SUBTITLE"] = subtitle_en_var.get()
         config["CACHED_OLLAMA_MODELS"] = ollama_dynamic_models
+        config["CACHED_LMSTUDIO_MODELS"] = lmstudio_dynamic_models
         config["TAVILY_API_KEY"] = tavily_key_entry.get().strip()
         config["MODEL_ID_SUMMARY"] = summary_model_var.get()
         
@@ -1082,6 +1205,9 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["MODEL_ID_PRO"] = model_pro_var.get()
         config["MODEL_ID_GPT"] = gpt_model_var.get()
         config["MODEL_ID_LOCAL"] = llama_model_var.get()
+        
+        config["LOCAL_LLM_PROVIDER"] = local_provider_var.get()
+        config["LMSTUDIO_URL"] = lmstudio_url_entry.get()
         config["OLLAMA_URL"] = ollama_url_entry.get()
         
         # 文字数制限を数値として保存

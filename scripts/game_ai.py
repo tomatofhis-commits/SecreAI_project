@@ -435,12 +435,48 @@ def increment_grounding_count(root):
             send_log_to_hub(f"Grounding Count Increment Error: {e}", is_error=True)
             return 0
 
+def call_local_llm_chat(config, messages, json_mode=False):
+    """プロバイダー設定に応じてOllamaまたはLM StudioのAPIを呼び分けてチャット応答を返すヘルパー"""
+    prov = config.get("LOCAL_LLM_PROVIDER", "ollama").lower()
+    model = config.get("MODEL_ID_SUMMARY", "gemma2:9b")
+
+    if prov == "lmstudio":
+        url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1").rstrip("/")
+        url = url.replace("localhost", "127.0.0.1")
+        if not url.endswith("/v1"):
+            url = url + "/v1"
+        api_url = url + "/chat/completions"
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.3,
+        }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        resp = requests.post(api_url, json=payload, timeout=60)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    else:
+        # Ollama REST API (/api/chat)
+        url = config.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+        url = url.replace("localhost", "127.0.0.1")
+        # /v1 が含まれる場合はベースURLのみ抽出
+        url = url.split("/v1")[0].rstrip("/")
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+        }
+        if json_mode:
+            payload["format"] = "json"
+        resp = requests.post(f"{url}/api/chat", json=payload, timeout=60)
+        resp.raise_for_status()
+        return resp.json()["message"]["content"]
+
+
 def should_execute_search(query, config, log_m):
     """案1: 検索が本当に必要かAI（軽量モデル）で事前判定する"""
     try:
-        import ollama
-        summary_model = config.get("MODEL_ID_SUMMARY", "gemma2:9b")
-        
         prompt = (
             "あなたは検索のゲートキーパーです。ユーザーの質問に答えるために、インターネットでのリアルタイム検索が【絶対に】必要かどうかを判定してください。\n"
             "以下の場合は 'False' と判定してください：\n"
@@ -455,24 +491,17 @@ def should_execute_search(query, config, log_m):
             "{\"necessary\": boolean, \"optimized_query\": \"検索に適した短いキーワード\", \"reason\": \"理由\"}\n\n"
             f"判定対象のクエリ: {query}"
         )
-        
-        response = ollama.chat(
-            model=summary_model,
-            messages=[{'role': 'user', 'content': prompt}],
-            format='json'
-        )
-        
-        res_data = json.loads(response['message']['content'])
+
+        content = call_local_llm_chat(config, [{'role': 'user', 'content': prompt}], json_mode=True)
+        res_data = json.loads(content)
         return res_data
-    except ImportError:
-        return {"necessary": True, "optimized_query": query, "reason": "Ollama library not installed"}
     except Exception as e:
         # 接続エラーの詳細判定
         err_str = str(e).lower()
         if "connection" in err_str or "refused" in err_str:
-             send_log_to_hub(f"Gatekeeper Warning: Ollama connection failed. Falling back to search. (Ensure Ollama is running)", is_error=True)
-             return {"necessary": True, "optimized_query": query, "reason": "Ollama not running"}
-        
+            send_log_to_hub(f"Gatekeeper Warning: ローカルLLM接続失敗。検索にフォールバックします。", is_error=True)
+            return {"necessary": True, "optimized_query": query, "reason": "Local LLM not running"}
+
         send_log_to_hub(f"Gatekeeper Error: {e}", is_error=True)
         return {"necessary": True, "optimized_query": query, "reason": f"Gatekeeper failed: {e}"}
 
@@ -504,8 +533,7 @@ def execute_background_search(search_query, config, root, session_data):
         
         # 検索プロバイダーの判定
         search_provider = config.get("SEARCH_PROVIDER", "tavily").lower()
-        
-        import ollama
+
         api_key_tavily = config.get("TAVILY_API_KEY")
         summary_model = config.get("MODEL_ID_SUMMARY", "gemma2:9b")
         timeout = config.get("TIMEOUT_WEB_SEARCH", 30)
@@ -613,11 +641,10 @@ def execute_background_search(search_query, config, root, session_data):
             ctx = res_tavily
             role = ai_p.get("search_tavily_summary", "Tavily要約プロンプト").format(max_chars=max_chars)
 
-        response = ollama.chat(
-            model=summary_model,
-            messages=[{'role': 'user', 'content': f"{role}\n\n検索結果クエリ: {search_query}\n情報ソース:\n{ctx}"}]
+        summary = call_local_llm_chat(
+            config,
+            [{'role': 'user', 'content': f"{role}\n\n検索結果クエリ: {search_query}\n情報ソース:\n{ctx}"}]
         )
-        summary = response['message']['content']
 
         if summary:
             # キャッシュ保存
@@ -649,22 +676,19 @@ def execute_background_search(search_query, config, root, session_data):
 def save_search_to_db(full_summary, query, config, root):
     """検索結果をさらに短く要約して直接ChromaDBへ保存する（改善版: 接続プール使用）"""
     try:
-        import ollama
         import chromadb
         
         lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
         log_m = lang_data.get("log_messages", {})
         ai_p = lang_data.get("ai_prompt", {})
-        summary_model = config.get("MODEL_ID_SUMMARY", "gemma2:9b")
         
         role = ai_p.get("search_save_db_role", "以下の検索結果を、将来参照する知識として【200文字以内】で極限まで簡潔にまとめてください。").format(max_chars=200)
         save_prompt = f"{role}\n内容: {full_summary}"
         
-        response = ollama.chat(
-            model=summary_model,
-            messages=[{'role': 'user', 'content': save_prompt}]
-        )
-        short_summary = response['message']['content'][:200].strip()
+        short_summary = call_local_llm_chat(
+            config,
+            [{'role': 'user', 'content': save_prompt}]
+        )[:200].strip()
 
         # ChromaDBへ接続（改善: プール使用）
         db_path = os.path.join(root, "memory_db")

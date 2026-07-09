@@ -139,7 +139,7 @@ def main(base_path=None):
     elif provider == "local":
         model_id = config.get("MODEL_ID_LOCAL", "llama3.2-vision:11b")
     else:  # gemini
-        model_id = config.get("MODEL_ID", "gemini-2.5-flash")
+        model_id = config.get("MODEL_ID", "gemini-3.5-flash")
 
     # APIキャッシュの初期化
     cache_enabled = config.get("API_CACHE_ENABLED", True)
@@ -203,15 +203,24 @@ def main(base_path=None):
                 return response.choices[0].message.content.strip()
 
             elif db_provider == "local":
-                url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+                prov = config.get("LOCAL_LLM_PROVIDER", "ollama")
+                if prov == "lmstudio":
+                    url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                else:
+                    url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
                 try:
+                    post_data = {
+                        "model": local_db_model_id,
+                        "messages": [{"role": "user", "content": prompt}],
+                    }
+                    if prov == "ollama":
+                        post_data["options"] = {"num_ctx": 8192, "temperature": 0.3}
+                    else:
+                        post_data["temperature"] = 0.3
+                        
                     res = requests.post(
                         f"{url.rstrip('/')}/chat/completions",
-                        json={
-                            "model": local_db_model_id,
-                            "messages": [{"role": "user", "content": prompt}],
-                            "options": {"num_ctx": 8192, "temperature": 0.3}
-                        },
+                        json=post_data,
                         timeout=180
                     )
                     return res.json()['choices'][0]['message']['content'].strip()
@@ -268,15 +277,24 @@ def main(base_path=None):
                 return response.choices[0].message.content.strip()
 
             elif db_provider == "local":
-                url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
+                prov = config.get("LOCAL_LLM_PROVIDER", "ollama")
+                if prov == "lmstudio":
+                    url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                else:
+                    url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
                 try:
+                    post_data = {
+                        "model": local_db_model_id,
+                        "messages": [{"role": "user", "content": prompt}],
+                    }
+                    if prov == "ollama":
+                        post_data["options"] = {"num_ctx": 8192, "temperature": 0.3}
+                    else:
+                        post_data["temperature"] = 0.3
+                        
                     res = requests.post(
                         f"{url.rstrip('/')}/chat/completions",
-                        json={
-                            "model": local_db_model_id,
-                            "messages": [{"role": "user", "content": prompt}],
-                            "options": {"num_ctx": 8192, "temperature": 0.3}
-                        },
+                        json=post_data,
                         timeout=180
                     )
                     return res.json()['choices'][0]['message']['content'].strip()
