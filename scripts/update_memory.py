@@ -203,7 +203,7 @@ def main(base_path=None):
                 return response.choices[0].message.content.strip()
 
             elif db_provider == "local":
-                prov = config.get("LOCAL_LLM_PROVIDER", "ollama")
+                prov = config.get("LOCAL_LLM_PROVIDER", "ollama").lower()
                 if prov == "lmstudio":
                     url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
                 else:
@@ -277,7 +277,7 @@ def main(base_path=None):
                 return response.choices[0].message.content.strip()
 
             elif db_provider == "local":
-                prov = config.get("LOCAL_LLM_PROVIDER", "ollama")
+                prov = config.get("LOCAL_LLM_PROVIDER", "ollama").lower()
                 if prov == "lmstudio":
                     url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
                 else:
