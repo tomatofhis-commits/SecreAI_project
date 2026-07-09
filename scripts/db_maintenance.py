@@ -41,7 +41,7 @@ def get_ai_response(prompt, config, response_json=False):
             return res.choices[0].message.content
 
         elif provider == "local":
-            prov = config.get("LOCAL_LLM_PROVIDER", "ollama")
+            prov = config.get("LOCAL_LLM_PROVIDER", "ollama").lower()
             if prov == "lmstudio":
                 try:
                     import requests

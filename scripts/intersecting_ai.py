@@ -180,7 +180,7 @@ async def generate_intersecting_response(query, image_path, config, root, lang_d
 
     # STEP 3: ローカルモデルで最終集約
     try:
-        prov = config.get("LOCAL_LLM_PROVIDER", "ollama")
+        prov = config.get("LOCAL_LLM_PROVIDER", "ollama").lower()
         if prov == "lmstudio":
             import httpx
             url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
