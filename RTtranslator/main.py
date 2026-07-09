@@ -279,6 +279,47 @@ class TranslationController:
     def __init__(self, config: dict):
         self.config = config
         
+        # --- SecreAI本体の data/config.json から設定をフォールバックロード ---
+        try:
+            import json, os
+            # RTtranslator/main.py の親の親が SecreAI ルート
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            secre_config_path = os.path.join(base_dir, "data", "config.json")
+            if not os.path.exists(secre_config_path):
+                # 旧パスフォールバック
+                secre_config_path = os.path.join(base_dir, "config", "config.json")
+            
+            if os.path.exists(secre_config_path):
+                with open(secre_config_path, "r", encoding="utf-8") as f:
+                    s_cfg = json.load(f)
+                
+                # local_llm_provider / LOCAL_LLM_PROVIDER のマージ
+                if "local_llm_provider" not in config:
+                    prov = s_cfg.get("LOCAL_LLM_PROVIDER", s_cfg.get("local_llm_provider", "ollama")).lower()
+                    config["local_llm_provider"] = prov
+                
+                # ollama_url (LM Studio または Ollama の適切なURLを選択)
+                if "ollama_url" not in config or "localhost:11434" in config.get("ollama_url", ""):
+                    prov = config.get("local_llm_provider", "ollama").lower()
+                    if prov == "lmstudio":
+                        url = s_cfg.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                    else:
+                        url = s_cfg.get("OLLAMA_URL", "http://localhost:11434/v1")
+                    config["ollama_url"] = url
+                    
+                # ollama_model (LM Studio または Ollama の適切なモデル)
+                if "ollama_model" not in config or config.get("ollama_model") == "translategemma:4b":
+                    prov = config.get("local_llm_provider", "ollama").lower()
+                    if prov == "lmstudio":
+                        # LM Studio用のモデル名 (settings_ui.py 保存値またはキャッシュ)
+                        model = s_cfg.get("rtt_ollama_model", s_cfg.get("MODEL_ID_LOCAL", "meta-llama-3-8b-instruct"))
+                        config["ollama_model"] = model
+                    else:
+                        model = s_cfg.get("rtt_ollama_model", "translategemma:4b")
+                        config["ollama_model"] = model
+        except Exception as e:
+            print(f"[RTtranslator Warning] Failed to merge main config.json: {e}")
+
         # --- [最優先] CPUリミットとアフィニティの適用 ---
         # 他の重いエンジンのロードが始まる前に制限をかける
         self.apply_cpu_limit()

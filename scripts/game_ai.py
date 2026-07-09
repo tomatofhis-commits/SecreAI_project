@@ -837,23 +837,25 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
 
     try:
         if provider == "local":
-            provider_local = config.get("LOCAL_LLM_PROVIDER", "ollama")
-            if provider_local == "ollama":
+            provider_local = config.get("LOCAL_LLM_PROVIDER", "ollama").lower()
+            if provider_local == "lmstudio":
+                url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                payload = {
+                    "model": "",
+                    "messages": [],
+                    "temperature": 0.7,
+                    "max_tokens": 400,
+                    "stop": ["\n\n", "###"]
+                }
+            else:
                 url = config.get("OLLAMA_URL", "http://localhost:11434/v1")
                 payload = {
-                    "model": model_id, "messages": messages,
+                    "model": "",
+                    "messages": [],
                     "options": {
                         "num_ctx": 4096, "temperature": 0.7, "repeat_penalty": 1.2, 
                         "num_predict": 400, "stop": ["\n\n", "###"]
                     }
-                }
-            else: # lmstudio
-                url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1")
-                payload = {
-                    "model": model_id, "messages": messages,
-                    "temperature": 0.7,
-                    "max_tokens": 400,
-                    "stop": ["\n\n", "###"]
                 }
             model_id = config.get("MODEL_ID_LOCAL", "llama3.2-vision:11b")
             messages = [{"role": "system", "content": system_instr}]
