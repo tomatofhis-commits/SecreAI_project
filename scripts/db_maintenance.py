@@ -56,12 +56,29 @@ def get_ai_response(prompt, config, response_json=False):
                     if response_json:
                         post_data["response_format"] = { "type": "json_object" }
                         
-                    res = requests.post(
-                        f"{url_resolved.rstrip('/')}/chat/completions",
-                        json=post_data,
-                        timeout=180
-                    )
-                    return res.json()['choices'][0]['message']['content']
+                    try:
+                        res = requests.post(
+                            f"{url_resolved.rstrip('/')}/chat/completions",
+                            json=post_data,
+                            timeout=180
+                        )
+                        res.raise_for_status()
+                        return res.json()['choices'][0]['message']['content']
+                    except Exception as first_err:
+                        if response_json:
+                            try:
+                                post_data.pop("response_format", None)
+                                res = requests.post(
+                                    f"{url_resolved.rstrip('/')}/chat/completions",
+                                    json=post_data,
+                                    timeout=180
+                                )
+                                res.raise_for_status()
+                                return res.json()['choices'][0]['message']['content']
+                            except Exception as retry_err:
+                                raise retry_err
+                        else:
+                            raise first_err
                 except Exception as lm_err:
                     return f"Error: LM Studio client failed: {lm_err}"
             else:
