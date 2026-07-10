@@ -1,17 +1,88 @@
 {
-    "system": {
-        "single_instance_title": "중복 실행",
-        "single_instance_msg": "SecreAI가 이미 실행 중입니다.\n시스템 트레이를 확인해주세요.",
-        "restart": "재시작",
-        "restart_failed": "재시작 실패: {e}",
-        "exit": "종료",
-        "show": "표시",
-        "save_success": "설정을 저장하고 적용했습니다.",
-        "save_fail": "저장 실패: {e}",
-        "ai_stop_signal": "AI 정지 신호를 보냈습니다.",
-        "error": "오류",
-        "you_prefix": "당신: ",
-        "ai_prefix": "AI: "
+  "system": {
+    "single_instance_title": "중복 실행",
+    "single_instance_msg": "SecreAI가 이미 실행 중입니다.\n시스템 트레이를 확인해주세요.",
+    "restart": "재시작",
+    "restart_failed": "재시작 실패: {e}",
+    "exit": "종료",
+    "show": "표시",
+    "save_success": "설정을 저장하고 적용했습니다.",
+    "save_fail": "저장 실패: {e}",
+    "ai_stop_signal": "AI 정지 신호를 보냈습니다.",
+    "error": "오류",
+    "you_prefix": "당신: ",
+    "ai_prefix": "AI: "
+  },
+  "menu": {
+    "system_cascade": "시스템",
+    "refresh_windows": "대상 창 목록 갱신",
+    "reset_memory": "단기 기억 리셋",
+    "open_memory": "기억 관리 (Memory)",
+    "restart": "재시작",
+    "exit": "종료",
+    "tray_show": "표시",
+    "rtt_cascade": "RT 번역기",
+    "rtt_start": "번역 시작",
+    "rtt_stop": "번역 중지",
+    "rtt_eco_mode": "에코 모드",
+    "rtt_single_mode": "원샷 번역 모드",
+    "rtt_settings": "RTT 설정 열기",
+    "reset_memory_confirm_title": "확인",
+    "reset_memory_confirm_msg": "이전 대화 기록(단기 기억)을 초기화하시겠습니까?",
+    "status_memory_reset": "단기 기억을 초기화했습니다."
+  },
+  "gui": {
+    "log_header": "AI 전사 & 시스템 로그",
+    "placeholder_chat": "텍스트로 AI에게 말하기...",
+    "btn_voice_mode": "🎙 음성 모드",
+    "btn_vision_mode": "👁 비전 모드",
+    "btn_stop_ai": "🛑 대화 중지",
+    "btn_fix": "⚠ 수정",
+    "btn_clear_log": "🧹 로그 지우기",
+    "btn_toggle_theme": "배경색 전환",
+    "label_target_window": "대상 창:",
+    "label_voice_speed": "음성 속도:",
+    "label_context": "오늘의 전제:",
+    "btn_quick_save": "빠른 저장",
+    "btn_open_settings": "고급 설정",
+    "default_capture": "기본",
+    "op_operations": "-- 조작 --",
+    "btn_good": "👍 좋음",
+    "btn_bad": "👎 나쁨",
+    "op_display_settings": "-- 표시 설정 --",
+    "window_get_fail": "창 가져오기 실패"
+  },
+  "settings": {
+    "win_title": "SecreAI - 고급 설정",
+    "tab_general": "  일반  ",
+    "tab_hotkey": "  단축키  ",
+    "browse": "찾아보기",
+    "model_normal": "AI 모델 (일반):",
+    "model_pro": "복잡한 작업용 모델 (MODEL_ID_PRO):",
+    "max_chars": "텍스트 길이 제한:",
+    "voicevox_speaker": "VOICEVOX 음성:",
+    "audio_device": "오디오 출력 장치:",
+    "font_size": "로그 폰트 크기:",
+    "display_time": "메시지 표시 시간 (초):",
+    "window_alpha": "자막 창 불투명도:",
+    "label_voice_volume": "음성 볼륨 (Voice Volume):",
+    "label_input_device": "입력 장치 (Microphone):",
+    "btn_test_audio": "테스트 음성 재생",
+    "btn_stop_test": "재생 중지",
+    "test_audio_text": "음성 테스트를 시작합니다. 옛날 옛적, 대나무를 베는 노인이 빛나는 대나무 속에서 작은 소녀를 발견하여 정성껏 키웠습니다. 카구야 공주라 이름 붙여진 그녀는 순식간에 절세 미녀로 성장했습니다. 다섯 명의 귀공자가 구혼했으나 그녀가 낸 불가능한 난제를 풀지 못했고, 천황의 부름조차 거절했습니다. 마침내 8월 보름달 밤, 그녀는 자신이 달나라 사람임을 밝히고 사자들과 함께 달로 돌아갔습니다. 그녀가 남긴 불사약은 높은 산 위에서 태워졌고, 그 산은 '후지산(불사의 산)'이라 불리게 되었습니다.",
+    "btn_refresh_devices": "장치 목록 새로고침",
+    "msg_device_refreshed": "장치 목록이 업데이트되었습니다.",
+    "max_chars_options": {
+      "labels": [
+        "300자 이내",
+        "700자 이내",
+        "1000자 이내"
+      ],
+      "values": [
+        300,
+        700,
+        1000
+      ]
     },
     "hotkey_title": "\n【전역 단축키 설정】",
     "hotkey_voice": "음성 모드 시작:",
@@ -270,4 +341,25 @@
         "doc_link": ""
       }
     }
+  },
+  "performance": {
+    "title": "성능 대시보드",
+    "cache_stats": "API 캐시 통계",
+    "tavily_usage": "Tavily 검색 사용량",
+    "db_resources": "데이터베이스 및 리소스",
+    "total_requests": "총 요청 수: {count}",
+    "hits": "히트 수: {count} (미스: {miss})",
+    "hit_rate": "히트율: {rate}%",
+    "tavily_monthly": "이번 달 사용량: {count} / 1000",
+    "savings": "예상 절감액: ${amount}",
+    "db_size": "DB 크기: {size} MB",
+    "total_entries": "총 항목 수: {count}",
+    "grounding_usage": "Google Search 사용 현황",
+    "search_usage_grounding": "오늘 사용량: {count} ({date})",
+    "model_stats_title": "모델 통계",
+    "model_header": "모델/제공자",
+    "requests_header": "요청",
+    "hits_header": "히트",
+    "btn_update": "대시보드 업데이트"
+  }
 }

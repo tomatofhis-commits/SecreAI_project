@@ -118,23 +118,29 @@ if __name__ == "__main__":
             except:
                 pass
 
-    win = settings_ui.open_settings_window(parent, config_path, parent.config_data, save_callback)
-    
-    # Configure cleanup
-    def on_close(event=None):
-        if getattr(on_close, "_done", False):
-            return
-        on_close._done = True
-        try:
-            win.destroy()
-        except:
-            pass
-        try:
-            parent.destroy()
-        except:
-            pass
-        sys.exit(0)
+        win = settings_ui.open_settings_window(parent, config_path, parent.config_data, save_callback)
+        
+        # Configure cleanup
+        def on_close(event=None):
+            if getattr(on_close, "_done", False):
+                return
+            on_close._done = True
+            try:
+                win.destroy()
+            except:
+                pass
+            try:
+                parent.destroy()
+            except:
+                pass
+            sys.exit(0)
 
-    win.protocol("WM_DELETE_WINDOW", on_close)
-    win.bind("<Destroy>", lambda e: on_close() if e.widget == win else None)
-    parent.mainloop()
+        win.protocol("WM_DELETE_WINDOW", on_close)
+        win.bind("<Destroy>", lambda e: on_close() if str(e.widget) == str(win) else None)
+        parent.mainloop()
+    except Exception as e:
+        log_path = os.path.join(base_dir, "settings_error.log")
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write("Settings UI Launch Error:\n")
+            traceback.print_exc(file=f)
+        sys.exit(1)

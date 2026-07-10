@@ -3,9 +3,9 @@
 ;  Inno Setup 6 スクリプト
 ; ============================================================
 
-#define MyAppName        "SecreAI (Debug)"
-#define MyAppVersion     "1.3.0-Debug"
-#define MyAppPublisher   "SecreAI Dev Team (Debug)"
+#define MyAppName        "SecreAI"
+#define MyAppVersion     "1.3.0"
+#define MyAppPublisher   "SecreAI Dev Team"
 #define MyAppExeName     "secreAI.exe"
 
 ; --- ユーザー指定のソースフォルダ定義 ---
@@ -15,12 +15,12 @@
 
 [Setup]
 ; デバッグ版用の独立IDを設定
-AppId={{C12F4B7B-9E5C-4F3D-8A1B-2C3D4E5F6G7H}
+AppId={{C12F4B7A-9E5C-4F3D-8A1B-2C3D4E5F6G7H}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 ; インストール先をデバッグ専用のSecreAI_Debugフォルダに設定します
-DefaultDirName={localappdata}\SecreAI_Debug
+DefaultDirName={localappdata}\SecreAI
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
