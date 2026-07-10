@@ -453,9 +453,21 @@ def call_local_llm_chat(config, messages, json_mode=False):
         }
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
-        resp = requests.post(api_url, json=payload, timeout=60)
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        try:
+            resp = requests.post(api_url, json=payload, timeout=60)
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            if json_mode:
+                # JSONモードでの接続・指定が原因で400等のエラーになった場合は、通常モードで再試行
+                try:
+                    payload.pop("response_format", None)
+                    resp = requests.post(api_url, json=payload, timeout=60)
+                    resp.raise_for_status()
+                    return resp.json()["choices"][0]["message"]["content"]
+                except Exception as retry_err:
+                    raise retry_err
+            raise e
     else:
         # Ollama REST API (/api/chat)
         url = config.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
@@ -469,9 +481,21 @@ def call_local_llm_chat(config, messages, json_mode=False):
         }
         if json_mode:
             payload["format"] = "json"
-        resp = requests.post(f"{url}/api/chat", json=payload, timeout=60)
-        resp.raise_for_status()
-        return resp.json()["message"]["content"]
+        try:
+            resp = requests.post(f"{url}/api/chat", json=payload, timeout=60)
+            resp.raise_for_status()
+            return resp.json()["message"]["content"]
+        except Exception as e:
+            if json_mode:
+                # OllamaでもJSON指定起因のエラー時は通常モードで再試行
+                try:
+                    payload.pop("format", None)
+                    resp = requests.post(f"{url}/api/chat", json=payload, timeout=60)
+                    resp.raise_for_status()
+                    return resp.json()["message"]["content"]
+                except Exception as retry_err:
+                    raise retry_err
+            raise e
 
 
 def should_execute_search(query, config, log_m):
@@ -493,7 +517,23 @@ def should_execute_search(query, config, log_m):
         )
 
         content = call_local_llm_chat(config, [{'role': 'user', 'content': prompt}], json_mode=True)
-        res_data = json.loads(content)
+        content_str = content.strip()
+        try:
+            res_data = json.loads(content_str)
+        except json.JSONDecodeError:
+            # Markdownブロック（```json ... ```）や、前後にテキストが入っている場合のロバスト抽出
+            cleaned = content_str
+            if "```json" in cleaned:
+                cleaned = cleaned.split("```json")[1].split("```")[0].strip()
+            elif "```" in cleaned:
+                cleaned = cleaned.split("```")[1].split("```")[0].strip()
+            
+            # 最初の中括弧 { から最後の中括弧 } までを切り出す
+            start_idx = cleaned.find('{')
+            end_idx = cleaned.rfind('}')
+            if start_idx != -1 and end_idx != -1:
+                cleaned = cleaned[start_idx:end_idx + 1]
+            res_data = json.loads(cleaned)
         return res_data
     except Exception as e:
         provider = config.get("LOCAL_LLM_PROVIDER", "ollama")
