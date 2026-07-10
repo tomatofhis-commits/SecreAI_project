@@ -33,19 +33,8 @@ if %ERRORLEVEL% neq 0 (
 copy /Y "d:\SecreAI_Build\WPF\bin\Release\SecreAI_Hub.exe" "d:\SecreAI_Build\SecreAI_Hub.exe"
 echo WPF Build Done!
 
-:: 2. Setup/Verify Portable Python Runtime
-echo ========================================================
-echo  2. Checking/Building Portable Python Runtime...
-echo ========================================================
-python d:\SecreAI_Build\build_python_runtime.py
-if %ERRORLEVEL% neq 0 (
-    echo.
-    echo [ERROR] Portable Python Runtime setup failed.
-    pause
-    exit /b 1
-)
 
-:: 3. Run Inno Setup Compiler
+:: 2. Run Inno Setup Compiler
 echo ========================================================
 echo  3. Building Installer (Inno Setup)...
 echo ========================================================

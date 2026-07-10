@@ -816,7 +816,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     # 変更監視と初期実行
     db_provider_var.trace_add("write", update_db_model_list)
-    local_llm_provider_var.trace_add("write", update_db_model_list)
+    local_provider_var.trace_add("write", update_db_model_list)
     update_db_model_list()
 
     # 3. メンテナンスグループ
@@ -1222,10 +1222,9 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["MODEL_ID"] = model_var.get()
         config["MODEL_ID_PRO"] = model_pro_var.get()
         config["MODEL_ID_GPT"] = gpt_model_var.get()
-        config["LOCAL_LLM_PROVIDER"] = local_llm_provider_var.get()
+        config["LOCAL_LLM_PROVIDER"] = local_provider_var.get()
         config["MODEL_ID_LOCAL"] = llama_model_var.get()
         
-        config["LOCAL_LLM_PROVIDER"] = local_provider_var.get()
         config["LMSTUDIO_URL"] = lmstudio_url_entry.get()
         config["OLLAMA_URL"] = ollama_url_entry.get()
         
