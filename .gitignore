@@ -110,3 +110,9 @@ WPF/packages/
 /frozen_east_text_detection.pb
 /config.json
 /models/
+
+# Custom Cleaner and Archive
+/clean_build.bat
+/archive/
+/scripts/debug_tools/
+
