@@ -967,8 +967,9 @@ def open_settings_window(parent, config_path, current_config, save_callback):
             tk.OptionMenu(rtt_model_menu_container, rtt_model_var, *models).pack()
 
     refresh_rtt_model_menu()
+    local_provider_var.trace_add("write", lambda *args: refresh_rtt_model_menu())
 
-    def fetch_rtt_ollama_models():
+    def fetch_rtt_local_models():
         prov = local_provider_var.get()
         if prov == "lmstudio":
             url = lmstudio_url_entry.get()
