@@ -77,6 +77,47 @@ namespace RTtranslator_CS_Overlay
             public int Y;
         }
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder strText, int maxCount);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowTextLength(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        private static IntPtr FindWindowPartial(string title)
+        {
+            IntPtr foundHwnd = IntPtr.Zero;
+            EnumWindows(delegate (IntPtr hWnd, IntPtr lParam)
+            {
+                if (IsWindowVisible(hWnd))
+                {
+                    int size = GetWindowTextLength(hWnd);
+                    if (size > 0)
+                    {
+                        System.Text.StringBuilder sb = new System.Text.StringBuilder(size + 1);
+                        GetWindowText(hWnd, sb, sb.Capacity);
+                        string wTitle = sb.ToString();
+                        if (wTitle.ToLower().Contains(title.ToLower()))
+                        {
+                            foundHwnd = hWnd;
+                            return false; // Stop enumeration
+                        }
+                    }
+                }
+                return true; // Continue enumeration
+            }, IntPtr.Zero);
+            return foundHwnd;
+        }
+
         private static double GetDpiScale(IntPtr hwnd)
         {
             try
@@ -101,6 +142,10 @@ namespace RTtranslator_CS_Overlay
             IntPtr hwnd = FindWindow(null, windowTitle);
             if (hwnd == IntPtr.Zero)
             {
+                hwnd = FindWindowPartial(windowTitle);
+            }
+            if (hwnd == IntPtr.Zero)
+            {
                 Console.WriteLine(string.Format("[C# WindowCapturer] Window not found: {0}", windowTitle));
                 return null;
             }
@@ -117,30 +162,27 @@ namespace RTtranslator_CS_Overlay
             RECT clientRect;
             if (!GetClientRect(hwnd, out clientRect)) return null;
 
+            // DPI-awareプロセスなので、GetClientRectとClientToScreenで得られるのは物理座標です
             int w = clientRect.Right - clientRect.Left;
             int h = clientRect.Bottom - clientRect.Top;
 
             POINT pt = new POINT { X = 0, Y = 0 };
             ClientToScreen(hwnd, ref pt);
 
-            int left = pt.X;
-            int top = pt.Y;
+            int pLeft = pt.X;
+            int pTop = pt.Y;
+            int pW = w;
+            int pH = h;
 
             // 部分領域の指定がある場合
             if (rect != null && rect.Length >= 4)
             {
-                // Pythonから渡されるのは クライアント領域内の相対座標(x, y, w, h)
-                // 絶対スクリーン座標に加算して物理ピクセルへ変換する
-                left += rect[0];
-                top += rect[1];
-                w = rect[2];
-                h = rect[3];
+                // Python(DPI-unaware)から渡される相対座標(論理)を物理座標にスケーリングして加算
+                pLeft += (int)Math.Round(rect[0] * scale);
+                pTop += (int)Math.Round(rect[1] * scale);
+                pW = (int)Math.Round(rect[2] * scale);
+                pH = (int)Math.Round(rect[3] * scale);
             }
-
-            int pLeft = (int)Math.Round(left * scale);
-            int pTop = (int)Math.Round(top * scale);
-            int pW = (int)Math.Round(w * scale);
-            int pH = (int)Math.Round(h * scale);
 
             if (pW <= 0 || pH <= 0) return null;
 

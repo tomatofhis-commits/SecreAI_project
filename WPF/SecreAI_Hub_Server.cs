@@ -331,7 +331,7 @@ namespace SecreAI_Hub
         {
             HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = "GET";
-            request.Timeout = 2000;
+            request.Timeout = 15000;
             using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
             using (StreamReader reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
             {
@@ -343,7 +343,7 @@ namespace SecreAI_Hub
         {
             HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = "POST";
-            request.Timeout = 2000;
+            request.Timeout = 15000;
             request.ContentType = "application/json";
             byte[] byteArray = Encoding.UTF8.GetBytes(postData);
             request.ContentLength = byteArray.Length;

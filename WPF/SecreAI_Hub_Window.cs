@@ -678,7 +678,7 @@ namespace SecreAI_Hub
                     argBuilder.Append(" \"" + arg + "\"");
                 }
 
-                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I " + argBuilder.ToString())
+                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), argBuilder.ToString())
                 {
                     WorkingDirectory = _baseDir,
                     UseShellExecute = false,
@@ -948,7 +948,7 @@ namespace SecreAI_Hub
                     try
                     {
                         string scriptPath = Path.Combine(_baseDir, "scripts", "run_memory_viewer.py");
-                        ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I \"" + scriptPath + "\"")
+                        ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
                         {
                             WorkingDirectory = _baseDir,
                             CreateNoWindow = true,
@@ -1070,7 +1070,7 @@ namespace SecreAI_Hub
                 try
                 {
                     string scriptPath = Path.Combine(_baseDir, "scripts", "run_settings.py");
-                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I \"" + scriptPath + "\"")
+                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
                     {
                         WorkingDirectory = _baseDir,
                         UseShellExecute = false,
@@ -1122,7 +1122,7 @@ namespace SecreAI_Hub
                 try
                 {
                     string scriptPath = Path.Combine(_baseDir, "scripts", "run_setup_wizard.py");
-                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I \"" + scriptPath + "\"")
+                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
                     {
                         WorkingDirectory = _baseDir,
                         UseShellExecute = false,
@@ -1484,6 +1484,10 @@ namespace SecreAI_Hub
                 if (kp.Key.StartsWith("rtt_"))
                 {
                     string key = kp.Key.Substring(4).ToLower();
+                    if (key == "ollama_url" || key == "ollama_model" || key == "local_llm_provider")
+                    {
+                        continue;
+                    }
                     rttCfg[key] = kp.Value;
                 }
             }
@@ -1515,7 +1519,7 @@ namespace SecreAI_Hub
                 StringBuilder argBuilder = new StringBuilder();
                 argBuilder.Append("\"" + scriptPath + "\" server");
 
-                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I " + argBuilder.ToString())
+                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), argBuilder.ToString())
                 {
                     WorkingDirectory = _baseDir,
                     UseShellExecute = false,
@@ -1624,7 +1628,7 @@ namespace SecreAI_Hub
                 else if (rttScript != null)
                 {
                     UpdateLogArea("[RTT] EXEが見つかりません。Pythonスクリプトで代替起動します（開発モード）。");
-                    psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I \"" + rttScript + "\" --headless --config \"" + rttConfigPath + "\"")
+                    psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + rttScript + "\" --headless --config \"" + rttConfigPath + "\"")
                     {
                         WorkingDirectory = rttScriptDir,
                         CreateNoWindow = true,
@@ -2080,7 +2084,7 @@ namespace SecreAI_Hub
         {
             HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = "POST";
-            request.Timeout = 1500;
+            request.Timeout = 15000;
             request.ContentType = "application/json";
             byte[] byteArray = Encoding.UTF8.GetBytes(postData);
             request.ContentLength = byteArray.Length;
@@ -2101,7 +2105,7 @@ namespace SecreAI_Hub
             {
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
                 request.Method = "GET";
-                request.Timeout = 1500;
+                request.Timeout = 15000;
                 using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
                 using (StreamReader reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
                 {

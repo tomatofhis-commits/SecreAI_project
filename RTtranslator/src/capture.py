@@ -14,10 +14,26 @@ import win32api
 import dxcam
 import numpy as np
 
-
-
 # DXCAM カメラのグローバルインスタンス (シングルトン)
 _dxcam_camera = None
+
+def find_window_partial(title: str) -> int:
+    """
+    指定されたタイトルが部分一致する visible なウィンドウのハンドルを返す。
+    """
+    hwnd = win32gui.FindWindow(None, title)
+    if hwnd != 0:
+        return hwnd
+
+    hwnds = []
+    def enum_handler(h, _):
+        if win32gui.IsWindowVisible(h):
+            t = win32gui.GetWindowText(h)
+            if title.lower() in t.lower():
+                hwnds.append(h)
+                
+    win32gui.EnumWindows(enum_handler, None)
+    return hwnds[0] if hwnds else 0
 
 def get_dxcam():
     global _dxcam_camera
@@ -34,7 +50,7 @@ def get_client_rect_on_screen(window_title: str) -> tuple[int, int, int, int] | 
     指定されたウィンドウのクライアント領域（枠の内側のゲーム画面）の
     スクリーン座標における矩形（left, top, width, height）を取得する。
     """
-    hwnd = win32gui.FindWindow(None, window_title)
+    hwnd = find_window_partial(window_title)
     if hwnd == 0:
         return None
 
@@ -102,16 +118,13 @@ def get_dpi_scale(hwnd: int) -> float:
 def capture_bitblt(rect: tuple, window_title: str) -> Image.Image | None:
     """
     BitBltを使用して物理ピクセル精度でキャプチャする（高画質版）。
+    DPI-unawareなPythonプロセスからデスクトップDCを呼び出す場合は、
+    OSの仮想化座標に合わせるため scale を掛け算しない論理座標を使用します。
     """
-    hwnd = win32gui.FindWindow(None, window_title)
+    hwnd = find_window_partial(window_title)
     if not hwnd: return None
     
-    scale = get_dpi_scale(hwnd)
     left, top, w, h = rect
-    
-    # 物理ピクセルサイズを計算 (端数によるジッターを防ぐため round を使用)
-    p_left, p_top = int(round(left * scale)), int(round(top * scale))
-    p_w, p_h = int(round(w * scale)), int(round(h * scale))
 
     try:
         hwnd_desktop = win32gui.GetDesktopWindow()
@@ -120,12 +133,10 @@ def capture_bitblt(rect: tuple, window_title: str) -> Image.Image | None:
         saveDC = mfcDC.CreateCompatibleDC()
         
         saveBitMap = win32ui.CreateBitmap()
-        # 物理サイズのビットマップを作成
-        saveBitMap.CreateCompatibleBitmap(mfcDC, p_w, p_h)
+        saveBitMap.CreateCompatibleBitmap(mfcDC, w, h)
         saveDC.SelectObject(saveBitMap)
         
-        # 物理座標(p_left, p_top)から物理サイズ(p_w, p_h)でコピー
-        saveDC.BitBlt((0, 0), (p_w, p_h), mfcDC, (p_left, p_top), win32con.SRCCOPY)
+        saveDC.BitBlt((0, 0), (w, h), mfcDC, (left, top), win32con.SRCCOPY)
         
         bmpinfo = saveBitMap.GetInfo()
         bmpstr = saveBitMap.GetBitmapBits(True)
@@ -146,7 +157,7 @@ def capture_printwindow(window_title: str, rect: tuple) -> Image.Image | None:
     """
     PrintWindowを使用して物理ピクセル精度でキャプチャする（高画質版）。
     """
-    hwnd = win32gui.FindWindow(None, window_title)
+    hwnd = find_window_partial(window_title)
     if not hwnd:
         return None
     
@@ -200,7 +211,7 @@ def capture_dxcam(rect: tuple, window_title: str) -> Image.Image | None:
     try:
         # rect = (left, top, w, h) in logical screen coordinates
         # DXCAM は物理座標を期待するため、DPIスケールを考慮する
-        hwnd = win32gui.FindWindow(None, window_title)
+        hwnd = find_window_partial(window_title)
         scale = get_dpi_scale(hwnd) if hwnd else 1.0
         
         left, top, w, h = rect
@@ -227,13 +238,10 @@ def capture_dxcam(rect: tuple, window_title: str) -> Image.Image | None:
         # grab が None を返した場合（D3Dデバイスエラーやタイミングエラー等）
         raise Exception("dxcam_grab_none")
     except Exception as e:
+        global _dxcam_camera
+        _dxcam_camera = None  # カメラをリセットして次回再生成を促す
         err_msg = str(e)
         print(f"[Capture] DXCAM エラー: {err_msg}")
-        # 例外情報を PIL Image の info タグに伝達するフォールバック画像を即座に作成して返す！
-        img_fb = capture_bitblt(rect, window_title)
-        if img_fb:
-            img_fb.info["captured_by"] = f"bitblt (WGCエラー: {err_msg})"
-            return img_fb
         return None
 
 
@@ -246,7 +254,7 @@ def capture_csharp(window_title: str, rect: tuple = None, mode: str = "bitblt", 
         import requests
         import io
         
-        hwnd = win32gui.FindWindow(None, window_title)
+        hwnd = find_window_partial(window_title)
         if hwnd == 0:
             return None
             
@@ -349,7 +357,7 @@ def capture_window(
             return img_fb1
         # BitBlt も真っ黒か失敗した場合は最終手段として PrintWindow を試す
         img_fb2 = capture_printwindow(window_title, rect)
-        if img_fb2:
+        if img_fb2 and img_fb2.getextrema() != ((0, 0), (0, 0), (0, 0)):
             img_fb2.info["captured_by"] = "printwindow (WGCフォールバック)"
             return img_fb2
 
