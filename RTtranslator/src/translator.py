@@ -301,15 +301,12 @@ class Translator:
         try:
             model_names = Translator.get_available_models(self.ollama_url, provider=self.local_llm_provider)
             if self.model in model_names:
-                self.last_error = ""
                 return True
             # 部分一致チェック
             for name in model_names:
                 if self.model.split(":")[0] in name or name.split(":")[0] in self.model:
-                    self.last_error = ""
                     return True
             print(f"[Translator Warning] モデル '{self.model}' が見つかりません。利用可能: {model_names}")
-            self.last_error = f"Model '{self.model}' not found in {model_names}"
             return False
         except Exception as e:
             self.last_error = str(e)

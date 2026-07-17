@@ -14,35 +14,39 @@ import win32api
 import dxcam
 import numpy as np
 
+
+
 # DXCAM カメラのグローバルインスタンス (シングルトン)
 _dxcam_camera = None
+_dxcam_gpu_idx = -1
+_dxcam_none_count = 0
+_DXCAM_NONE_RESET_THRESHOLD = 5
 
-def find_window_partial(title: str) -> int:
-    """
-    指定されたタイトルが部分一致する visible なウィンドウのハンドルを返す。
-    """
-    hwnd = win32gui.FindWindow(None, title)
-    if hwnd != 0:
-        return hwnd
+def get_dxcam(gpu_device_idx: int = 0):
+    global _dxcam_camera, _dxcam_gpu_idx
+    
+    # GPU インデックスが変更された場合は、既存のカメラを破棄して再作成
+    if _dxcam_camera is not None and _dxcam_gpu_idx != gpu_device_idx:
+        print(f"[Capture] DXCAM GPU変更検出: {_dxcam_gpu_idx} -> {gpu_device_idx}. カメラを再作成します。")
+        _dxcam_camera = None
 
-    hwnds = []
-    def enum_handler(h, _):
-        if win32gui.IsWindowVisible(h):
-            t = win32gui.GetWindowText(h)
-            if title.lower() in t.lower():
-                hwnds.append(h)
-                
-    win32gui.EnumWindows(enum_handler, None)
-    return hwnds[0] if hwnds else 0
-
-def get_dxcam():
-    global _dxcam_camera
     if _dxcam_camera is None:
         try:
-            _dxcam_camera = dxcam.create(output_color="RGB", max_buffer_len=1)
+            print(f"[Capture] dxcam.create(device_idx={gpu_device_idx}) 実行中...")
+            _dxcam_camera = dxcam.create(device_idx=gpu_device_idx, output_color="RGB", max_buffer_len=1)
+            _dxcam_gpu_idx = gpu_device_idx
         except Exception as e:
-            print(f"[Capture] dxcam.create 失敗: {e}")
-            return None
+            print(f"[Capture] dxcam.create 失敗 (GPU {gpu_device_idx}): {e}")
+            if gpu_device_idx != 0:
+                try:
+                    print(f"[Capture] デバイス0での再試行を行います...")
+                    _dxcam_camera = dxcam.create(device_idx=0, output_color="RGB", max_buffer_len=1)
+                    _dxcam_gpu_idx = 0
+                except Exception as e2:
+                    print(f"[Capture] dxcam.create 最終失敗: {e2}")
+                    _dxcam_camera = None
+            else:
+                _dxcam_camera = None
     return _dxcam_camera
 
 def get_client_rect_on_screen(window_title: str) -> tuple[int, int, int, int] | None:
@@ -50,7 +54,7 @@ def get_client_rect_on_screen(window_title: str) -> tuple[int, int, int, int] | 
     指定されたウィンドウのクライアント領域（枠の内側のゲーム画面）の
     スクリーン座標における矩形（left, top, width, height）を取得する。
     """
-    hwnd = find_window_partial(window_title)
+    hwnd = win32gui.FindWindow(None, window_title)
     if hwnd == 0:
         return None
 
@@ -118,13 +122,16 @@ def get_dpi_scale(hwnd: int) -> float:
 def capture_bitblt(rect: tuple, window_title: str) -> Image.Image | None:
     """
     BitBltを使用して物理ピクセル精度でキャプチャする（高画質版）。
-    DPI-unawareなPythonプロセスからデスクトップDCを呼び出す場合は、
-    OSの仮想化座標に合わせるため scale を掛け算しない論理座標を使用します。
     """
-    hwnd = find_window_partial(window_title)
+    hwnd = win32gui.FindWindow(None, window_title)
     if not hwnd: return None
     
+    scale = get_dpi_scale(hwnd)
     left, top, w, h = rect
+    
+    # 物理ピクセルサイズを計算 (端数によるジッターを防ぐため round を使用)
+    p_left, p_top = int(round(left * scale)), int(round(top * scale))
+    p_w, p_h = int(round(w * scale)), int(round(h * scale))
 
     try:
         hwnd_desktop = win32gui.GetDesktopWindow()
@@ -133,10 +140,12 @@ def capture_bitblt(rect: tuple, window_title: str) -> Image.Image | None:
         saveDC = mfcDC.CreateCompatibleDC()
         
         saveBitMap = win32ui.CreateBitmap()
-        saveBitMap.CreateCompatibleBitmap(mfcDC, w, h)
+        # 物理サイズのビットマップを作成
+        saveBitMap.CreateCompatibleBitmap(mfcDC, p_w, p_h)
         saveDC.SelectObject(saveBitMap)
         
-        saveDC.BitBlt((0, 0), (w, h), mfcDC, (left, top), win32con.SRCCOPY)
+        # 物理座標(p_left, p_top)から物理サイズ(p_w, p_h)でコピー
+        saveDC.BitBlt((0, 0), (p_w, p_h), mfcDC, (p_left, p_top), win32con.SRCCOPY)
         
         bmpinfo = saveBitMap.GetInfo()
         bmpstr = saveBitMap.GetBitmapBits(True)
@@ -157,7 +166,7 @@ def capture_printwindow(window_title: str, rect: tuple) -> Image.Image | None:
     """
     PrintWindowを使用して物理ピクセル精度でキャプチャする（高画質版）。
     """
-    hwnd = find_window_partial(window_title)
+    hwnd = win32gui.FindWindow(None, window_title)
     if not hwnd:
         return None
     
@@ -200,18 +209,19 @@ def capture_printwindow(window_title: str, rect: tuple) -> Image.Image | None:
         return None
 
 
-def capture_dxcam(rect: tuple, window_title: str) -> Image.Image | None:
+def capture_dxcam(rect: tuple, window_title: str, gpu_device_idx: int = 0) -> Image.Image | None:
     """
     DXCAM (DXGI) を使用して高速キャプチャする。
     """
-    camera = get_dxcam()
+    global _dxcam_none_count, _dxcam_camera
+    camera = get_dxcam(gpu_device_idx)
     if not camera:
         return None
 
     try:
         # rect = (left, top, w, h) in logical screen coordinates
         # DXCAM は物理座標を期待するため、DPIスケールを考慮する
-        hwnd = find_window_partial(window_title)
+        hwnd = win32gui.FindWindow(None, window_title)
         scale = get_dpi_scale(hwnd) if hwnd else 1.0
         
         left, top, w, h = rect
@@ -231,17 +241,31 @@ def capture_dxcam(rect: tuple, window_title: str) -> Image.Image | None:
         # camera.grab は numpy 配列 (RGB) を返す
         frame = camera.grab(region=region)
         if frame is not None:
+            _dxcam_none_count = 0  # 成功したのでカウントリセット
             img = Image.fromarray(frame)
             img.info["captured_by"] = "wgc"
             return img
         
         # grab が None を返した場合（D3Dデバイスエラーやタイミングエラー等）
-        raise Exception("dxcam_grab_none")
+        _dxcam_none_count += 1
+        if _dxcam_none_count >= _DXCAM_NONE_RESET_THRESHOLD:
+            _dxcam_camera = None
+            _dxcam_none_count = 0
+            print(f"[Capture] DXCAM grab() が{_DXCAM_NONE_RESET_THRESHOLD}回連続Noneのため、カメラをリセットします")
+            
+        img_fb = capture_bitblt(rect, window_title)
+        if img_fb:
+            img_fb.info["captured_by"] = "bitblt (WGCフォールバック)"
+            return img_fb
+        return None
     except Exception as e:
-        global _dxcam_camera
-        _dxcam_camera = None  # カメラをリセットして次回再生成を促す
+        _dxcam_camera = None  # D3Dエラー等の場合はカメラを一旦破棄して次回再初期化を促す
         err_msg = str(e)
-        print(f"[Capture] DXCAM エラー: {err_msg}")
+        print(f"[Capture] DXCAM 例外発生 (カメラ参照をリセットしました): {err_msg}")
+        img_fb = capture_bitblt(rect, window_title)
+        if img_fb:
+            img_fb.info["captured_by"] = f"bitblt (WGCエラー: {err_msg})"
+            return img_fb
         return None
 
 
@@ -254,7 +278,7 @@ def capture_csharp(window_title: str, rect: tuple = None, mode: str = "bitblt", 
         import requests
         import io
         
-        hwnd = find_window_partial(window_title)
+        hwnd = win32gui.FindWindow(None, window_title)
         if hwnd == 0:
             return None
             
@@ -295,7 +319,8 @@ def capture_window(
     rect: tuple = None,
     mode: str = "bitblt",
     use_csharp: bool = False,
-    cs_api_url: str = "http://127.0.0.1:5002"
+    cs_api_url: str = "http://127.0.0.1:5002",
+    dxcam_gpu_idx: int = 0
 ) -> Image.Image | None:
     """
     指定されたタイトルのウィンドウ領域をキャプチャし、PIL Imageとして返す。
@@ -340,13 +365,13 @@ def capture_window(
                 screenshot = sct.grab(monitor)
                 img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
                 if img:
-                    img.info["captured_by"] = "mss"
-                    return img
+                     img.info["captured_by"] = "mss"
+                     return img
         except Exception:
             return None
 
     elif mode == "wgc" or mode == "dxcam":
-        img = capture_dxcam(rect, window_title)
+        img = capture_dxcam(rect, window_title, dxcam_gpu_idx)
         if img:
             img.info["captured_by"] = "wgc"
             return img
@@ -357,7 +382,7 @@ def capture_window(
             return img_fb1
         # BitBlt も真っ黒か失敗した場合は最終手段として PrintWindow を試す
         img_fb2 = capture_printwindow(window_title, rect)
-        if img_fb2 and img_fb2.getextrema() != ((0, 0), (0, 0), (0, 0)):
+        if img_fb2:
             img_fb2.info["captured_by"] = "printwindow (WGCフォールバック)"
             return img_fb2
 

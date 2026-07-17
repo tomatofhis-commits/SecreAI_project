@@ -8,23 +8,40 @@ import os
 from PIL import Image, ImageDraw
 
 # --- デバッグログ出力設定 ---
-class Logger(object):
-    def __init__(self):
-        self.terminal = sys.stdout
-        self.log = open("debug_rtt.log", "a", encoding="utf-8")
+# デバッグ情報を debug_rtt.log に書き出します
+import sys
+import os
+try:
+    app_data_dir = os.path.join(os.environ.get("LOCALAPPDATA", ""), "SecreAI")
+    os.makedirs(app_data_dir, exist_ok=True)
+    log_file_path = os.path.join(app_data_dir, "debug_rtt.log")
+    
+    class Logger(object):
+        def __init__(self):
+            self.terminal = sys.stdout
+            # 追記モードで開き、ログ出力をバッファリングせず即時書き出します
+            self.log = open(log_file_path, "a", encoding="utf-8", buffering=1)
 
-    def write(self, message):
-        self.terminal.write(message)
-        self.log.write(message)
-        self.log.flush()
+        def write(self, message):
+            self.terminal.write(message)
+            try:
+                self.log.write(message)
+            except:
+                pass
 
-    def flush(self):
-        self.terminal.flush()
-        self.log.flush()
+        def flush(self):
+            self.terminal.flush()
+            try:
+                self.log.flush()
+            except:
+                pass
 
-sys.stdout = Logger()
-sys.stderr = Logger()
-print("\n--- SecreAI RTT Debug Log Start ---")
+    sys.stdout = Logger()
+    sys.stderr = sys.stdout
+    print("[RTtranslator] stdout/stderr を debug_rtt.log にリダイレクトしました。")
+except Exception as log_e:
+    print(f"[Logging Setup Error] {log_e}")
+
 import psutil
 
 import time
@@ -296,8 +313,45 @@ class TranslationController:
         self.config = config
         
         # --- SecreAI本体の data/config.json から設定をフォールバックロード ---
-        config = self._merge_secre_config(config)
-        self.config = config
+        try:
+            import json, os
+            # RTtranslator/main.py の親の親が SecreAI ルート
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            secre_config_path = os.path.join(base_dir, "data", "config.json")
+            if not os.path.exists(secre_config_path):
+                # 旧パスフォールバック
+                secre_config_path = os.path.join(base_dir, "config", "config.json")
+            
+            if os.path.exists(secre_config_path):
+                with open(secre_config_path, "r", encoding="utf-8") as f:
+                    s_cfg = json.load(f)
+                
+                # local_llm_provider / LOCAL_LLM_PROVIDER のマージ
+                if "local_llm_provider" not in config:
+                    prov = s_cfg.get("LOCAL_LLM_PROVIDER", s_cfg.get("local_llm_provider", "ollama")).lower()
+                    config["local_llm_provider"] = prov
+                
+                # ollama_url (LM Studio または Ollama の適切なURLを選択)
+                if "ollama_url" not in config or "localhost:11434" in config.get("ollama_url", ""):
+                    prov = config.get("local_llm_provider", "ollama").lower()
+                    if prov == "lmstudio":
+                        url = s_cfg.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+                    else:
+                        url = s_cfg.get("OLLAMA_URL", "http://localhost:11434/v1")
+                    config["ollama_url"] = url
+                    
+                # ollama_model (LM Studio または Ollama の適切なモデル)
+                if "ollama_model" not in config or config.get("ollama_model") == "translategemma:4b":
+                    prov = config.get("local_llm_provider", "ollama").lower()
+                    if prov == "lmstudio":
+                        # LM Studio用のモデル名 (settings_ui.py 保存値またはキャッシュ)
+                        model = s_cfg.get("rtt_ollama_model", s_cfg.get("MODEL_ID_LOCAL", "meta-llama-3-8b-instruct"))
+                        config["ollama_model"] = model
+                    else:
+                        model = s_cfg.get("rtt_ollama_model", "translategemma:4b")
+                        config["ollama_model"] = model
+        except Exception as e:
+            print(f"[RTtranslator Warning] Failed to merge main config.json: {e}")
 
         # --- [最優先] CPUリミットとアフィニティの適用 ---
         # 他の重いエンジンのロードが始まる前に制限をかける
@@ -550,77 +604,11 @@ class TranslationController:
         """ターゲットウィンドウを更新する。"""
         self.window_title = new_title
 
-    def _merge_secre_config(self, config: dict) -> dict:
-        """SecreAI本体の data/config.json から設定を安全にマージ・補正する"""
-        merged = config.copy()
-        try:
-            import json, os
-            s_cfg = {}
-            # RTtranslator/main.py の親が RTtranslator なら、そのさらに親が SecreAI ルート（開発時）
-            # そうでなければ現在のディレクトリが SecreAI ルート（本番EXE実行時）
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            if os.path.basename(current_dir).lower() == "rttranslator":
-                base_dir = os.path.dirname(current_dir)
-            else:
-                base_dir = current_dir
-
-            secre_config_path = os.path.join(base_dir, "data", "config.json")
-            if not os.path.exists(secre_config_path):
-                # 旧パスフォールバック
-                secre_config_path = os.path.join(base_dir, "config", "config.json")
-            
-            if os.path.exists(secre_config_path):
-                with open(secre_config_path, "r", encoding="utf-8") as f:
-                    s_cfg = json.load(f)
-                
-                # local_llm_provider / LOCAL_LLM_PROVIDER のマージ
-                if "local_llm_provider" not in merged or not merged.get("local_llm_provider"):
-                    prov = s_cfg.get("LOCAL_LLM_PROVIDER", s_cfg.get("local_llm_provider", "ollama")).lower()
-                    merged["local_llm_provider"] = prov
-                
-                # ollama_url (LM Studio または Ollama の適切なURLを選択)
-                prov = merged.get("local_llm_provider", "ollama").lower()
-                if prov == "lmstudio":
-                    url = s_cfg.get("LMSTUDIO_URL", "http://localhost:1234/v1")
-                else:
-                    url = s_cfg.get("OLLAMA_URL", "http://localhost:11434/v1")
-                merged["ollama_url"] = url
-                    
-                # ollama_model (LM Studio または Ollama の適切なモデル)
-                if "ollama_model" not in merged or merged.get("ollama_model") == "translategemma:4b":
-                    if prov == "lmstudio":
-                        model = s_cfg.get("rtt_ollama_model", s_cfg.get("MODEL_ID_LOCAL", "meta-llama-3-8b-instruct"))
-                        merged["ollama_model"] = model
-                    else:
-                        model = s_cfg.get("rtt_ollama_model", "translategemma:4b")
-                        merged["ollama_model"] = model
-                
-                # モデル名とプロバイダの不整合を自動補正
-                curr_model = merged.get("ollama_model", "")
-                if prov == "lmstudio":
-                    if ":" in curr_model or curr_model == "translategemma:4b":
-                        fallback_model = s_cfg.get("MODEL_ID_LOCAL", "gemma-4-e4b-it-qat")
-                        if ":" in fallback_model:
-                            fallback_model = "gemma-4-e4b-it-qat"
-                        merged["ollama_model"] = fallback_model
-                        print(f"[RTtranslator] LM Studio のモデル名を自動補正しました: {curr_model} -> {fallback_model}")
-                else: # prov == "ollama"
-                    if ":" not in curr_model or "-qat" in curr_model or "@" in curr_model:
-                        fallback_model = "translategemma:latest"
-                        merged["ollama_model"] = fallback_model
-                        print(f"[RTtranslator] Ollama のモデル名を自動補正しました: {curr_model} -> {fallback_model}")
-        except Exception as e:
-            print(f"[RTtranslator Warning] Failed to merge config: {e}")
-        return merged
-
     def update_config(self, new_config: dict):
         """翻訳開始直前に最新の設定（翻訳先言語など）を反映する"""
         with self._lock:
             old_val = self.config.get("cpu_threads", 0)
             old_pct = self.config.get("ocr_thread_limit_percent", 100)
-            
-            # 本体の config.json の内容を踏まえて安全にマージ・補正する
-            new_config = self._merge_secre_config(new_config)
             
             self.config = new_config
             self.window_title = new_config.get("target_window_title", "")
@@ -692,13 +680,6 @@ class TranslationController:
             new_pct = self.config.get("ocr_thread_limit_percent", 100)
             if new_val != old_val or new_pct != old_pct:
                 self.apply_cpu_limit()
-            
-            # 設定更新時に稼働中であれば接続テストを再実行し、オーバーレイ状態を更新する
-            if self.is_running:
-                if self.translator.test_connection():
-                    self.overlay.set_status(f"✅ 接続OK | 対象: {self.window_title}")
-                else:
-                    self.overlay.set_status(f"⚠️ {self.translator.local_llm_provider.upper()}に接続できません")
             
             print(f"[RTtranslator] 設定を更新しました: Model={self.translator.model}, CPU_Limit={self.config.get('ocr_thread_limit_percent')}%")
 
@@ -1076,7 +1057,8 @@ class TranslationController:
                 rect=rect,
                 mode=capture_mode,
                 use_csharp=use_cs_cap,
-                cs_api_url=cs_api_url
+                cs_api_url=cs_api_url,
+                dxcam_gpu_idx=self.config.get("paddle_gpu_index", 0)
             )
 
             if image:
@@ -1108,10 +1090,7 @@ class TranslationController:
 
             if image is None:
                 if not self._ocr_busy:
-                    if rect is not None:
-                        self._update_status("警告: キャプチャ失敗 (復帰試行中)")
-                    else:
-                        self._update_status(f"警告: 対象ウィンドウが見つかりません: {self.window_title}")
+                    self._update_status(f"警告: 対象ウィンドウが見つかりません: {self.window_title}")
                 return
 
             new_rects = []  # 自動クリア判定用に初期化

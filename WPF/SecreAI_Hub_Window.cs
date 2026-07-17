@@ -678,7 +678,7 @@ namespace SecreAI_Hub
                     argBuilder.Append(" \"" + arg + "\"");
                 }
 
-                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), argBuilder.ToString())
+                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I " + argBuilder.ToString())
                 {
                     WorkingDirectory = _baseDir,
                     UseShellExecute = false,
@@ -948,7 +948,7 @@ namespace SecreAI_Hub
                     try
                     {
                         string scriptPath = Path.Combine(_baseDir, "scripts", "run_memory_viewer.py");
-                        ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
+                        ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I \"" + scriptPath + "\"")
                         {
                             WorkingDirectory = _baseDir,
                             CreateNoWindow = true,
@@ -1070,7 +1070,7 @@ namespace SecreAI_Hub
                 try
                 {
                     string scriptPath = Path.Combine(_baseDir, "scripts", "run_settings.py");
-                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
+                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I \"" + scriptPath + "\"")
                     {
                         WorkingDirectory = _baseDir,
                         UseShellExecute = false,
@@ -1122,7 +1122,7 @@ namespace SecreAI_Hub
                 try
                 {
                     string scriptPath = Path.Combine(_baseDir, "scripts", "run_setup_wizard.py");
-                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + scriptPath + "\"")
+                    ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I \"" + scriptPath + "\"")
                     {
                         WorkingDirectory = _baseDir,
                         UseShellExecute = false,
@@ -1413,7 +1413,7 @@ namespace SecreAI_Hub
                         Dispatcher.BeginInvoke(new Action(() => {
                             if (!string.IsNullOrEmpty(ollamaErr))
                             {
-                                UpdateLogArea("[RTT] Ollama接続エラー発生中: " + ollamaErr, true);
+                                UpdateLogArea("[RTT] ローカルLLM接続エラー発生中: " + ollamaErr, true);
                             }
                             else
                             {
@@ -1452,7 +1452,26 @@ namespace SecreAI_Hub
                 localProv = _configData["LOCAL_LLM_PROVIDER"].ToString().ToLower();
             }
 
-            // プロバイダーに応じたURLを取得
+            var rttCfg = new Dictionary<string, object>
+            {
+                { "target_window_title", _configData.ContainsKey("TARGET_GAME_TITLE") ? _configData["TARGET_GAME_TITLE"] : "" },
+                { "target_language", _configData.ContainsKey("rtt_target_language") ? _configData["rtt_target_language"] : "ja" },
+                { "ollama_model", _configData.ContainsKey("rtt_ollama_model") ? _configData["rtt_ollama_model"] : "translategemma:4b" },
+                { "local_llm_provider", localProv },
+                { "ocr_engine_mode", "dual_scout_hybrid" }
+            };
+
+            // まず rtt_ プレフィックスの個別設定をマージ (古い rtt_ollama_url を含む)
+            foreach (var kp in _configData)
+            {
+                if (kp.Key.StartsWith("rtt_"))
+                {
+                    string key = kp.Key.Substring(4).ToLower();
+                    rttCfg[key] = kp.Value;
+                }
+            }
+
+            // その後、プロバイダーに応じた正しい URL で上書き解決する
             string localUrl = "http://localhost:11434/v1";
             if (localProv == "lmstudio")
             {
@@ -1468,29 +1487,7 @@ namespace SecreAI_Hub
                     localUrl = _configData["OLLAMA_URL"].ToString();
                 }
             }
-
-            var rttCfg = new Dictionary<string, object>
-            {
-                { "target_window_title", _configData.ContainsKey("TARGET_GAME_TITLE") ? _configData["TARGET_GAME_TITLE"] : "" },
-                { "target_language", _configData.ContainsKey("rtt_target_language") ? _configData["rtt_target_language"] : "ja" },
-                { "ollama_url", localUrl },
-                { "ollama_model", _configData.ContainsKey("rtt_ollama_model") ? _configData["rtt_ollama_model"] : "translategemma:4b" },
-                { "local_llm_provider", localProv },
-                { "ocr_engine_mode", "dual_scout_hybrid" }
-            };
-
-            foreach (var kp in _configData)
-            {
-                if (kp.Key.StartsWith("rtt_"))
-                {
-                    string key = kp.Key.Substring(4).ToLower();
-                    if (key == "ollama_url" || key == "ollama_model" || key == "local_llm_provider")
-                    {
-                        continue;
-                    }
-                    rttCfg[key] = kp.Value;
-                }
-            }
+            rttCfg["ollama_url"] = localUrl;
 
             return rttCfg;
         }
@@ -1519,7 +1516,7 @@ namespace SecreAI_Hub
                 StringBuilder argBuilder = new StringBuilder();
                 argBuilder.Append("\"" + scriptPath + "\" server");
 
-                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), argBuilder.ToString())
+                ProcessStartInfo psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I " + argBuilder.ToString())
                 {
                     WorkingDirectory = _baseDir,
                     UseShellExecute = false,
@@ -1628,7 +1625,7 @@ namespace SecreAI_Hub
                 else if (rttScript != null)
                 {
                     UpdateLogArea("[RTT] EXEが見つかりません。Pythonスクリプトで代替起動します（開発モード）。");
-                    psi = new ProcessStartInfo(GetPythonExecutablePath(), "\"" + rttScript + "\" --headless --config \"" + rttConfigPath + "\"")
+                    psi = new ProcessStartInfo(GetPythonExecutablePath(), "-I \"" + rttScript + "\" --headless --config \"" + rttConfigPath + "\"")
                     {
                         WorkingDirectory = rttScriptDir,
                         CreateNoWindow = true,
@@ -2084,7 +2081,7 @@ namespace SecreAI_Hub
         {
             HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = "POST";
-            request.Timeout = 15000;
+            request.Timeout = 1500;
             request.ContentType = "application/json";
             byte[] byteArray = Encoding.UTF8.GetBytes(postData);
             request.ContentLength = byteArray.Length;
@@ -2105,7 +2102,7 @@ namespace SecreAI_Hub
             {
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
                 request.Method = "GET";
-                request.Timeout = 15000;
+                request.Timeout = 1500;
                 using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
                 using (StreamReader reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
                 {
