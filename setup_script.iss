@@ -69,7 +69,7 @@ Source: "d:\SecreAI_Build\scripts\*"; DestDir: "{app}\scripts"; Flags: ignorever
 ; 1.4 ルート階層の重要 Python スクリプト群の同梱 (設定画面・ウィザード起動用)
 Source: "d:\SecreAI_Build\settings_ui.py";  DestDir: "{app}"; Flags: ignoreversion
 Source: "d:\SecreAI_Build\setup_wizard.py"; DestDir: "{app}"; Flags: ignoreversion
-Source: "d:\SecreAI_Build\update_lang.py";  DestDir: "{app}"; Flags: ignoreversion
+
 
 ; 2. RTtranslator コア（本体と重複する巨大ライブラリ、および設定・ログ・キャッシュを除外）
 Source: "{#RTTDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "config.json, translation_cache.json, log.json, *.log, debug_rtt.log, data\api_cache\*, data\search_cache\*, paddle\include\*, cupy\*, cupy_backends\*, cupyx\*, scipy\*, scipy.libs\*, pandas\*, pandas.libs\*, matplotlib\*, lxml\*, Cython\*, sklearn\*, skimage\*, shapely\*, shapely.libs\*, docx\*, qt6designer.dll, qt6pdf*.dll, qt6quick3d*.dll, qt6bluetooth.dll, qt6multimedia*.dll, qt6positioning.dll, qt6sensors.dll, qt6nfc.dll, qt6serialport.dll, qt6webchannel.dll, qt6websockets.dll, qt6quickwidgets.dll, qt6texttospeech.dll, qt6spatialaudio.dll"
@@ -187,15 +187,118 @@ begin
   end;
 end;
 
+// 古い競合フォルダのクリーンアップ処理（保護フォルダ data, memory_db, models は絶対に除外）
+procedure CleanOldConflictDirs(AppDir: String);
+var
+  TargetDirs: array[0..74] of String;
+  I: Integer;
+  Path: String;
+begin
+  if AppDir = '' then Exit;
+  
+  // 以前の古いPython環境でルート直下にインストールされていた、不要かつ新しいポータブル環境と衝突するライブラリフォルダの一覧
+  TargetDirs[0] := 'Cython';
+  TargetDirs[1] := 'PIL';
+  TargetDirs[2] := 'PyQt6';
+  TargetDirs[3] := 'PySide6';
+  TargetDirs[4] := '_sounddevice_data';
+  TargetDirs[5] := '_websocket';
+  TargetDirs[6] := 'aiohttp';
+  TargetDirs[7] := 'astor';
+  TargetDirs[8] := 'av';
+  TargetDirs[9] := 'av.libs';
+  TargetDirs[10] := 'bcrypt';
+  TargetDirs[11] := 'brotlicffi_bak';
+  TargetDirs[12] := 'certifi';
+  TargetDirs[13] := 'chardet';
+  TargetDirs[14] := 'charset_normalizer';
+  TargetDirs[15] := 'chromadb';
+  TargetDirs[16] := 'chromadb_rust_bindings';
+  TargetDirs[17] := 'contourpy';
+  TargetDirs[18] := 'cryptography';
+  TargetDirs[19] := 'ctranslate2';
+  TargetDirs[20] := 'cupy';
+  TargetDirs[21] := 'cupy_backends';
+  TargetDirs[22] := 'cupyx';
+  TargetDirs[23] := 'customtkinter';
+  TargetDirs[24] := 'cv2';
+  TargetDirs[25] := 'docx';
+  TargetDirs[26] := 'dxcam';
+  TargetDirs[27] := 'frozenlist';
+  TargetDirs[28] := 'google';
+  TargetDirs[29] := 'grpc';
+  TargetDirs[30] := 'hf_xet';
+  TargetDirs[31] := 'httptools';
+  TargetDirs[32] := 'jaraco';
+  TargetDirs[33] := 'jiter';
+  TargetDirs[34] := 'jsonschema_specifications';
+  TargetDirs[35] := 'kiwisolver';
+  TargetDirs[36] := 'lmdb';
+  TargetDirs[37] := 'lxml';
+  TargetDirs[38] := 'markupsafe';
+  TargetDirs[39] := 'matplotlib';
+  TargetDirs[40] := 'multidict';
+  TargetDirs[41] := 'numpy';
+  TargetDirs[42] := 'numpy.libs';
+  TargetDirs[43] := 'pandas';
+  TargetDirs[44] := 'pandas.libs';
+  TargetDirs[45] := 'propcache';
+  TargetDirs[46] := 'psutil';
+  TargetDirs[47] := 'pyaudio';
+  TargetDirs[48] := 'pybase64';
+  TargetDirs[49] := 'pyclipper';
+  TargetDirs[50] := 'pydantic_core';
+  TargetDirs[51] := 'pygame';
+  TargetDirs[52] := 'rapidfuzz';
+  TargetDirs[53] := 'regex';
+  TargetDirs[54] := 'rpds';
+  TargetDirs[55] := 'scipy';
+  TargetDirs[56] := 'scipy.libs';
+  TargetDirs[57] := 'shapely';
+  TargetDirs[58] := 'shapely.libs';
+  TargetDirs[59] := 'shiboken6';
+  TargetDirs[60] := 'skimage';
+  TargetDirs[61] := 'sklearn';
+  TargetDirs[62] := 'speech_recognition';
+  TargetDirs[63] := 'tcl';
+  TargetDirs[64] := 'tcl8';
+  TargetDirs[65] := 'tiktoken';
+  TargetDirs[66] := 'tk';
+  TargetDirs[67] := 'tokenizers';
+  TargetDirs[68] := 'tzdata';
+  TargetDirs[69] := 'watchfiles';
+  TargetDirs[70] := 'websockets';
+  TargetDirs[71] := 'winrt';
+  TargetDirs[72] := 'yaml';
+  TargetDirs[73] := 'yarl';
+  TargetDirs[74] := 'zstandard';
+
+  for I := 0 to 74 do
+  begin
+    Path := AddBackslash(AppDir) + TargetDirs[I];
+    if DirExists(Path) then
+    begin
+      DelTree(Path, True, True, True);
+    end;
+  end;
+end;
+
 // インストール完了ステップでのフック処理
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   OldPath: String;
   NewPath: String;
 begin
+  NewPath := ExpandConstant('{app}');
+
+  // ファイル展開直前に古い競合フォルダを自動削除（クリーンアップ）する
+  if CurStep = ssInstall then
+  begin
+    CleanOldConflictDirs(NewPath);
+  end;
+
   if CurStep = ssPostInstall then
   begin
-    NewPath := ExpandConstant('{app}');
     // 旧通常版の AppId: {C12F4B7A-9E5C-4F3D-8A1B-2C3D4E5F6G7H} から移行
     OldPath := GetInstalledPath('{C12F4B7A-9E5C-4F3D-8A1B-2C3D4E5F6G7H}');
     if OldPath <> '' then
