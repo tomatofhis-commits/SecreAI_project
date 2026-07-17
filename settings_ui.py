@@ -109,7 +109,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     root = tk.Toplevel(parent)
     root.title(l_set.get("win_title", "Settings"))
-    root.geometry("600x700") 
+    root.geometry("600x750") 
     # root.attributes("-topmost", True) # Removed to allow normal window behavior
 
     # フッター（保存ボタン用）を先にpackして最下部への固定を保証
@@ -252,10 +252,11 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     # --- 1. 全般設定タブ ---
 
 
-    lbl_ai_provider = add_label(tab_general, l_set.get("label_ai_provider", "AI Provider:"), pady=(5,0))
-    provider_var = tk.StringVar(tab_general, config.get("AI_PROVIDER", "gemini"))
     provider_frame = tk.Frame(tab_general)
     provider_frame.pack(pady=5)
+    lbl_ai_provider = tk.Label(provider_frame, text=l_set.get("label_ai_provider", "AI Provider:"), font=("Segoe UI", 9))
+    lbl_ai_provider.pack(side="left", padx=5)
+    provider_var = tk.StringVar(tab_general, config.get("AI_PROVIDER", "gemini"))
     
     for p_val in ["gemini", "openai", "local"]:
         tk.Radiobutton(provider_frame, text=p_val.capitalize(), variable=provider_var, value=p_val).pack(side="left", padx=5)
@@ -268,14 +269,23 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     gemini_key_entry.insert(0, config.get("GEMINI_API_KEY", ""))
     gemini_key_entry.pack(pady=2)
 
-    lbl_model_normal = add_label(gemini_frame, l_set.get("model_normal", "Normal Model:"), pady=(5,0))
-    # すべての候補を維持
+    # 横並び用の行フレームを作成
+    gemini_row_frame = tk.Frame(gemini_frame)
+    gemini_row_frame.pack(pady=5, fill="x")
+
+    # 1. Normal Model (左)
+    normal_col = tk.Frame(gemini_row_frame)
+    normal_col.pack(side="left", expand=True, padx=5)
+    tk.Label(normal_col, text=l_set.get("model_normal", "Normal Model:"), font=("Segoe UI", 9)).pack(anchor="w")
     gemini_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
     model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-3.5-flash"))
-    tk.OptionMenu(gemini_frame, model_var, *gemini_models).pack(pady=2)
+    tk.OptionMenu(normal_col, model_var, *gemini_models).pack(pady=2, fill="x")
 
-    # 思考レベル (gemini-3.1-flash-lite のみ)
-    thinking_label = add_label(gemini_frame, l_set.get("thinking_level_label", "思考レベル (3.1-flash-lite / 3.5-flash のみ):"), pady=(5,0))
+    # 2. 思考レベル (中央)
+    thinking_col = tk.Frame(gemini_row_frame)
+    thinking_col.pack(side="left", expand=True, padx=5)
+    thinking_label = tk.Label(thinking_col, text=l_set.get("thinking_level_short", "思考レベル:"), font=("Segoe UI", 9))
+    thinking_label.pack(anchor="w")
     THINKING_OPTIONS = {
         l_set.get("thinking_min", "最小"):     "minimal",
         l_set.get("thinking_low", "低"):       "low",
@@ -283,14 +293,13 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         l_set.get("thinking_high", "高"):       "high",
     }
     _budget_val = config.get("THINKING_BUDGET", "medium")
-    # もし古い数値データや無効なデータが残っていた場合は medium にする
     if _budget_val not in THINKING_OPTIONS.values():
         _budget_val = "medium"
     _reverse_map = {v: k for k, v in THINKING_OPTIONS.items()}
     _initial_thinking = _reverse_map.get(_budget_val, l_set.get("thinking_mid", "中"))
     thinking_var = tk.StringVar(gemini_frame, _initial_thinking)
-    thinking_menu = tk.OptionMenu(gemini_frame, thinking_var, *THINKING_OPTIONS.keys())
-    thinking_menu.pack(pady=2)
+    thinking_menu = tk.OptionMenu(thinking_col, thinking_var, *THINKING_OPTIONS.keys())
+    thinking_menu.pack(pady=2, fill="x")
 
     def update_thinking_state(*args):
         if model_var.get() in ("gemini-3.1-flash-lite", "gemini-3.5-flash"):
@@ -303,10 +312,13 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     model_var.trace_add("write", update_thinking_state)
     update_thinking_state()
 
-    lbl_model_pro = add_label(gemini_frame, l_set.get("model_pro", "Pro Model:"), pady=(5,0))
+    # 3. Pro Model (右)
+    pro_col = tk.Frame(gemini_row_frame)
+    pro_col.pack(side="left", expand=True, padx=5)
+    tk.Label(pro_col, text=l_set.get("model_pro", "Pro Model:"), font=("Segoe UI", 9)).pack(anchor="w")
     pro_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.5-flash（中）", "gemini-3.5-flash（高）"]
     model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.5-flash（中）"))
-    tk.OptionMenu(gemini_frame, model_pro_var, *pro_models).pack(pady=2)
+    tk.OptionMenu(pro_col, model_pro_var, *pro_models).pack(pady=2, fill="x")
 
     # OpenAI Frame
     openai_frame = tk.LabelFrame(tab_general, text=l_set.get("setting_group_openai", " OpenAI Settings "), padx=10, pady=5)
@@ -315,7 +327,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     openai_key_entry = tk.Entry(openai_frame, width=50, show="*")
     openai_key_entry.insert(0, config.get("OPENAI_API_KEY", ""))
     openai_key_entry.pack(pady=2)
-    gpt_models = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"]
+    gpt_models = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4-mini", "gpt-5.4-nano"]
     gpt_model_var = tk.StringVar(openai_frame, config.get("MODEL_ID_GPT", "gpt-5.4-mini"))
     tk.OptionMenu(openai_frame, gpt_model_var, *gpt_models).pack(pady=2)
 
@@ -790,8 +802,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
             # 最新の gemini-3.5-flash を筆頭に配置
             models = ["gemini-3.5-flash（中）", "gemini-3.5-flash（高）", "gemini-3.5-flash（最小）", "gemini-3.5-flash（低）", "gemini-3.1-flash-lite（中）", "gemini-3.1-flash-lite（高）", "gemini-3-flash-preview", "gemini-3.1-pro-preview"]
         elif provider == "openai":
-            # 2/13に終了する旧モデルを排除し、あなたが最適化した最新モデルのみを配置
-            models = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5", "gpt-5-mini", "gpt-5-nano"]
+            models = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4-mini", "gpt-5.4-nano"]
         else: # local
             # APIから取得したプロバイダ別のリストを使用
             loc_prov = local_provider_var.get()
