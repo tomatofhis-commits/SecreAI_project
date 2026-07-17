@@ -8,39 +8,40 @@ import os
 from PIL import Image, ImageDraw
 
 # --- デバッグログ出力設定 ---
-# デバッグ情報を debug_rtt.log に書き出します
-import sys
-import os
-try:
-    app_data_dir = os.path.join(os.environ.get("LOCALAPPDATA", ""), "SecreAI")
-    os.makedirs(app_data_dir, exist_ok=True)
-    log_file_path = os.path.join(app_data_dir, "debug_rtt.log")
-    
-    class Logger(object):
-        def __init__(self):
-            self.terminal = sys.stdout
-            # 追記モードで開き、ログ出力をバッファリングせず即時書き出します
-            self.log = open(log_file_path, "a", encoding="utf-8", buffering=1)
+# 配布用に不要なディスク書き込みおよびログの肥大化を防ぐため、
+# debug_rtt.log への stdout/stderr のリダイレクト設定は無効化されました。
+#
+# try:
+#     app_data_dir = os.path.join(os.environ.get("LOCALAPPDATA", ""), "SecreAI")
+#     os.makedirs(app_data_dir, exist_ok=True)
+#     log_file_path = os.path.join(app_data_dir, "debug_rtt.log")
+#     
+#     class Logger(object):
+#         def __init__(self):
+#             self.terminal = sys.stdout
+#             # 追記モードで開き、ログ出力をバッファリングせず即時書き出します
+#             self.log = open(log_file_path, "a", encoding="utf-8", buffering=1)
+# 
+#         def write(self, message):
+#             self.terminal.write(message)
+#             try:
+#                 self.log.write(message)
+#             except:
+#                 pass
+# 
+#         def flush(self):
+#             self.terminal.flush()
+#             try:
+#                 self.log.flush()
+#             except:
+#                 pass
+# 
+#     sys.stdout = Logger()
+#     sys.stderr = sys.stdout
+#     print("[RTtranslator] stdout/stderr を debug_rtt.log にリダイレクトしました。")
+# except Exception as log_e:
+#     print(f"[Logging Setup Error] {log_e}")
 
-        def write(self, message):
-            self.terminal.write(message)
-            try:
-                self.log.write(message)
-            except:
-                pass
-
-        def flush(self):
-            self.terminal.flush()
-            try:
-                self.log.flush()
-            except:
-                pass
-
-    sys.stdout = Logger()
-    sys.stderr = sys.stdout
-    print("[RTtranslator] stdout/stderr を debug_rtt.log にリダイレクトしました。")
-except Exception as log_e:
-    print(f"[Logging Setup Error] {log_e}")
 
 import psutil
 

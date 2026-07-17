@@ -150,7 +150,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     # --- UIテキスト更新用関数 ---
     def refresh_ui_text():
-        nonlocal l_set, sys_lang
+        nonlocal l_set, sys_lang, lbl_model_pro, lbl_model_normal
         root.title(l_set.get("win_title", "Settings"))
         
         # タブタイトル
@@ -276,7 +276,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     # 1. Normal Model (左)
     normal_col = tk.Frame(gemini_row_frame)
     normal_col.pack(side="left", expand=True, padx=5)
-    tk.Label(normal_col, text=l_set.get("model_normal", "Normal Model:"), font=("Segoe UI", 9)).pack(anchor="w")
+    lbl_model_normal = tk.Label(normal_col, text=l_set.get("model_normal", "Normal Model:"), font=("Segoe UI", 9))
+    lbl_model_normal.pack(anchor="w")
     gemini_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
     model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-3.5-flash"))
     tk.OptionMenu(normal_col, model_var, *gemini_models).pack(pady=2, fill="x")
@@ -315,7 +316,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     # 3. Pro Model (右)
     pro_col = tk.Frame(gemini_row_frame)
     pro_col.pack(side="left", expand=True, padx=5)
-    tk.Label(pro_col, text=l_set.get("model_pro", "Pro Model:"), font=("Segoe UI", 9)).pack(anchor="w")
+    lbl_model_pro = tk.Label(pro_col, text=l_set.get("model_pro", "Pro Model:"), font=("Segoe UI", 9))
+    lbl_model_pro.pack(anchor="w")
     pro_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.5-flash（中）", "gemini-3.5-flash（高）"]
     model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.5-flash（中）"))
     tk.OptionMenu(pro_col, model_pro_var, *pro_models).pack(pady=2, fill="x")

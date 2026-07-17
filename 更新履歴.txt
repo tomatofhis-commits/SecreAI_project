@@ -1,8 +1,10 @@
 ver1.3.0
-・ローカルLLM連携のマルチプロバイダ対応（Ollama と LM Studio からの選択および URL 入力欄の共存表示）を実装
+・ローカルLLM連携のマルチプロバイダ対応（Ollama と LM Studio からの選択および URL 入力欄 of 共存表示）を実装
 ・Google Grounding (Google Search) の無料枠利用制限回数を「月ごと (5000回)」のカウント表示に改修し、リセット周期を月単位に変更
 ・設定画面における Gemini 2.5 系列などの終了予定モデルを完全に排除し、Grounding 固定モデルを gemini-3.1-flash-lite-preview へ移行
 ・10ヶ国語すべての多言語ファイル（json）に対し、ローカルLLM選択、LM Studio設定、3択検索モードなどの翻訳テキストを完全マージ
+・GPT-5.6系統追加。それに伴い選択できるモデルを整理
+
 
 ver1.2.2
 ・詳細設定画面（settings_ui.py）におけるOllamaモデル取得時のフリーズ不具合の修正（スレッドセーフ化、および接続先URLのlocalhost→127.0.0.1置換によるIPv6名前解決競合の回避）
