@@ -32,9 +32,29 @@ if %ERRORLEVEL% neq 0 (
 
 copy /Y "d:\SecreAI_Build\WPF\bin\Release\SecreAI_Hub.exe" "d:\SecreAI_Build\SecreAI_Hub.exe"
 echo WPF Build Done!
+echo.
 
+:: 2. Build Python Core (Nuitka)
+echo ========================================================
+echo  2. Building Python Core (Nuitka)...
+echo ========================================================
+echo.
+choice /M "Do you want to rebuild Python Core (Nuitka) [Takes 40-60 mins]?"
+if %ERRORLEVEL% equ 1 (
+    echo Starting Python Core compilation...
+    call "d:\SecreAI_Build\build_rtt_core.bat"
+    if %ERRORLEVEL% neq 0 (
+        echo.
+        echo [ERROR] Python Core compilation failed.
+        pause
+        exit /b 1
+    )
+) else (
+    echo Skipping Python Core compilation. Using existing binary.
+)
+echo.
 
-:: 2. Run Inno Setup Compiler
+:: 3. Run Inno Setup Compiler
 echo ========================================================
 echo  3. Building Installer (Inno Setup)...
 echo ========================================================
