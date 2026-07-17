@@ -917,7 +917,7 @@ class MainApp(ctk.CTk):
                         s_data = status_resp.json()
                         err = s_data.get("error", "")
                         if err:
-                            self.update_log_area(f"[RTT] Ollama接続エラー発生中: {err}", is_error=True)
+                            self.update_log_area(f"[RTT] ローカルLLM接続エラー発生中: {err}", is_error=True)
                         else:
                             self.update_log_area("[RTT] 設定を同期しました。")
             except Exception as e:
@@ -1036,8 +1036,12 @@ class MainApp(ctk.CTk):
                 key = k[4:].lower()
                 rtt_cfg[key] = v
         
-        # 3. OLLAMA_URL は全般設定の値を強制的に優先させる（不整合防止）
-        rtt_cfg["ollama_url"] = self.config_data.get("OLLAMA_URL", "http://localhost:11434/v1")
+        # 3. 接続先 URL はプロバイダに応じて適切な設定キーからマージする（不整合防止）
+        provider = self.config_data.get("LOCAL_LLM_PROVIDER", self.config_data.get("local_llm_provider", "ollama")).lower()
+        if provider == "lmstudio":
+            rtt_cfg["ollama_url"] = self.config_data.get("LMSTUDIO_URL", "http://localhost:1234/v1")
+        else:
+            rtt_cfg["ollama_url"] = self.config_data.get("OLLAMA_URL", "http://localhost:11434/v1")
         
         return rtt_cfg
 

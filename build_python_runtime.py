@@ -7,7 +7,8 @@ import shutil
 
 RUNTIME_DIR = "python_runtime"
 # Detect host python version dynamically to ensure binary compatibility
-PYTHON_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+# Pin Python version to 3.12.8 for binary consistency with the stable release
+PYTHON_VERSION = "3.12.8"
 ZIP_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
 ZIP_PATH = "python_embed.zip"
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
