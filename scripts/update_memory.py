@@ -7,7 +7,29 @@ import sys
 import uuid
 import threading  # <--- これを追加しました
 from datetime import datetime, timedelta
-from collections import Counter
+# --- 日付・時間・数値判定フィルター ---
+def is_date_or_number(text: str) -> bool:
+    """文字列が日付、時刻、年号、または純粋な数値であるかを判定します。"""
+    if not text:
+        return True
+    s = text.strip()
+    if s.isdigit():
+        return True
+    patterns = [
+        r'^\d{2,4}[-/\.]\d{1,2}([-/\.]\d{1,2})?$',          # 2026-07-23, 2026/07/23, 07-23 等
+        r'^\d{2,4}年(\d{1,2}月)?(\d{1,2}日)?$',             # 2026年7月23日, 2026年 等
+        r'^\d{1,2}月(\d{1,2}日)?$',                         # 7月23日, 7月 等
+        r'^\d{1,2}日$',                                     # 23日
+        r'^\d{1,2}時(\d{1,2}分)?(\d{1,2}秒)?$',             # 12時30分
+        r'^\d{1,2}:\d{2}(:\d{2})?$',                        # 12:30, 12:30:45
+        r'^(平成|令和|昭和)?\d{1,2}年$',                     # 令和8年
+        r'^(月|火|水|木|金|土|日)曜日?$',                    # 月曜日, 月曜
+        r'^(AM|PM|am|pm)$'                                  # AM/PM
+    ]
+    for p in patterns:
+        if re.match(p, s, re.IGNORECASE):
+            return True
+    return False
 
 # --- ライブラリのインポート ---
 config_manager = None
@@ -361,7 +383,15 @@ def main(base_path=None):
         if old_data and old_data.get("ids"):
             collection.delete(ids=old_data["ids"])
 
-        # --- 5. 最新のキーワードタグ生成 (5回に1回実行) ---
+        # --- 5. 最新のキーワードタグ生成 ---
+        tag_interval = config.get("TAG_GENERATION_INTERVAL", 5)
+        try:
+            tag_interval = int(tag_interval)
+            if tag_interval < 1:
+                tag_interval = 1
+        except (ValueError, TypeError):
+            tag_interval = 5
+
         counter_file = os.path.join(base, "data", "tags_counter.json")
         os.makedirs(os.path.dirname(counter_file), exist_ok=True) 
         
@@ -374,7 +404,7 @@ def main(base_path=None):
 
         tag_count += 1
 
-        if tag_count >= 5:
+        if tag_count >= tag_interval:
             one_week_ago_ts = (now - timedelta(days=7)).timestamp()
             recent_data = collection.get(where={"unix": {"$gt": one_week_ago_ts}})
 
@@ -387,7 +417,7 @@ def main(base_path=None):
                 for doc in documents:
                     tokens = re.findall(r'[A-Za-z0-9\-\_]+|[ァ-ヴー]{2,}|[一-龥]{2,}', doc)
                     for t in tokens:
-                        if t not in ignore_words and len(t) > 1:
+                        if t not in ignore_words and len(t) > 1 and not is_date_or_number(t):
                             words_counter[t] += 1
                 
                 top_frequent_words = words_counter.most_common(15)
@@ -404,14 +434,18 @@ def main(base_path=None):
                     tag_prompt = f"{extract_template}\n\n### 【過去1週間で繰り返し登場している頻出テーマ・キーワード】\n{freq_summary_text}\n\n### 【直近の最新会話 (過去7日分の要約)】\n{all_7days_summary_text}"
                 
                 tag_raw = generate_text(tag_prompt)
-                tags = [t.strip() for t in tag_raw.split(",") if t.strip()]
+                tags = [t.strip() for t in tag_raw.split(",") if t.strip() and not is_date_or_number(t.strip())]
                 
                 with open(tags_file, "w", encoding="utf-8") as f:
                     json.dump({"tags": tags, "updated_at": now.strftime("%Y-%m-%d %H:%M:%S")}, f, ensure_ascii=False, indent=2)
             
             tag_count = 0 
         else:
-            send_log_to_hub(log_m.get("memory_cycle_progress", "System: Memory cycle in progress ({count}/5)").format(count=tag_count))
+            default_progress_msg = f"System: Memory cycle in progress ({{count}}/{tag_interval})"
+            progress_msg_fmt = log_m.get("memory_cycle_progress", default_progress_msg)
+            if "/5)" in progress_msg_fmt:
+                progress_msg_fmt = progress_msg_fmt.replace("/5)", f"/{tag_interval})")
+            send_log_to_hub(progress_msg_fmt.format(count=tag_count))
 
         with open(counter_file, "w") as f:
             json.dump({"count": tag_count}, f)

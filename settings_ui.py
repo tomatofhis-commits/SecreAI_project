@@ -206,6 +206,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         db_model_group.config(text=" " + l_set.get('db_model_settings', '記憶整理用AIモデル') + " ")
         lbl_db_p.config(text=l_set.get("label_db_provider", "プロバイダー:"))
         lbl_db_m.config(text=l_set.get("label_db_model", "記憶要約モデル:"))
+        if 'lbl_tag_interval' in locals() or 'lbl_tag_interval' in globals():
+            lbl_tag_interval.config(text=l_set.get("label_tag_interval", "タグ自動生成の間隔 (動作回数):"))
+        if 'lbl_unit_times' in locals() or 'lbl_unit_times' in globals():
+            lbl_unit_times.config(text=l_set.get("unit_times", "回に1回"))
         maintenance_group.config(text=" " + l_set.get('db_maintenance_group', 'メンテナンス') + " ")
         viewer_btn.config(text=l_set.get("btn_open_memory_viewer", "記憶の一覧・管理を表示"))
 
@@ -832,6 +836,17 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     local_provider_var.trace_add("write", update_db_model_list)
     update_db_model_list()
 
+    lbl_tag_interval = add_label(db_model_group, l_set.get("label_tag_interval", "タグ自動生成の間隔 (動作回数):"), pady=(10,0))
+    tag_interval_var = tk.StringVar(db_model_group, str(config.get("TAG_GENERATION_INTERVAL", 5)))
+    tag_interval_frame = tk.Frame(db_model_group)
+    tag_interval_frame.pack(pady=5)
+    
+    tag_interval_options = ["1", "2", "3", "4", "5"]
+    tag_interval_menu = tk.OptionMenu(tag_interval_frame, tag_interval_var, *tag_interval_options)
+    tag_interval_menu.pack(side="left")
+    lbl_unit_times = tk.Label(tag_interval_frame, text=l_set.get("unit_times", "回に1回"))
+    lbl_unit_times.pack(side="left", padx=5)
+
     # 3. メンテナンスグループ
     maintenance_group = tk.LabelFrame(tab_database, text=f" {l_set.get('db_maintenance_group', 'メンテナンス')} ", padx=10, pady=10)
     maintenance_group.pack(pady=10, fill="x", padx=20)
@@ -1255,6 +1270,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["DISPLAY_TIME"] = int(display_time_var.get())
         config["DB_PROVIDER"] = db_provider_var.get()
         config["DB_MODEL_ID"] = db_model_var.get()
+        try:
+            config["TAG_GENERATION_INTERVAL"] = int(tag_interval_var.get())
+        except (ValueError, TypeError):
+            config["TAG_GENERATION_INTERVAL"] = 5
         config["search_switch"] = search_switch_var.get()
         config["SEARCH_PROVIDER"] = SEARCH_OPTIONS.get(search_disp_var.get(), "tavily")
         config["TAVILY_API_KEY"] = tavily_key_entry.get()
