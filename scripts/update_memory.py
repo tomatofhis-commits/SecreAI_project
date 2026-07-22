@@ -79,7 +79,7 @@ def load_lang_file(lang_code):
             },
             "ai_prompt": {
                 "summarize_start": "あなたは記憶整理の達人です。以下の会話履歴を、後で参照するための重要な事実に絞って簡潔に要約してください。日時は {time} です。\n【会話履歴】\n{history_text}",
-                "extract_keywords": "以下の要約された記憶から、ユーザーの興味や現在の状況を表すキーワードを最大5個、カンマ区切りで抽出してください。回答はキーワードのみにしてください。:\n\n"
+                "extract_keywords": "以下の会話要約から、ユーザーの現在の関心事キーワードを5つ抽出してください。\n\n### 抽出ルール:\n1. 会話内で出現頻度の高い（繰り返し話題に上がっている）重要な情報を最も重視すること。\n2. 出現頻度が同程度の場合は、より新しい会話の情報を優先すること。\n3. 出力はキーワードのみをカンマ区切りで出力すること（余計な解説や番号は不要）。\n\n"
             }
         }
 
@@ -139,7 +139,7 @@ def main(base_path=None):
     elif provider == "local":
         model_id = config.get("MODEL_ID_LOCAL", "llama3.2-vision:11b")
     else:  # gemini
-        model_id = config.get("MODEL_ID", "gemini-3.5-flash")
+        model_id = config.get("MODEL_ID", "gemini-3.6-flash")
 
     # APIキャッシュの初期化
     cache_enabled = config.get("API_CACHE_ENABLED", True)
@@ -240,11 +240,11 @@ def main(base_path=None):
                     level = thinking_budget
 
                 is_thinking_supported = (
-                    local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
+                    local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.1-flash-lite-preview")
                 )
 
                 if is_thinking_supported and level:
-                    if local_db_model_id == "gemini-3.5-flash":
+                    if local_db_model_id == "gemini-3.5-flash-lite":
                         if level not in ("medium", "high"):
                             level = "medium"
                     gemini_config_obj["thinking_config"] = {"thinking_level": level.upper()}
@@ -314,11 +314,11 @@ def main(base_path=None):
                     level = thinking_budget
 
                 is_thinking_supported = (
-                    local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
+                    local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.1-flash-lite-preview")
                 )
 
                 if is_thinking_supported and level:
-                    if local_db_model_id == "gemini-3.5-flash":
+                    if local_db_model_id == "gemini-3.5-flash-lite":
                         if level not in ("medium", "high"):
                             level = "medium"
                     gemini_config_obj["thinking_config"] = {"thinking_level": level.upper()}

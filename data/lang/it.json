@@ -363,5 +363,8 @@
     "requests_header": "Richieste",
     "hits_header": "Hit",
     "btn_update": "Aggiorna pannello"
+  },
+  "ai_prompt": {
+    "extract_keywords": "Estrarre 5 parole chiave che rappresentano gli interessi attuali dell'utente dal seguente riepilogo della conversazione.\n\n### Regole di estrazione:\n1. Dare priorità alle informazioni importanti con un'elevata frequenza di comparsa (argomenti discussi ripetutamente).\n2. Se la frequenza è simile, dare priorità alle informazioni di conversazione più recenti.\n3. Restituire solo le parole chiave separate da virgole (non sono necessarie spiegazioni o numerazioni aggiuntive).\n\n"
   }
 }

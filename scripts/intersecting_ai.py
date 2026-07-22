@@ -30,7 +30,7 @@ def encode_image_to_base64(image_path):
 
 def call_gemini_sync(query, image_obj, system_instr, config):
     try:
-        model_id = config.get("MODEL_ID", "gemini-3.5-flash")
+        model_id = config.get("MODEL_ID", "gemini-3.6-flash")
         from config_manager import parse_model_name
         actual_model_id, level = parse_model_name(model_id)
 
@@ -47,11 +47,11 @@ def call_gemini_sync(query, image_obj, system_instr, config):
             level = thinking_budget
 
         is_thinking_supported = (
-            actual_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
+            actual_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.1-flash-lite-preview")
         )
 
         if is_thinking_supported and level:
-            if actual_model_id == "gemini-3.5-flash":
+            if actual_model_id == "gemini-3.5-flash-lite":
                 if level not in ("medium", "high"):
                     level = "medium"
             gemini_config_obj["thinking_config"] = {"thinking_level": level.upper()}

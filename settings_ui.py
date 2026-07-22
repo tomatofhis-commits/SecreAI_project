@@ -278,8 +278,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     normal_col.pack(side="left", expand=True, padx=5)
     lbl_model_normal = tk.Label(normal_col, text=l_set.get("model_normal", "Normal Model:"), font=("Segoe UI", 9))
     lbl_model_normal.pack(anchor="w")
-    gemini_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
-    model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-3.5-flash"))
+    gemini_models = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3-flash-preview", "gemini-3.6-flash", "gemini-3.1-pro-preview"]
+    model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-3.6-flash"))
     tk.OptionMenu(normal_col, model_var, *gemini_models).pack(pady=2, fill="x")
 
     # 2. 思考レベル (中央)
@@ -303,7 +303,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     thinking_menu.pack(pady=2, fill="x")
 
     def update_thinking_state(*args):
-        if model_var.get() in ("gemini-3.1-flash-lite", "gemini-3.5-flash"):
+        if model_var.get() in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash"):
             thinking_menu.configure(state="normal")
             thinking_label.configure(fg="black")
         else:
@@ -318,8 +318,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     pro_col.pack(side="left", expand=True, padx=5)
     lbl_model_pro = tk.Label(pro_col, text=l_set.get("model_pro", "Pro Model:"), font=("Segoe UI", 9))
     lbl_model_pro.pack(anchor="w")
-    pro_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.5-flash（中）", "gemini-3.5-flash（高）"]
-    model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.5-flash（中）"))
+    pro_models = ["gemini-3-flash-preview", "gemini-3.6-flash（中）", "gemini-3.6-flash（高）", "gemini-3.1-pro-preview"]
+    model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.6-flash（中）"))
     tk.OptionMenu(pro_col, model_pro_var, *pro_models).pack(pady=2, fill="x")
 
     # OpenAI Frame
@@ -801,8 +801,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         
         provider = db_provider_var.get()
         if provider == "gemini":
-            # 最新の gemini-3.5-flash を筆頭に配置
-            models = ["gemini-3.5-flash（中）", "gemini-3.5-flash（高）", "gemini-3.5-flash（最小）", "gemini-3.5-flash（低）", "gemini-3.1-flash-lite（中）", "gemini-3.1-flash-lite（高）", "gemini-3-flash-preview", "gemini-3.1-pro-preview"]
+            # 最新の gemini-3.6-flash を筆頭に配置（思考レベルは降順）
+            models = ["gemini-3.6-flash（高）", "gemini-3.6-flash（中）", "gemini-3.6-flash（低）", "gemini-3.6-flash（最小）", "gemini-3.5-flash-lite（高）", "gemini-3.5-flash-lite（中）", "gemini-3.1-flash-lite（高）", "gemini-3.1-flash-lite（中）", "gemini-3-flash-preview", "gemini-3.1-pro-preview"]
         elif provider == "openai":
             models = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4-mini", "gpt-5.4-nano"]
         else: # local
@@ -875,46 +875,45 @@ def open_settings_window(parent, config_path, current_config, save_callback):
             
             def _update_ui():
                 nonlocal fetched
-                if prov == "lmstudio":
-                    if not fetched:
-                        fetched = ["meta-llama-3-8b-instruct", "gemma-2-9b-it", "gemma-3-4b-it"]
-                    config["CACHED_LMSTUDIO_MODELS"] = fetched
-                    lmstudio_dynamic_models.clear()
-                    lmstudio_dynamic_models.extend(fetched)
-                else:
-                    if not fetched:
-                        fetched = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:4b"]
-                    config["CACHED_OLLAMA_MODELS"] = fetched
-                    ollama_dynamic_models.clear()
-                    ollama_dynamic_models.extend(fetched)
-                
-                # Local Model 更新
-                update_local_model_menu()
+                try:
+                    if prov == "lmstudio":
+                        if not fetched:
+                            fetched = ["meta-llama-3-8b-instruct", "gemma-2-9b-it", "gemma-3-4b-it"]
+                        config["CACHED_LMSTUDIO_MODELS"] = fetched
+                        lmstudio_dynamic_models.clear()
+                        lmstudio_dynamic_models.extend(fetched)
+                    else:
+                        if not fetched:
+                            fetched = ["llama4:scout", "llama3.2-vision", "llama3.1:8b", "gemma2:9b", "gemma3:4b"]
+                        config["CACHED_OLLAMA_MODELS"] = fetched
+                        ollama_dynamic_models.clear()
+                        ollama_dynamic_models.extend(fetched)
+                    
+                    # Local Model / Summary Model / RTTモデル を一括更新
+                    # (refresh_all_local_model_menus が llama / summary / rtt の各メニューを更新する)
+                    refresh_all_local_model_menus()
+                    
+                    # DB Model (Local) 更新
+                    update_db_model_list()
 
-                # Summary Model 更新
-                for widget in summary_model_menu_container.winfo_children():
-                    widget.destroy()
-                if summary_model_var.get() not in fetched:
-                    summary_model_var.set(fetched[0] if fetched else "")
-                tk.OptionMenu(summary_model_menu_container, summary_model_var, *fetched).pack()
-                
-                # DB Model (Local) 更新
-                update_db_model_list()
+                    # RTトランスレーターの OptionMenu を直接更新（rtt_model_menu_ref 経由）
+                    if rtt_model_menu_ref[0] is not None:
+                        try:
+                            menu = rtt_model_menu_ref[0]['menu']
+                            menu.delete(0, 'end')
+                            for m in fetched:
+                                menu.add_command(label=m, command=tk._setit(rtt_model_var, m))
+                            if rtt_model_var.get() not in fetched:
+                                rtt_model_var.set(fetched[0] if fetched else "")
+                        except Exception as err:
+                            print(f"DEBUG: Failed to update RTT model menu: {err}")
 
-                # RTトランスレーターのモデル OptionMenu も更新
-                if rtt_model_menu_ref[0] is not None:
-                    try:
-                        menu = rtt_model_menu_ref[0]['menu']
-                        menu.delete(0, 'end')
-                        for m in fetched:
-                            menu.add_command(label=m, command=tk._setit(rtt_model_var, m))
-                        if rtt_model_var.get() not in fetched:
-                            rtt_model_var.set(fetched[0] if fetched else "")
-                    except Exception as err:
-                        print(f"DEBUG: Failed to update RTT model menu: {err}")
-
-                btn_fetch_ollama.config(text=l_set.get("btn_fetch_success", "取得完了！"), state="disabled")
-                root.after(2000, lambda: btn_fetch_ollama.config(text=original_text, state="normal"))
+                    btn_fetch_ollama.config(text=l_set.get("btn_fetch_success", "取得完了！"), state="disabled")
+                    root.after(2000, lambda: btn_fetch_ollama.config(text=original_text, state="normal"))
+                except Exception as _e:
+                    print(f"DEBUG: _update_ui でエラーが発生しました: {_e}")
+                    # 例外が発生した場合でも必ずボタンを元の状態に戻す
+                    btn_fetch_ollama.config(text=original_text, state="normal")
             
             root.after(0, _update_ui)
         

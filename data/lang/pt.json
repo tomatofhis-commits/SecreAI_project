@@ -363,5 +363,8 @@
     "requests_header": "Solicitações",
     "hits_header": "Acertos",
     "btn_update": "Atualizar informações"
+  },
+  "ai_prompt": {
+    "extract_keywords": "Extraia 5 palavras-chave que representem os interesses atuais do usuário a partir do seguinte resumo da conversa.\n\n### Regras de extração:\n1. Priorize informações importantes com alta frequência de ocorrência (tópicos discutidos repetidamente).\n2. Se a frequência for semelhante, priorize as informações da conversa mais recente.\n3. Emita apenas as palavras-chave separadas por vírgulas (sem explicações adicionais ou numeração).\n\n"
   }
 }

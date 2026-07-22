@@ -370,5 +370,8 @@
     "requests_header": "Requests",
     "hits_header": "Hits",
     "btn_update": "Update Info"
+  },
+  "ai_prompt": {
+    "extract_keywords": "Please extract 5 keywords representing the user's current interests from the following conversation summary.\n\n### Extraction Rules:\n1. Prioritize important information with high frequency of occurrence (repeatedly discussed topics).\n2. If frequency is similar, prioritize newer conversation information.\n3. Output only the keywords separated by commas (no extra explanations or numbering needed).\n\n"
   }
 }

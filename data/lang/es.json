@@ -363,5 +363,8 @@
         "doc_link": ""
       }
     }
+  },
+  "ai_prompt": {
+    "extract_keywords": "Extraiga 5 palabras clave que representen los intereses actuales del usuario a partir del siguiente resumen de la conversación.\n\n### Reglas de extracción:\n1. Priorice la información importante con alta frecuencia de aparición (temas discutidos repetidamente).\n2. Si la frecuencia es similar, dé prioridad a la información de conversación más reciente.\n3. Genere solo las palabras clave separadas por comas (sin explicaciones adicionales ni numeración).\n\n"
   }
 }

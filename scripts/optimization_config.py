@@ -54,11 +54,11 @@ OPTIMIZED_CONFIG = {
         
         # タスク別モデル設定
         "TASK_MODELS": {
-            "chat": "gemini-3.5-flash",  # 通常会話
-            "vision": "gemini-3.5-flash",  # 画像分析
+            "chat": "gemini-3.6-flash",  # 通常会話
+            "vision": "gemini-3.6-flash",  # 画像分析
             "analysis": "gemini-3.1-pro-preview",  # 複雑な分析
             "summary": "gemma3:4b",  # ローカル要約(無料)
-            "feedback": "gemini-3.5-flash（中）"  # フィードバック分析
+            "feedback": "gemini-3.6-flash（中）"  # フィードバック分析
         }
     }
 }
@@ -144,7 +144,7 @@ ECONOMY_MODE = {
 
 PERFORMANCE_MODE = {
     "AI_PROVIDER": "gemini",
-    "MODEL_ID": "gemini-3.5-flash",  # 最高性能
+    "MODEL_ID": "gemini-3.6-flash",  # 最高性能
     "search_switch": True,
     "USE_INTERSECTING_AI": True,  # 複合AI有効
     "PERFORMANCE": {
@@ -159,7 +159,7 @@ PERFORMANCE_MODE = {
 
 BALANCED_MODE = {
     "AI_PROVIDER": "gemini",
-    "MODEL_ID": "gemini-3.5-flash",  # コスパ良好
+    "MODEL_ID": "gemini-3.6-flash",  # コスパ良好
     "MODEL_ID_SUMMARY": "gemma3:4b",  # ローカル要約
     "search_switch": True,
     "USE_INTERSECTING_AI": False,  # 必要時のみ

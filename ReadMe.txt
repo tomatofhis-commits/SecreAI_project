@@ -1,4 +1,4 @@
-　SecreAI - ユーザーガイド (Ver 1.3.0)
+　SecreAI - ユーザーガイド (Ver 1.3.1)
 
 この度は「AI秘書システム SecreAI」をご利用いただきありがとうございます。
 本システムは、Googleの最新AI「Gemini」をメインエンジンとして使用し、会話・視覚（画面キャプチャ）・ネット検索を組み合わせた高度な応答を生成します。
@@ -84,7 +84,7 @@ https://github.com/tomatofhis-commits/SecreAI_project
 ・Good/Badフィードバック: AIの回答を評価します。AIはこれを分析して学習します。
 ・今日の前置条件: AIにその日の状況（遊んでいるゲームなど）を事前に伝えておけます。
 
-4. Ver 1.3.0 の注目機能
+4. Ver 1.3.1 の注目機能
 ◆ ローカルLLM（Ollama / LM Studio）のマルチプロバイダ対応
 　これまでの Ollama に加え、OpenAI互換APIを持つ「LM Studio」との連携に完全対応しました。設定画面でラジオボタンを切り替えるだけで、それぞれの接続URL（Ollama / LM Studio）を保持したまま簡単に切り替えて利用できます。LM Studio のデフォルト接続先はポート 11435 に最適化されています。
 ◆ Google Grounding (Google Search) の月ごと制限カウントへの移行

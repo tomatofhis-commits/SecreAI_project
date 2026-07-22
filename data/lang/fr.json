@@ -363,5 +363,8 @@
     "requests_header": "Requêtes",
     "hits_header": "Succès",
     "btn_update": "Mettre à jour le tableau"
+  },
+  "ai_prompt": {
+    "extract_keywords": "Veuillez extraire 5 mots-clés représentant les intérêts actuels de l'utilisateur à partir du résumé de conversation suivant.\n\n### Règles d'extraction :\n1. Accordez la priorité aux informations importantes à forte fréquence d'apparition (sujets abordés de manière répétée).\n2. Si la fréquence est similaire, donnez la priorité aux informations de conversation les plus récentes.\n3. Affichez uniquement les mots-clés séparés par des virgules (aucune explication ou numérotation supplémentaire n'est nécessaire).\n\n"
   }
 }

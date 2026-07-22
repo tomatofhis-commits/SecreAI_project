@@ -19,7 +19,7 @@ except ImportError:
 
 def get_ai_response(prompt, config, response_json=False):
     provider = config.get("DB_PROVIDER", config.get("AI_PROVIDER", "gemini")).lower()
-    model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-3.5-flash"))
+    model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-3.6-flash"))
 
     try:
         from config_manager import parse_model_name
@@ -116,11 +116,11 @@ def get_ai_response(prompt, config, response_json=False):
                 level = thinking_budget
 
             is_thinking_supported = (
-                actual_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite-preview")
+                actual_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.1-flash-lite-preview")
             )
 
             if is_thinking_supported and level:
-                if actual_model_id == "gemini-3.5-flash":
+                if actual_model_id == "gemini-3.5-flash-lite":
                     if level not in ("medium", "high"):
                         level = "medium"
                 gen_config["thinking_config"] = {"thinking_level": level.upper()}
