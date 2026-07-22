@@ -251,7 +251,7 @@
     "chromadb_error": "ChromaDB Verbindungsfehler: {e}"
   },
   "ai_prompt": {
-    "extract_keywords": "Bitte extrahieren Sie 5 aktuelle Interessenschlüsselwörter des Benutzers aus der folgenden Gesprächszusammenfassung.\n\n### Extraktionsregeln:\n1. Relevante Informationen mit hoher Häufigkeit im Gespräch am stärksten berücksichtigen.\n2. Bei ähnlicher Häufigkeit neuere Informationen bevorzugen.\n3. Nur Schlüsselwörter durch Kommas getrennt ausgeben.",
+    "extract_keywords": "Bitte extrahieren Sie 5 aktuelle Interessenschlüsselwörter des Benutzers aus der folgenden Gesprächszusammenfassung.\n\n### Extraktionsregeln:\n1. Relevante Informationen mit hoher Häufigkeit im Gespräch am stärksten berücksichtigen.\n2. Wenn die Häufigkeit ähnlich ist und eine Eingrenzung schwierig ist, können neuere Gesprächsinformationen bevorzugt werden.\n3. Nur Schlüsselwörter durch Kommas getrennt ausgeben.",
     "role": "あなたはサポートを得意とする頼もしい秘書兼相棒です。",
     "instruction": "状況に合わせて要点をまとめ、丁寧な日本語で【{max_chars}】で回答してください。",
     "stt_notice": "ユーザーの入力は音声認識によるものです。誤変換を補完してください。",
