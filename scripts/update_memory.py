@@ -7,6 +7,7 @@ import sys
 import uuid
 import threading  # <--- これを追加しました
 from datetime import datetime, timedelta
+from collections import Counter
 
 # --- ライブラリのインポート ---
 config_manager = None
@@ -378,11 +379,32 @@ def main(base_path=None):
             recent_data = collection.get(where={"unix": {"$gt": one_week_ago_ts}})
 
             if recent_data and recent_data.get("documents"):
-                all_memories_text = "\n".join(recent_data["documents"])
-                tag_prompt = lang_data["ai_prompt"]["extract_keywords"] + all_memories_text
+                documents = recent_data["documents"]
+                
+                # --- Python による過去7日間の単語出現頻度の事前自動集計 ---
+                ignore_words = {"内容", "検索", "要約", "ネット情報", "システム", "日時", "Error", "failed", "の", "に", "は", "を", "た", "で", "て", "と", "し", "れ", "さ", "ある", "いる", "する", "から", "より", "なる", "こと", "これ", "それ", "これら", "ため", "等", "及", "用", "化", "中", "性", "者", "点", "他", "約", "年", "月", "日", "時", "分", "秒"}
+                words_counter = Counter()
+                for doc in documents:
+                    tokens = re.findall(r'[A-Za-z0-9\-\_]+|[ァ-ヴー]{2,}|[一-龥]{2,}', doc)
+                    for t in tokens:
+                        if t not in ignore_words and len(t) > 1:
+                            words_counter[t] += 1
+                
+                top_frequent_words = words_counter.most_common(15)
+                freq_summary_text = "".join([f"・{w} (出現回数: {c}回)\n" for w, c in top_frequent_words])
+                all_7days_summary_text = "\n".join(documents)
+                
+                extract_template = lang_data["ai_prompt"]["extract_keywords"]
+                if "{freq_summary_text}" in extract_template and "{all_7days_summary_text}" in extract_template:
+                    tag_prompt = extract_template.format(
+                        freq_summary_text=freq_summary_text,
+                        all_7days_summary_text=all_7days_summary_text
+                    )
+                else:
+                    tag_prompt = f"{extract_template}\n\n### 【過去1週間で繰り返し登場している頻出テーマ・キーワード】\n{freq_summary_text}\n\n### 【直近の最新会話 (過去7日分の要約)】\n{all_7days_summary_text}"
                 
                 tag_raw = generate_text(tag_prompt)
-                tags = [t.strip() for t in tag_raw.split(",")]
+                tags = [t.strip() for t in tag_raw.split(",") if t.strip()]
                 
                 with open(tags_file, "w", encoding="utf-8") as f:
                     json.dump({"tags": tags, "updated_at": now.strftime("%Y-%m-%d %H:%M:%S")}, f, ensure_ascii=False, indent=2)

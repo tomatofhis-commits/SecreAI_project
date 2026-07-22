@@ -251,7 +251,7 @@
     "chromadb_error": "Errore di connessione a ChromaDB: {e}"
   },
   "ai_prompt": {
-    "extract_keywords": "Estrai 5 parole chiave di interesse attuale dell'utente dal seguente riepilogo della conversazione.\n\n### Regole di estrazione:\n1. Dare la massima importanza alle informazioni con un'alta frequenza di comparsa.\n2. Se la frequenza è simile e difficile da restringere, è possibile dare priorità alle informazioni più recenti.\n3. Output solo parole chiave separate da virgole.",
+    "extract_keywords": "Sei un maestro dell'organizzazione della memoria.\nAnalizza in modo approfondito i seguenti \"Dati sui argomenti frequenti dell'ultima settimana\" e le \"Conversazioni recenti\", e seleziona e restituisci [esattamente 5] parole chiave di interesse.\n\n### [Temi/Parole chiave frequenti dell'ultima settimana]\n{freq_summary_text}\n\n### [Conversazioni recenti (Riepilogo degli ultimi 7 giorni)]\n{all_7days_summary_text}\n\n### Regole di estrazione:\n1. Dare la massima importanza alle informazioni con un'alta frequenza di comparsa.\n2. Se la frequenza è simile e difficile da restringere, è possibile dare priorità alle informazioni più recenti.\n3. Output solo parole chiave separate da virgole.",
     "role": "あなたはサポートを得意とする頼もしい秘書兼相棒です。",
     "instruction": "状況に合わせて要点をまとめ、丁寧な日本語で【{max_chars}】で回答してください。",
     "stt_notice": "ユーザーの入力は音声認識によるものです。誤変換を補完してください。",
