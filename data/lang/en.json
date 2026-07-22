@@ -264,7 +264,7 @@
     "gatekeeper_approve": "System: Gatekeeper approved the search."
   },
   "ai_prompt": {
-    "extract_keywords": "Please extract 5 current interest keywords of the user from the following conversation summary.\n\n### Extraction Rules:\n1. Prioritize important information with high frequency of occurrence in the conversation.\n2. If frequencies are similar, prioritize newer conversation information.\n3. Output keywords only separated by commas (no extra explanation).",
+    "extract_keywords": "Please extract 5 current interest keywords of the user from the following conversation summary.\n\n### Extraction Rules:\n1. Prioritize important information with high frequency of occurrence in the conversation.\n2. If frequencies are similar and hard to narrow down, newer conversation information may be prioritized.\n3. Output keywords only separated by commas (no extra explanation).",
     "role": "あなたはサポートを得意とする頼もしい秘書兼相棒です。",
     "instruction": "状況に合わせて要点をまとめ、丁寧な日本語で【{max_chars}】で回答してください。",
     "stt_notice": "ユーザーの入力は音声認識によるものです。誤変換を補完してください。",
