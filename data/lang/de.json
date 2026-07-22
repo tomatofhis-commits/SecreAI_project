@@ -363,5 +363,8 @@
     "requests_header": "Anfragen",
     "hits_header": "Treffer",
     "btn_update": "Dashboard aktualisieren"
+  },
+  "ai_prompt": {
+    "extract_keywords": "Bitte extrahieren Sie 5 Schlüsselwörter, die die aktuellen Interessen des Benutzers aus der folgenden Gesprächszusammenfassung darstellen.\n\n### Extraktionsregeln:\n1. Wichtige Informationen mit hoher Häufigkeit (wiederholt besprochene Themen) haben höchste Priorität.\n2. Bei ähnlicher Häufigkeit haben neuere Gesprächsinformationen Vorrang.\n3. Geben Sie nur die Schlüsselwörter durch Kommas getrennt aus (keine zusätzlichen Erklärungen oder Nummerierungen erforderlich).\n\n"
   }
 }

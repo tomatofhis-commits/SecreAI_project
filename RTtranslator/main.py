@@ -2697,7 +2697,7 @@ class ControlPanel(QMainWindow):
 
         
     def _setup_window(self):
-        self.setWindowTitle("Real Time Translate - Control Panel v1.3.0")
+        self.setWindowTitle("Real Time Translate - Control Panel v1.3.1")
         self.setFixedSize(560, 640)
         
     def _setup_ui(self):

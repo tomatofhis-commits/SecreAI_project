@@ -12,8 +12,8 @@ DEFAULT_CONFIG = {
     "GEMINI_API_KEY": "",
     "OPENAI_API_KEY": "",
     "TAVILY_API_KEY": "",
-    "MODEL_ID": "gemini-3.5-flash",
-    "MODEL_ID_PRO": "gemini-3.5-flash（中）",
+    "MODEL_ID": "gemini-3.6-flash",
+    "MODEL_ID_PRO": "gemini-3.6-flash（中）",
     "MODEL_ID_GPT": "gpt-5.4-mini",
     "LOCAL_LLM_PROVIDER": "ollama",
     "OLLAMA_URL": "http://localhost:11434/v1",
@@ -21,7 +21,7 @@ DEFAULT_CONFIG = {
     "MODEL_ID_LOCAL": "gemma3:12b",
     "MODEL_ID_SUMMARY": "gemma3:4b",
     "DB_PROVIDER": "gemini",
-    "DB_MODEL_ID": "gemini-3.5-flash（中）",
+    "DB_MODEL_ID": "gemini-3.6-flash（中）",
     "search_switch": False,
     "SEARCH_PROVIDER": "tavily",
     # SEARCH_PROVIDER の選択肢:
@@ -144,23 +144,24 @@ def migrate_config(config):
             config[_key] = _model_renames[config[_key]]
             migrated = True
 
-    # Gemini 旧モデルの自動置換 (Gemini 2.5 系列終了に伴う 3.5 Flash への移行)
+    # Gemini 旧モデルの自動置換 (gemini-3.6-flash への移行)
     _gemini_renames = {
-        "gemini-2.0-flash": "gemini-3.5-flash",
-        "gemini-2.5-flash-lite": "gemini-3.5-flash",
-        "gemini-2.5-flash": "gemini-3.5-flash"
+        "gemini-2.0-flash": "gemini-3.6-flash",
+        "gemini-2.5-flash-lite": "gemini-3.6-flash",
+        "gemini-2.5-flash": "gemini-3.6-flash",
+        "gemini-3.5-flash": "gemini-3.6-flash"
     }
     
     if config.get("MODEL_ID") in _gemini_renames:
         config["MODEL_ID"] = _gemini_renames[config["MODEL_ID"]]
         migrated = True
         
-    if config.get("MODEL_ID_PRO") in ("gemini-2.0-flash-thinking-exp", "gemini-2.5-flash", "gemini-2.5-flash-lite"):
-        config["MODEL_ID_PRO"] = "gemini-3.5-flash（中）"
+    if config.get("MODEL_ID_PRO") in ("gemini-2.0-flash-thinking-exp", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.5-flash（中）", "gemini-3.5-flash（高）"):
+        config["MODEL_ID_PRO"] = "gemini-3.6-flash（中）"
         migrated = True
         
-    if config.get("DB_MODEL_ID") in ("gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash"):
-        config["DB_MODEL_ID"] = "gemini-3.5-flash（中）"
+    if config.get("DB_MODEL_ID") in ("gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.5-flash（中）", "gemini-3.5-flash（高）", "gemini-3.5-flash（低）", "gemini-3.5-flash（最小）"):
+        config["DB_MODEL_ID"] = "gemini-3.6-flash（中）"
         migrated = True
 
     # 常に最新のデフォルト値で不足しているキーを補完する
