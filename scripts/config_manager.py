@@ -56,6 +56,7 @@ DEFAULT_CONFIG = {
     "TARGET_GAME_TITLE": "All Capture",
     "LANGUAGE": "ja",
     "USE_INTERSECTING_AI": False,
+    "TAG_GENERATION_INTERVAL": 5,
     "FILES": {
         "HISTORY": "data/chat_history.json",
         "CURRENT_TAGS": "data/current_tags.json",
@@ -206,7 +207,9 @@ def load_config(config_path):
 
 def save_config(config_path, config):
     """設定ファイルを保存します。"""
-    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+    dir_path = os.path.dirname(config_path)
+    if dir_path:
+        os.makedirs(dir_path, exist_ok=True)
     try:
         # 保存前にバージョン情報を付与
         config["CONFIG_VERSION"] = CONFIG_VERSION
