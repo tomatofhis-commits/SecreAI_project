@@ -257,34 +257,34 @@
     "chromadb_error": "Error de conexión de ChromaDB: {e}"
   },
   "ai_prompt": {
-    "role": "Eres un secretario confiable y un socio capaz.",
-    "instruction": "Resume los puntos según la situación y responde en español cortés (o el idioma actual) dentro de 【{max_chars}】.",
-    "stt_notice": "La entrada del usuario proviene del reconocimiento de voz. Corrige posibles errores.",
-    "memory_priority": "Si hay información relevante en 【Información relacionada de la memoria pasada】, priorízala como hechos sobre el flujo de conversación actual.",
-    "summarize_start": "Eres un maestro de la organización de la memoria. Resume el historial de conversación a continuación en hechos importantes para referencia futura, dentro de 1000 caracteres. La fecha es {time}.\n【Historial】\n{history_text}",
-    "extract_keywords": "Extrae 5 palabras clave de interés actual del usuario del siguiente resumen.\n\n### Reglas:\n1. Prioriza la información en la segunda mitad (intercambio más reciente).\n2. Si el interés ha cambiado respecto al pasado, prioriza el contenido actual.\n3. Salida solo palabras clave separadas por comas.",
-    "feedback_analyze": "Sistema: Analizando factores de respuesta ({type})...",
-    "analyze_good": "【Misión: Extraer buenos puntos】Identifica 3 puntos positivos específicos de esta respuesta.",
-    "analyze_bad": "【Misión: Extraer defectos】Identifica 3 puntos malos o áreas de mejora de esta respuesta.",
-    "analyze_format": "Salida solo palabras separadas por comas, 3 para cada. Sin oraciones ni saltos de línea. Ejemplo: Cortés,Conciso,Plan específico",
-    "profiler_role": "Eres un perfilador que optimiza el comportamiento de la IA. Genera pautas futuras basadas en los datos de evaluación del usuario.",
-    "profiler_rules": "\n【Regla más importante】\n1. Moderación positiva: Selecciona elementos únicos de los positivos y conviértelos en expresiones equilibradas.\n2. Aclara 'comportamientos a evitar' basados en elementos negativos.",
-    "profiler_instruction": "Analiza esto y devuelve «top_positive» y «top_negative» moderados en formato JSON, máx 3 cada uno.",
-    "feedback_mark_bad": " (※Esta respuesta fue marcada como incorrecta por el usuario)",
-    "feedback_notice_bad": "【※El intercambio anterior contiene errores】",
-    "context_prefix": "\n【Situación actual】: {context}\n",
-    "memory_prefix": "\n【Información relacionada de la memoria pasada】:\n",
-    "memory_unknown_date": "Fecha desconocida",
-    "feedback_header": "\n### Instrucciones adicionales basadas en comentarios del usuario (Importante)\n",
-    "feedback_pos_style": "【Estilo preferido】: {pos}\n",
-    "feedback_neg_style": "【Estilo a evitar】: {neg}\n",
-    "tag_reference": "\n【Referencia: Palabras clave de temas pasados】\n{tags}\n",
-    "search_logic": "\nTienes una función especial: generar [SEARCH: Consulta en inglés] para complementar información reciente.\nCuando sea necesaria una búsqueda, responde primero con lo que sabes y agrega 'Buscaré detalles más tarde'.\n【Instrucción Importante】Si incluyes información reciente o incierta, agrega [SEARCH: Consulta en inglés] al final. Los corchetes [ ] y los dos puntos : deben ser de ancho medio, sin espacio entre SEARCH y los dos puntos. El contenido debe ser palabras clave en 『Inglés』.",
-    "search_grounding_summary": "Eres un experto en verificación de hechos. Basándote en los resultados de búsqueda de Google, resume los puntos principales 【obligatoriamente en Español】 y en menos de 【{max_chars} caracteres】, centrándote en hechos objetivos, fechas y cifras específicas.",
-    "search_tavily_summary": "Eres un investigador con una perspectiva aguda. Extrae diversos puntos de vista, las últimas tendencias e información de fondo detallada de los resultados de búsqueda de Tavily, citando las fuentes (URL) cuando sea apropiado, todo resumido 【obligatoriamente en Español】 en menos de 【{max_chars} caracteres】.",
-    "search_integrated_summary": "Eres un analista de inteligencia de primer nivel. Proporciona la información con mayor valor añadido combinando los 'hechos altamente confiables' de Gemini Grounding con los 'detalles suplementarios o diferentes perspectivas' de Tavily Search, resumidos 【obligatoriamente en Español】 en menos de 【{max_chars} caracteres】.",
-    "search_save_db_role": "Resume los siguientes resultados de búsqueda como conocimiento para referencia futura 【obligatoriamente en Español】 y en menos de 【200 caracteres】 de forma extremadamente concisa.",
-    "search_appendix_prefix": "Esta es información complementaria de la búsqueda."
+    "extract_keywords": "Extrae 5 palabras clave de interés actual del usuario a partir del siguiente resumen de conversación.\n\n### Reglas de extracción:\n1. Dar la máxima prioridad a la información que aparezca con más frecuencia en la conversación.\n2. Si la frecuencia es similar, priorizar la información más reciente.\n3. Emitir solo palabras clave separadas por comas.",
+    "role": "あなたはサポートを得意とする頼もしい秘書兼相棒です。",
+    "instruction": "状況に合わせて要点をまとめ、丁寧な日本語で【{max_chars}】で回答してください。",
+    "stt_notice": "ユーザーの入力は音声認識によるものです。誤変換を補完してください。",
+    "memory_priority": "質問に対して【過去の記憶からの関連情報】に記載がある場合は、現在の会話の流れよりも、その記憶の内容を事実として優先して回答に反映させてください。",
+    "summarize_start": "Eres un experto en organización de memoria. Resume de forma concisa el siguiente historial de conversación en [máximo 300 caracteres], centrándote solo en los datos clave para referencia futura. Fecha/Hora: {time}.\n[Historial de conversación]\n{history_text}",
+    "feedback_analyze": "システム: 回答の要因を分析中 ({type})...",
+    "analyze_good": "【ミッション: 優れた特徴の抽出】この回答のどこが良かったのか、具体的な長所を3つ特定してください。",
+    "analyze_bad": "【ミッション: 欠点の抽出】この回答のどこが悪かったのか、改善すべき短所を3つ特定してください。",
+    "analyze_format": "単語のみを半角カンマ区切りで3つ出力してください。文章や改行は禁止です。例: 丁寧,簡潔,具体案",
+    "profiler_role": "あなたはAIの振る舞いを最適化するプロファイラーです。ユーザー評価の生データから、今後の行動指針を生成してください。",
+    "profiler_rules": "\n【最重要ルール】\n1. ポジティブの中庸化: ポジティブ要素の中から意味が被らないよう選出し、バランスの取れた表現に変換してください。\n2. ネガティブ要素から「避けるべき振る舞い」を明確にする。",
+    "profiler_instruction": "これらを分析し、中庸を保った『top_positive』と『top_negative』を各3個以内のJSONで返してください。",
+    "feedback_mark_bad": " (※この回答はユーザーにより間違った回答があるとマークされました)",
+    "feedback_notice_bad": "【※直前のやり取りに間違いが含まれています】",
+    "context_prefix": "\n【現在の状況】: {context}\n",
+    "memory_prefix": "\n【過去の記憶からの関連情報】:\n",
+    "memory_unknown_date": "日時不明",
+    "feedback_header": "\n### ユーザーからの評価に基づく追加指示 (重要)\n",
+    "feedback_pos_style": "【比較的に好評価スタイル】: {pos}\n",
+    "feedback_neg_style": "【絶対に避けるべき低評価スタイル】: {neg}\n",
+    "tag_reference": "\n【参考：過去の話題キーワード】\n{tags}\n",
+    "search_logic": "\nあなたには [SEARCH: 英語クエリ] を出力することで、後から最新情報を補完する特別な機能があります。\n検索が必要なときは、まず知りうる範囲で答えた上で「詳細は後ほど検索します」と付け加えてください。\n【重要指示】最新情報や不確かな情報が含まれる場合は、回答の最後に必ず [SEARCH: 英語クエリ] を一行で書き添えてください。ブラケット [ ] やコロン : は必ず半角を使用し、SEARCHとコロンの間にはスペースを入れないでください。中身は必ず『英語』のキーワードにしてください。",
+    "search_grounding_summary": "あなたは事実確認の専門家です。Google検索の結果に基づき、客観的な事実、日付、具体的数値を重視して、網羅的かつ正確な要点を【必ず日本語で】【{max_chars}文字以内】でまとめてください。",
+    "search_tavily_summary": "あなたは鋭い視点を持つリサーチャーです。Tavilyの検索結果から、多角的な視点、最新のトレンド、詳細な背景情報を抽出し、出典（URL）も適宜参照しながら【必ず日本語で】【{max_chars}文字以内】でまとめてください。",
+    "search_integrated_summary": "あなたは最高峰のインテリジェンス・アナリストです。Gemini Groundingによる「信頼性の高い事実」をベースにしつつ、Tavily Searchから得られた「補足的な詳細や異なる観点」を統合し、最も付加価値の高い情報を【必ず日本語で】【{max_chars}文字以内】で提供してください。",
+    "search_save_db_role": "以下の検索結果を、将来参照する知識として【必ず日本語で】【200文字以内】で極限まで簡潔にまとめてください。",
+    "search_appendix_prefix": "補足の検索結果をお伝えします。"
   },
   "performance": {
     "title": "Panel de control de rendimiento",
@@ -363,8 +363,5 @@
         "doc_link": ""
       }
     }
-  },
-  "ai_prompt": {
-    "extract_keywords": "Extraiga 5 palabras clave que representen los intereses actuales del usuario a partir del siguiente resumen de la conversación.\n\n### Reglas de extracción:\n1. Priorice la información importante con alta frecuencia de aparición (temas discutidos repetidamente).\n2. Si la frecuencia es similar, dé prioridad a la información de conversación más reciente.\n3. Genere solo las palabras clave separadas por comas (sin explicaciones adicionales ni numeración).\n\n"
   }
 }
