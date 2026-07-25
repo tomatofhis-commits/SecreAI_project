@@ -7,6 +7,7 @@ import sys
 import uuid
 import threading  # <--- これを追加しました
 from datetime import datetime, timedelta
+from collections import Counter
 # --- 日付・時間・数値判定フィルター ---
 def is_date_or_number(text: str) -> bool:
     """文字列が日付、時刻、年号、または純粋な数値であるかを判定します。"""
