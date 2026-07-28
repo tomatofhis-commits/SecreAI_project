@@ -117,6 +117,9 @@ class MemoryViewer:
         self.btn_bulk = ttk.Button(btn_f, text=self.l_set.get("btn_bulk_summarize", "Bulk Summarize"), command=self.run_bulk_summarize)
         self.btn_bulk.pack(side="left", padx=5)
         
+        self.btn_repair_tags = ttk.Button(btn_f, text=self.l_set.get("btn_repair_tags", "タグ修復 (Repair Tags)"), command=self.run_repair_tags)
+        self.btn_repair_tags.pack(side="left", padx=5)
+        
         ttk.Button(btn_f, text=self.l_set.get("btn_refresh", "Refresh"), command=self.load_data).pack(side="right", padx=5)
 
         # --- タブ2: パフォーマンスダッシュボード ---
@@ -368,13 +371,19 @@ class MemoryViewer:
 
                 final_ts = infer_date(entry_id, val[1])
                 
+                # 名詞・キーワードの自動抽出（タグの維持・更新）
+                ignore_words = {"内容", "検索", "要約", "ネット情報", "システム", "日時", "Error", "failed", "の", "に", "は", "を", "た", "で", "て", "と", "し", "れ", "さ", "ある", "いる", "する", "から", "より", "なる", "こと", "これ", "それ", "これら", "ため", "等", "及", "用", "化", "中", "性", "者", "点", "他", "約", "年", "月", "日", "時", "分", "秒"}
+                auto_tags = re.findall(r'[A-Za-z0-9\-\_]+|[ァ-ヴー]{2,}|[一-龠]{2,}', new_content)
+                clean_tags = list(set([t for t in auto_tags if t not in ignore_words and len(t) > 1]))
+                tags_str = ",".join(clean_tags[:10])
+
                 # ChromaDB更新（改善: 接続プールで3-5倍高速化）
                 collection = get_chroma_collection(self.db_path)
                 
                 collection.update(
                     ids=[entry_id],
                     documents=[new_content],
-                    metadatas=[{"timestamp": final_ts}]
+                    metadatas=[{"timestamp": final_ts, "tags": tags_str}]
                 )
                 
                 self.root.after(0, lambda: self.finish_summarize("Success", "Summarized successfully."))
@@ -390,6 +399,68 @@ class MemoryViewer:
             messagebox.showinfo(title, msg, parent=self.root)
         else:
             messagebox.showerror(title, msg, parent=self.root)
+
+    def run_repair_tags(self):
+        """データベース内のすべての記憶に対して名詞タグ（tags）を全自動で再生成・修復・更新する"""
+        if not messagebox.askyesno("Confirm", "データベース内の全記憶データを解析し、タグ（キーワード）を一括修復・更新しますか？\n（※数秒〜数分で完了します）", parent=self.root):
+            return
+
+        self.btn_repair_tags.config(state="disabled", text="タグ修復中...")
+
+        def process():
+            try:
+                collection = get_chroma_collection(self.db_path)
+                all_data = collection.get()
+                
+                ids = all_data.get("ids", [])
+                documents = all_data.get("documents", [])
+                metadatas = all_data.get("metadatas", [])
+                
+                if not ids:
+                    self.root.after(0, lambda: self.finish_repair_tags(True, "データベースに記憶データが存在しません。"))
+                    return
+
+                ignore_words = {"内容", "検索", "要約", "ネット情報", "システム", "日時", "Error", "failed", "の", "に", "は", "を", "た", "で", "て", "と", "し", "れ", "さ", "ある", "いる", "する", "から", "より", "なる", "こと", "これ", "それ", "これら", "ため", "等", "及", "用", "化", "中", "性", "者", "点", "他", "約", "年", "月", "日", "時", "分", "秒"}
+
+                updated_count = 0
+                total = len(ids)
+
+                for i in range(total):
+                    eid = ids[i]
+                    doc = documents[i] if i < len(documents) else ""
+                    meta = dict(metadatas[i]) if (i < len(metadatas) and metadatas[i]) else {}
+
+                    # 名詞・固有名詞・キーワード抽出
+                    auto_tags = re.findall(r'[A-Za-z0-9\-\_]+|[ァ-ヴー]{2,}|[一-龠]{2,}', doc)
+                    clean_tags = list(set([t for t in auto_tags if t not in ignore_words and len(t) > 1]))
+                    tags_str = ",".join(clean_tags[:10])
+
+                    meta["tags"] = tags_str
+
+                    collection.update(
+                        ids=[eid],
+                        metadatas=[meta]
+                    )
+                    updated_count += 1
+                    
+                    if i % 10 == 0 or i == total - 1:
+                        progress_txt = f"タグ修復中 ({i+1}/{total})..."
+                        self.root.after(0, lambda txt=progress_txt: self.btn_repair_tags.config(text=txt))
+
+                msg = f"合計 {updated_count} 件の記憶データのタグを一括修復・更新しました。"
+                self.root.after(0, lambda: self.finish_repair_tags(True, msg))
+            except Exception as e:
+                self.root.after(0, lambda err=e: self.finish_repair_tags(False, f"タグ修復エラー: {err}"))
+
+        threading.Thread(target=process, daemon=True).start()
+
+    def finish_repair_tags(self, success, msg):
+        self.btn_repair_tags.config(state="normal", text=self.l_set.get("btn_repair_tags", "タグ修復 (Repair Tags)"))
+        self.load_data()
+        if success:
+            messagebox.showinfo("成功", msg, parent=self.root)
+        else:
+            messagebox.showerror("エラー", msg, parent=self.root)
 
     def finish_bulk_summarize(self, success, msg):
         self.btn_bulk.config(state="normal", text=self.l_set.get("btn_bulk_summarize", "Bulk Summarize"))
@@ -450,10 +521,16 @@ class MemoryViewer:
                         else:
                             final_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     
+                    # 名詞・キーワードの自動抽出（タグの維持・更新）
+                    ignore_words = {"内容", "検索", "要約", "ネット情報", "システム", "日時", "Error", "failed", "の", "に", "は", "を", "た", "で", "て", "と", "し", "れ", "さ", "ある", "いる", "する", "から", "より", "なる", "こと", "これ", "それ", "これら", "ため", "等", "及", "用", "化", "中", "性", "者", "点", "他", "約", "年", "月", "日", "時", "分", "秒"}
+                    auto_tags = re.findall(r'[A-Za-z0-9\-\_]+|[ァ-ヴー]{2,}|[一-龠]{2,}', new_content)
+                    clean_tags = list(set([t for t in auto_tags if t not in ignore_words and len(t) > 1]))
+                    tags_str = ",".join(clean_tags[:10])
+
                     collection.update(
                         ids=[entry_id],
                         documents=[new_content],
-                        metadatas=[{"timestamp": final_ts}]
+                        metadatas=[{"timestamp": final_ts, "tags": tags_str}]
                     )
                 
                 self.root.after(0, lambda: self.finish_bulk_summarize(True, "Bulk summarization completed."))

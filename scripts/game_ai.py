@@ -49,6 +49,18 @@ except ImportError:
         config_manager = None
         print("警告: api_cache_system.py または config_manager.py が見つかりません。")
 
+# ワーキングメモリ管理システムのインポート (Ver 1.3.2)
+try:
+    from .working_memory_manager import WorkingMemoryManager
+except ImportError:
+    try:
+        from working_memory_manager import WorkingMemoryManager
+    except ImportError:
+        WorkingMemoryManager = None
+        print("警告: working_memory_manager.py が見つかりません。")
+
+global_working_memory = WorkingMemoryManager(max_context_chars=3000) if WorkingMemoryManager else None
+
 # --- 1. ロックの準備 ---
 file_lock = threading.Lock()
 active_session_id = None
@@ -319,18 +331,17 @@ def get_feedback_context(root):
         return ctx
     except: return ""
 
-def search_long_term_memory(query, history=None, root=None, n_results=5):
-    """改善版: 接続プールを使用した長期記憶検索"""
+def search_long_term_memory(query, history=None, root=None, n_results=50, is_all_mode=False):
+    """Ver 1.3.2 改善版: ハイブリッド検索＆ワーキングメモリによる多段階フィルタリング長期記憶検索"""
     try:
         db_path = os.path.join(root, "memory_db")
         if not os.path.exists(db_path): 
             return ""
         
-        # 改善: 接続プールから取得（高速化）
+        # 接続プールから取得（高速化）
         if get_chroma_collection:
             collection = get_chroma_collection(db_path)
         else:
-            # フォールバック: 従来の方法
             client_db = chromadb.PersistentClient(path=db_path)
             collection = client_db.get_collection("long_term_memory")
         
@@ -342,23 +353,79 @@ def search_long_term_memory(query, history=None, root=None, n_results=5):
                 context_snippet += clean_msg + " "
             search_query = f"{context_snippet.strip()} {query}"
         
-        results = collection.query(query_texts=[search_query], n_results=n_results)
+        # 取得件数の決定（全件モードまたは多段階上位50件）
+        fetch_limit = 500 if is_all_mode else n_results
         
+        # 1. ベクトル検索 (意味の類似度)
+        results = collection.query(query_texts=[search_query], n_results=fetch_limit)
+        
+        combined_dict = {}
         if results['documents'] and len(results['documents'][0]) > 0:
             docs = results['documents'][0]
             metas = results['metadatas'][0] if results['metadatas'] else []
-            combined = []
             for i in range(len(docs)):
-                combined.append({"doc": docs[i], "meta": metas[i] if metas else {}})
-            combined.sort(key=lambda x: x["meta"].get("unix") or 0, reverse=True)
+                doc_text = docs[i]
+                meta = metas[i] if metas else {}
+                combined_dict[doc_text] = meta
+
+        # 2. 名詞・固有名詞によるハイブリッド検索（ChromaDBテキスト部分一致 / 補強）
+        if global_working_memory:
+            keywords = global_working_memory.extract_search_keywords(query)
+            for kw in keywords:
+                try:
+                    # ChromaDB の where_document (contains) でキーワード直接一致を検索
+                    kw_results = collection.get(where_document={"$contains": kw}, limit=20)
+                    if kw_results and kw_results.get("documents"):
+                        kw_docs = kw_results["documents"]
+                        kw_metas = kw_results["metadatas"] if kw_results.get("metadatas") else []
+                        for j in range(len(kw_docs)):
+                            d_text = kw_docs[j]
+                            m_data = kw_metas[j] if j < len(kw_metas) else {}
+                            if d_text not in combined_dict:
+                                combined_dict[d_text] = m_data
+                except Exception as kw_e:
+                    pass
+
+        # リストに統合
+        combined = [{"doc": doc, "meta": meta} for doc, meta in combined_dict.items()]
+        combined.sort(key=lambda x: x["meta"].get("unix") or 0, reverse=True)
+        
+        # 全件まとめモードの場合は指定キーワードを含む過去ログを最優先抽出
+        if is_all_mode:
+            all_kw_docs = {}
+            if global_working_memory:
+                keywords = global_working_memory.extract_search_keywords(query)
+                for kw in keywords:
+                    try:
+                        kw_all = collection.get(where_document={"$contains": kw})
+                        if kw_all and kw_all.get("documents"):
+                            docs_list = kw_all["documents"]
+                            metas_list = kw_all["metadatas"] if kw_all.get("metadatas") else []
+                            for idx in range(len(docs_list)):
+                                all_kw_docs[docs_list[idx]] = metas_list[idx] if idx < len(metas_list) else {}
+                    except: pass
             
-            context = "\n【過去の記憶からの関連情報】:\n"
-            for item in combined:
+            # キーワード一致ログがあればそれを優先、なければ取得分を使用
+            target_list = [{"doc": k, "meta": v} for k, v in all_kw_docs.items()] if all_kw_docs else combined
+            target_list.sort(key=lambda x: x["meta"].get("unix") or 0, reverse=True)
+
+            context = "\n【抽出された過去の記憶全件】:\n"
+            for item in target_list:
                 date_val = item["meta"].get("timestamp") or "日時不明"
                 context += f"・[{date_val}] {item['doc']}\n"
             return context
+
+        if global_working_memory:
+            return global_working_memory.filter_and_format_memory(combined, query)
+        else:
+            # フォールバック処理
+            context = "\n【過去の記憶からの関連情報】:\n"
+            for item in combined[:5]:
+                date_val = item["meta"].get("timestamp") or "日時不明"
+                context += f"・[{date_val}] {item['doc']}\n"
+            return context
+
     except Exception as e:
-        # main()から離れた場所なので、多言語化が難しい場合は英語で最小限に
         send_log_to_hub(f"Memory Search Error: {e}", is_error=True)
     return ""
 
@@ -758,6 +825,10 @@ def save_search_to_db(full_summary, query, config, root):
             ids=[f"web_{int(unix_time)}"]
         )
         
+        # ワーキングメモリの「ネット検索スロット」を更新（直後会話の優先コンテキスト化）
+        if global_working_memory:
+            global_working_memory.update_web_search_slot(query, short_summary)
+
         send_log_to_hub(log_m.get("search_recorded", "システム: 検索情報を「ネット情報」としてDBに記録しました。"))
 
     except Exception as e:
@@ -810,7 +881,27 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
     global gemini_client, openai_client
     history = load_history_manual(root)
     max_chars = config.get("MAX_CHARS", "700文字以内")
-    long_term_ctx = search_long_term_memory(prompt, history, root)
+    # まとめ・要約要求の動的判定 (Ver 1.3.2)
+    if global_working_memory and global_working_memory.is_summary_request(prompt):
+        send_log_to_hub("システム: 「まとめ・要約」要求を検知。条件付き動的ローカル要約を実行中...")
+        raw_all_memory = search_long_term_memory(prompt, history, root, is_all_mode=True)
+        if raw_all_memory:
+            summary_prompt = (
+                "以下の抽出された過去の記憶・会話ログから、ユーザーが求めている主題・出来事・決定事項に関する主要内容と詳細を、"
+                "最大5000文字以内でまとめた要約テキストを作成してください。\n\n"
+                f"【抽出データ】:\n{raw_all_memory}"
+            )
+            summarized_ctx = call_local_llm_chat(config, [{'role': 'user', 'content': summary_prompt}])[:5000]
+            long_term_ctx = f"\n【抽出ログの動的要約 (5000文字以内)】:\n{summarized_ctx}\n"
+        else:
+            long_term_ctx = search_long_term_memory(prompt, history, root)
+    else:
+        long_term_ctx = search_long_term_memory(prompt, history, root)
+
+    # 会話ターン経過によるネット検索スロットTTLの減少
+    if global_working_memory:
+        global_working_memory.decrement_ttl()
+
     today_ctx_str = f"\n【現在の状況】: {config.get('TODAY_CONTEXT', '')}\n" if config.get('TODAY_CONTEXT') else ""
     feedback_ctx = get_feedback_context(root)
     mid_term_ctx = get_mid_term_context(root)

@@ -33,6 +33,13 @@ def is_date_or_number(text: str) -> bool:
     return False
 
 # --- ライブラリのインポート ---
+current_script_dir = os.path.dirname(os.path.abspath(__file__))
+app_root_dir = os.path.dirname(current_script_dir)
+if current_script_dir not in sys.path:
+    sys.path.insert(0, current_script_dir)
+if app_root_dir not in sys.path:
+    sys.path.insert(0, app_root_dir)
+
 config_manager = None
 APICache = None
 
@@ -42,19 +49,14 @@ try:
     import google.genai as genai
     from openai import OpenAI
     import chromadb
-    from .chromadb_pool import get_chroma_collection
-    from .api_cache_system import APICache
-    from . import config_manager
+    from chromadb_pool import get_chroma_collection
+    from api_cache_system import APICache
+    import config_manager
 except ImportError:
     try:
-        import pygame
-        import numpy as np
-        import google.genai as genai
-        from openai import OpenAI
-        import chromadb
-        from chromadb_pool import get_chroma_collection
-        from api_cache_system import APICache
-        import config_manager
+        from .chromadb_pool import get_chroma_collection
+        from .api_cache_system import APICache
+        from . import config_manager
     except ImportError as e:
         try:
             url = "http://127.0.0.1:5000/api/log"
@@ -168,7 +170,7 @@ def main(base_path=None):
     # APIキャッシュの初期化
     cache_enabled = config.get("API_CACHE_ENABLED", True)
     api_cache = None
-    if cache_enabled:
+    if cache_enabled and APICache is not None:
         cache_dir = os.path.join(base, "data", "api_cache")
         ttl_hours = config.get("API_CACHE_TTL_HOURS", 24)
         api_cache = APICache(cache_dir, ttl_hours=ttl_hours)
@@ -365,15 +367,19 @@ def main(base_path=None):
         # settings_ui や maintenance と同じく、APP_ROOT直下の memory_db を指定します
         db_path = os.path.join(base, "memory_db") 
 
-        # --- 3. ChromaDBへの保存 (改善: 接続プール使用で3-5倍高速化) ---
-        collection = get_chroma_collection(db_path)
+        # --- 名詞・キーワードの自動抽出（ハイブリッド検索・タグ強化） ---
+        auto_tags = re.findall(r'[A-Za-z0-9\-\_]+|[ァ-ヴー]{2,}|[一-龥]{2,}', new_summary)
+        ignore_words = {"内容", "検索", "要約", "ネット情報", "システム", "日時", "Error", "failed", "の", "に", "は", "を", "た", "で", "て", "と", "し", "れ", "さ", "ある", "いる", "する", "から", "より", "なる", "こと", "これ", "それ", "これら", "ため", "等", "及", "用", "化", "中", "性", "者", "点", "他", "約", "年", "月", "日", "時", "分", "秒"}
+        clean_tags = list(set([t for t in auto_tags if t not in ignore_words and len(t) > 1 and not is_date_or_number(t)]))
+        tags_str = ",".join(clean_tags[:10])
 
         mem_id = f"mem_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:4]}"
         collection.add(
             documents=[new_summary],
             metadatas=[{
                 "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"), 
-                "unix": now.timestamp()
+                "unix": now.timestamp(),
+                "tags": tags_str
             }],
             ids=[mem_id]
         )
@@ -406,8 +412,13 @@ def main(base_path=None):
         tag_count += 1
 
         if tag_count >= tag_interval:
+            send_log_to_hub(f"System: Generating mid-term memory tags ({tag_count}/{tag_interval})...")
             one_week_ago_ts = (now - timedelta(days=7)).timestamp()
             recent_data = collection.get(where={"unix": {"$gt": one_week_ago_ts}})
+
+            # 万が一 7日以内の指定クエリでヒットしない場合は全件フォールバック
+            if not (recent_data and recent_data.get("documents")):
+                recent_data = collection.get()
 
             if recent_data and recent_data.get("documents"):
                 documents = recent_data["documents"]
@@ -439,6 +450,7 @@ def main(base_path=None):
                 
                 with open(tags_file, "w", encoding="utf-8") as f:
                     json.dump({"tags": tags, "updated_at": now.strftime("%Y-%m-%d %H:%M:%S")}, f, ensure_ascii=False, indent=2)
+                send_log_to_hub(f"System: Mid-term memory tags updated successfully ({len(tags)} tags).")
             
             tag_count = 0 
         else:
