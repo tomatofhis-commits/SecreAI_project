@@ -372,5 +372,11 @@
         "requests_header": "Requests",
         "hits_header": "Hits",
         "btn_update": "Update Info"
+    },
+    "summary_intent_pattern": "summariz|summary|recap|overview|digest|review|wrap up|what did we talk|main point|roundup|gist|brief",
+    "memory_viewer": {
+        "btn_repair_tags": "Repair Tags",
+        "msg_repair_tags_confirm": "Analyze all memories in the database and repair metadata tags?\n(Takes a few seconds to minutes)",
+        "msg_repair_tags_done": "Successfully repaired tags for {count} memory entries."
     }
 }

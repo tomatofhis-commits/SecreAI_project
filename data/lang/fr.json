@@ -365,5 +365,11 @@
         "requests_header": "Requêtes",
         "hits_header": "Succès",
         "btn_update": "Mettre à jour le tableau"
+    },
+    "summary_intent_pattern": "résum|récap|synthé|points clés|de quoi on a parlé|de quoi on a parl|aperçu|grandes lignes",
+    "memory_viewer": {
+        "btn_repair_tags": "Réparer les étiquettes (Repair Tags)",
+        "msg_repair_tags_confirm": "Analyser tous les souvenirs et réparer les étiquettes de métadonnées ?\n(Prend quelques secondes)",
+        "msg_repair_tags_done": "Étiquettes réparées avec succès pour {count} entrées de mémoire."
     }
 }

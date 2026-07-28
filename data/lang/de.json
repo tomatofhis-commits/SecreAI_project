@@ -365,5 +365,11 @@
         "requests_header": "Anfragen",
         "hits_header": "Treffer",
         "btn_update": "Dashboard aktualisieren"
+    },
+    "summary_intent_pattern": "zusammenfass|zusammengefass|überblick|überprüf|hauptpunkt|fazit|worüber haben wir|resümee|zusammen",
+    "memory_viewer": {
+        "btn_repair_tags": "Tags reparieren (Repair Tags)",
+        "msg_repair_tags_confirm": "Alle Erinnerungen analysieren und Metadaten-Tags reparieren?\n(Dauert einige Sekunden)",
+        "msg_repair_tags_done": "Tags für {count} Erinnerungseinträge erfolgreich repariert."
     }
 }

@@ -8,8 +8,9 @@ import re
 import os
 import sys
 
-# 意図検知パターン（まとめ・要約・振り返りなどの表現を包括）
-SUMMARY_INTENT_PATTERN = r"(まとめ|要約|おさらい|振り返|どんな話|経緯|ダイジェスト|要点|整理|記録|リスト|一覧|かいつまんで)"
+# 全10言語の意図検知パターン（各言語の過去形・活用変化・口語・表記揺れを包括）
+GLOBAL_SUMMARY_INTENT_PATTERN = r"(まとめ|要約|おさらい|振り返|どんな話|経緯|ダイジェスト|要点|整理|記録|リスト|一覧|かいくまんで|summariz|summary|recap|overview|digest|review|wrap up|what did we talk|main point|roundup|gist|brief|总结|摘要|概括|回顾|盘点|综述|梳理|之前聊了|刚才说了|提炼|简述|요약|정리|복습|되돌아|줄거리|개요|무슨 이야기|지금까지|resum|recopila|repas|puntos clave|síntes|de qué hablamos|compendio|résum|récap|grandes lignes|de quoi on a parlé|de quoi on a parl|zusammenfass|zusammengefass|überblick|überprüf|hauptpunkt|fazit|worüber haben wir|resümee|zusammen|итог|резюм|обобщ|кратко|главное|о чем|говор|конспект|выжимка|обзор|recapitul|pontos principais|visão geral|do que falamos|riassum|ricapitol|panoramica|di cosa abbiamo parlato|sommario)"
+SUMMARY_INTENT_PATTERN = GLOBAL_SUMMARY_INTENT_PATTERN
 
 class WorkingMemoryManager:
     def __init__(self, max_context_chars: int = 3000, default_ttl: int = 3):
@@ -30,13 +31,15 @@ class WorkingMemoryManager:
         # 直前のコンテキスト記憶キャッシュ (重複排除用)
         self.recent_memory_hashes = set()
 
-    def is_summary_request(self, text: str) -> bool:
+    def is_summary_request(self, text: str, custom_pattern: str = None) -> bool:
         """
-        ユーザー入力が「まとめ・要約・振り返り」などの特定指示を含んでいるかを判定
+        ユーザー入力が「まとめ・要約・振り返り」などの特定指示を含んでいるかを判定（全10言語対応）
         """
         if not text:
             return False
-        return bool(re.search(SUMMARY_INTENT_PATTERN, text))
+        
+        pattern = custom_pattern if custom_pattern else GLOBAL_SUMMARY_INTENT_PATTERN
+        return bool(re.search(pattern, text, re.IGNORECASE))
 
     def extract_search_keywords(self, text: str) -> list:
         """

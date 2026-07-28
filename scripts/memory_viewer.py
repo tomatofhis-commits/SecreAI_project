@@ -44,6 +44,7 @@ class MemoryViewer:
         # 言語データ取得
         self.l_set = parent.lang.get("settings", {})
         self.sys_lang = parent.lang.get("system", {})
+        self.mv_lang = parent.lang.get("memory_viewer", {})
         
         self.setup_ui()
         self.load_data()
@@ -117,7 +118,8 @@ class MemoryViewer:
         self.btn_bulk = ttk.Button(btn_f, text=self.l_set.get("btn_bulk_summarize", "Bulk Summarize"), command=self.run_bulk_summarize)
         self.btn_bulk.pack(side="left", padx=5)
         
-        self.btn_repair_tags = ttk.Button(btn_f, text=self.l_set.get("btn_repair_tags", "タグ修復 (Repair Tags)"), command=self.run_repair_tags)
+        btn_repair_txt = self.mv_lang.get("btn_repair_tags", self.l_set.get("btn_repair_tags", "タグ修復 (Repair Tags)"))
+        self.btn_repair_tags = ttk.Button(btn_f, text=btn_repair_txt, command=self.run_repair_tags)
         self.btn_repair_tags.pack(side="left", padx=5)
         
         ttk.Button(btn_f, text=self.l_set.get("btn_refresh", "Refresh"), command=self.load_data).pack(side="right", padx=5)
@@ -402,10 +404,11 @@ class MemoryViewer:
 
     def run_repair_tags(self):
         """データベース内のすべての記憶に対して名詞タグ（tags）を全自動で再生成・修復・更新する"""
-        if not messagebox.askyesno("Confirm", "データベース内の全記憶データを解析し、タグ（キーワード）を一括修復・更新しますか？\n（※数秒〜数分で完了します）", parent=self.root):
+        confirm_msg = self.mv_lang.get("msg_repair_tags_confirm", "データベース内の全記憶データを解析し、タグ（キーワード）を一括修復・更新しますか？\n（※数秒〜数分で完了します）")
+        if not messagebox.askyesno("Confirm", confirm_msg, parent=self.root):
             return
 
-        self.btn_repair_tags.config(state="disabled", text="タグ修復中...")
+        self.btn_repair_tags.config(state="disabled", text="修復中 / Repairing...")
 
         def process():
             try:
@@ -417,7 +420,7 @@ class MemoryViewer:
                 metadatas = all_data.get("metadatas", [])
                 
                 if not ids:
-                    self.root.after(0, lambda: self.finish_repair_tags(True, "データベースに記憶データが存在しません。"))
+                    self.root.after(0, lambda: self.finish_repair_tags(True, "No entries found."))
                     return
 
                 ignore_words = {"内容", "検索", "要約", "ネット情報", "システム", "日時", "Error", "failed", "の", "に", "は", "を", "た", "で", "て", "と", "し", "れ", "さ", "ある", "いる", "する", "から", "より", "なる", "こと", "これ", "それ", "これら", "ため", "等", "及", "用", "化", "中", "性", "者", "点", "他", "約", "年", "月", "日", "時", "分", "秒"}
@@ -444,13 +447,14 @@ class MemoryViewer:
                     updated_count += 1
                     
                     if i % 10 == 0 or i == total - 1:
-                        progress_txt = f"タグ修復中 ({i+1}/{total})..."
+                        progress_txt = f"Repairing ({i+1}/{total})..."
                         self.root.after(0, lambda txt=progress_txt: self.btn_repair_tags.config(text=txt))
 
-                msg = f"合計 {updated_count} 件の記憶データのタグを一括修復・更新しました。"
+                done_fmt = self.mv_lang.get("msg_repair_tags_done", "合計 {count} 件の記憶データのタグを一括修復・更新しました。")
+                msg = done_fmt.replace("{count}", str(updated_count))
                 self.root.after(0, lambda: self.finish_repair_tags(True, msg))
             except Exception as e:
-                self.root.after(0, lambda err=e: self.finish_repair_tags(False, f"タグ修復エラー: {err}"))
+                self.root.after(0, lambda err=e: self.finish_repair_tags(False, f"Error: {err}"))
 
         threading.Thread(target=process, daemon=True).start()
 

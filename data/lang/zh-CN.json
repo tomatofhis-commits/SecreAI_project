@@ -365,5 +365,11 @@
         "requests_header": "请求",
         "hits_header": "命中",
         "btn_update": "更新信息"
+    },
+    "summary_intent_pattern": "总结|摘要|概括|回顾|盘点|综述|要点|梳理|之前聊了|刚才说了|提炼|简述",
+    "memory_viewer": {
+        "btn_repair_tags": "修复标签 (Repair Tags)",
+        "msg_repair_tags_confirm": "是否解析数据库中的所有记忆并批量修复标签？\n（耗时几秒至几分钟）",
+        "msg_repair_tags_done": "成功修复了 {count} 条记忆数据的标签。"
     }
 }

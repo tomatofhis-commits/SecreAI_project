@@ -363,5 +363,11 @@
         "requests_header": "요청",
         "hits_header": "히트",
         "btn_update": "대시보드 업데이트"
+    },
+    "summary_intent_pattern": "요약|정리|복습|되돌아|요점|줄거리|개요|무슨 이야기|정리해|요약해|지금까지",
+    "memory_viewer": {
+        "btn_repair_tags": "태그 복구 (Repair Tags)",
+        "msg_repair_tags_confirm": "데이터베이스의 모든 기억을 분석하여 태그(키워드)를 일괄 복구하시겠습니까?\n(몇 초~몇 분 소요)",
+        "msg_repair_tags_done": "총 {count} 건의 기억 데이터 태그를 일괄 복구했습니다."
     }
 }

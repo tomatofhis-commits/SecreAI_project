@@ -359,5 +359,11 @@
         "requests_header": "Richieste",
         "hits_header": "Hit",
         "btn_update": "Aggiorna pannello"
+    },
+    "summary_intent_pattern": "riassum|ricapitol|punti chiave|panoramica|sintesi|di cosa abbiamo parlato|sommario",
+    "memory_viewer": {
+        "btn_repair_tags": "Ripara tag (Repair Tags)",
+        "msg_repair_tags_confirm": "Analizzare tutti i ricordi e riparare i tag dei metadati?\n(Richiede pochi secondi)",
+        "msg_repair_tags_done": "Tag riparati con successo per {count} elementi di memoria."
     }
 }

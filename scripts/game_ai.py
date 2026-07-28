@@ -881,8 +881,9 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
     global gemini_client, openai_client
     history = load_history_manual(root)
     max_chars = config.get("MAX_CHARS", "700文字以内")
-    # まとめ・要約要求の動的判定 (Ver 1.3.2)
-    if global_working_memory and global_working_memory.is_summary_request(prompt):
+    # まとめ・要約要求の動的判定 (Ver 1.3.2 多言語対応)
+    lang_pattern = lang_data.get("summary_intent_pattern") if isinstance(lang_data, dict) else None
+    if global_working_memory and global_working_memory.is_summary_request(prompt, custom_pattern=lang_pattern):
         send_log_to_hub("システム: 「まとめ・要約」要求を検知。条件付き動的ローカル要約を実行中...")
         raw_all_memory = search_long_term_memory(prompt, history, root, is_all_mode=True)
         if raw_all_memory:

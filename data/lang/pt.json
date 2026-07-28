@@ -365,5 +365,11 @@
         "requests_header": "Solicitações",
         "hits_header": "Acertos",
         "btn_update": "Atualizar informações"
+    },
+    "summary_intent_pattern": "resum|recapitul|pontos principais|visão geral|síntes|do que falamos|resuma",
+    "memory_viewer": {
+        "btn_repair_tags": "Reparar tags (Repair Tags)",
+        "msg_repair_tags_confirm": "Analisar todas as memórias e reparar as tags de metadados?\n(Leva alguns segundos)",
+        "msg_repair_tags_done": "Tags reparadas com sucesso para {count} entradas de memória."
     }
 }

@@ -365,5 +365,11 @@
                 "doc_link": ""
             }
         }
+    },
+    "summary_intent_pattern": "resum|recopila|repas|puntos clave|síntes|de qué hablamos|compendio|resúme",
+    "memory_viewer": {
+        "btn_repair_tags": "Reparar etiquetas (Repair Tags)",
+        "msg_repair_tags_confirm": "¿Analizar todas las memorias y reparar las etiquetas de metadatos?\n(Tarda unos segundos)",
+        "msg_repair_tags_done": "Etiquetas reparadas con éxito para {count} entradas de memoria."
     }
 }
