@@ -1,4 +1,4 @@
-# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.1)
+# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.2)
 
 ![SecreAI Logo](SecreAI.ico)
 
@@ -7,10 +7,19 @@ SecreAIは、Google Geminiをコアエンジンに据え、ウェブ検索、画
 
 ---
 
-## 主要機能 / Key Features (Ver 1.3.1)
+## 主要機能 / Key Features (Ver 1.3.2)
 
 - **マルチモーダル対話 / Multimodal Interaction**: テキスト、音声、視覚（画面キャプチャ）を組み合わせた自然な対話。  
   *Natural conversations combining text, voice, and vision (screen capture).*
+- **ハイブリッド記憶＆ワーキングメモリ (Ver 1.3.2) / Hybrid Memory & Working Memory**:
+  ベクトル検索（意味類似度）とキーワード部分一致検索を併用し、過去の固有名詞検索漏れを防止。コンテキスト枠（1500〜3000文字）と直前検索スロット（TTL制御）でトークン無駄遣いをカット。  
+  *Combines vector search and keyword matching to eliminate missing proper nouns. Context limits (1500-3000 chars) and search slots (TTL) minimize token costs.*
+- **条件付き動的まとめ要約 (Ver 1.3.2) / Dynamic Summary Trigger**:
+  「〜をまとめて」「〜を振り返って」等の特定指示があった場合のみ、ローカルLLM（Gemma 12B）が全件過去ログを5000文字以内に自動要約・集約。通常時は高速応答を維持。  
+  *Triggers local LLM (Gemma 12B) to summarize full logs (up to 5000 chars) on explicit summary requests while preserving fast responses for normal chat.*
+- **タグ自動補完・修復機能 (Ver 1.3.2) / Automatic Tag Repair**:
+  記憶保存時および記憶管理画面からのワンクリックで、全過去記憶から名詞キーワードタグ（tags）を一括自動抽出・補完。  
+  *Extracts and repairs noun keyword tags (tags) across all long-term memories automatically or via one-click UI.*
 - **ゲートキーパーAI / Gatekeeper AI**: ウェブ検索の必要性を事前に判断し、APIコストを削減しながら最速の回答を提供。  
   *Predicts search necessity in advance to cut API costs while delivering the fastest responses.*
 - **多層記憶システム / Multi-Layered Memory**: 短期・中期・長期の3段階で記憶を管理。会話を重ねるごとにユーザーの好みを学習。  
@@ -73,8 +82,10 @@ AIのロジック、データベース処理、バックグラウンド並列処
   *Hybrid AI model executing Google Grounding and Tavily searches concurrently (`asyncio.gather`) for accurate fact-checking.*
 - **[update_memory.py](file:///D:/SecreAI_Build/scripts/update_memory.py)**: 過去の対話履歴から重要な要点・事実のみを抽出し、ChromaDBベクターデータベースに書き込むバックグラウンド記憶最適化スクリプト。  
   *Background memory script extracting key facts and writing them into the ChromaDB vector database.*
-- **[memory_viewer.py](file:///D:/SecreAI_Build/scripts/memory_viewer.py)**: ベクターデータベース（ChromaDB）内の長期記憶を検索・閲覧・削除したり、各モデルの統計グラフを表示するダッシュボード画面。  
-  *Dashboard UI for searching/deleting long-term memories in ChromaDB and displaying model statistics.*
+- **[working_memory_manager.py](file:///D:/SecreAI_Build/scripts/working_memory_manager.py)**: コンテキスト上限文字数（1500〜3000文字）の動的枠制御、直前検索キャッシュ（3ターンTTL制御）、および要約要求判定（口語パターン）を一括管理するワーキングメモリマネージャー。  
+  *Working memory manager handling dynamic context window control (1500-3000 chars), recent search cache (3-turn TTL), and summary request detection.*
+- **[memory_viewer.py](file:///D:/SecreAI_Build/scripts/memory_viewer.py)**: ベクターデータベース（ChromaDB）内の長期記憶を検索・閲覧・要約・削除したり、全記憶のメタデータタグを一括補完・修復（「タグ修復」機能）するダッシュボード画面。  
+  *Dashboard UI for searching/summarizing/deleting long-term memories in ChromaDB and repairing metadata tags automatically.*
 - **[chromadb_pool.py](file:///D:/SecreAI_Build/scripts/chromadb_pool.py)**: ChromaDB接続をプール（キャッシュ）し、記憶のベクトル検索や読み込み速度を3〜5倍に高速化するモジュール。  
   *Pools ChromaDB connections, accelerating vector searches and retrieval speeds by 3-5x.*
 - **[api_cache_system.py](file:///D:/SecreAI_Build/scripts/api_cache_system.py)**: 同一の質問や画像付き要求に対し、Gemini/OpenAI等のレスポンスをローカルに一時キャッシュ（TTL指定）することで、応答速度を爆速化（0.1s）しAPI費用を節約するキャッシュ。  
