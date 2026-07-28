@@ -186,7 +186,8 @@
         "rtt_sens_highest": "最高",
         "grounding_info_notice": "Google Grounding (Google Search) 每月最多可免费使用 5,000 次。",
         "label_tag_interval": "自动生成标签间隔 (运行次数):",
-        "unit_times": "次 / 1次"
+        "unit_times": "次 / 1次",
+        "dynamic_summary_enabled": "按意图启用过去记忆的动态摘要（推荐）"
     },
     "log_messages": {
         "module_loaded": "系统: 记忆更新模块已加载。",
@@ -256,7 +257,10 @@
         "edge_tts_error": "Edge-TTS 错误: {e}",
         "voicevox_error": "VOICEVOX 错误: {e}",
         "chromadb_connected": "ChromaDB连接完成: {path}",
-        "chromadb_error": "ChromaDB连接错误: {e}"
+        "chromadb_error": "ChromaDB连接错误: {e}",
+        "dynamic_summary_detect": "系统：检测到“总结/摘要”意图。正在执行条件动态摘要...",
+        "dynamic_summary_complete": "系统：动态摘要已完成（{limit}条模式）。",
+        "dynamic_summary_fallback": "系统：安全跳过摘要处理，已降级回普通记忆检索。"
     },
     "ai_prompt": {
         "extract_keywords": "你是记忆整理的专家。\n请综合分析以下“过去1周的高频话题数据”和“近期最新对话”，精选并输出【务必5个】关注点关键词。\n\n### 【过去1周内反复出现的频出主题/关键词】\n{freq_summary_text}\n\n### 【近期最新对话 (过去7天总结)】\n{all_7days_summary_text}\n\n### 提取规则：\n1. 最重视对话中出现频率高（反复提及）的重要信息。\n2. 若出现频率相当且难以筛选，可优先选择较新的对话信息。\n3. 输出仅限关键词，用逗号分隔（无需多余解释）。",

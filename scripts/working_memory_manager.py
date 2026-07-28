@@ -41,25 +41,168 @@ class WorkingMemoryManager:
         pattern = custom_pattern if custom_pattern else GLOBAL_SUMMARY_INTENT_PATTERN
         return bool(re.search(pattern, text, re.IGNORECASE))
 
+    def normalize_stt_text(self, text: str) -> str:
+        """
+        STT（音声認識）入力で発生する漢数字・英語/多言語数詞の表記揺れをアラビア数字にデコード・正規化
+        """
+        if not text:
+            return ""
+            
+        normalized = text.lower()
+        
+        # 1. 漢数字 -> アラビア数字 変換辞書
+        kanji_num_map = {
+            "三十一": "31", "三十": "30", "二十九": "29", "二十八": "28", "二十七": "27", "二十六": "26", "二十五": "25",
+            "二十四": "24", "二十三": "23", "二十二": "22", "二十一": "21", "二十": "20", "十九": "19", "十八": "18",
+            "十七": "17", "十六": "16", "十五": "15", "十四": "14", "十三": "13", "十二": "12", "十一": "11", "十": "10",
+            "九": "9", "八": "8", "七": "7", "六": "6", "五": "5", "四": "4", "三": "3", "二": "2", "一": "1", "零": "0"
+        }
+        for k, v in kanji_num_map.items():
+            normalized = normalized.replace(k, v)
+            
+        # 2. 英語・多言語数詞/月名 -> アラビア数字 変換辞書
+        multilingual_num_map = {
+            "twenty eighth": "28", "twenty-eighth": "28", "twenty seventh": "27", "twenty-seventh": "27",
+            "twenty sixth": "26", "twenty-sixth": "26", "twenty fifth": "25", "twenty-fifth": "25",
+            "twenty fourth": "24", "twenty-fourth": "24", "twenty third": "23", "twenty-third": "23",
+            "twenty second": "22", "twenty-second": "22", "twenty first": "21", "twenty-first": "21",
+            "twentieth": "20", "nineteenth": "19", "eighteenth": "18", "seventeenth": "17", "sixteenth": "16",
+            "fifteenth": "15", "fourteenth": "14", "thirteenth": "13", "twelfth": "12", "eleventh": "11",
+            "tenth": "10", "ninth": "9", "eighth": "8", "seventh": "7", "sixth": "6", "fifth": "5",
+            "fourth": "4", "third": "3", "second": "2", "first": "1",
+            "january": "1月", "february": "2月", "march": "3月", "april": "4月", "may": "5月", "june": "6月",
+            "july": "7月", "juli": "7月", "juillet": "7月", "julio": "7月", "julho": "7月", "luglio": "7月", "июля": "7月", "июль": "7月", "7월": "7月",
+            "august": "8月", "september": "9月", "october": "10月", "november": "11月", "december": "12月",
+            "sieben": "7", "sept": "7", "siete": "7", "sette": "7", "семь": "7",
+            "acht": "8", "huit": "8", "ocho": "8", "oito": "8", "восемь": "8"
+        }
+        for k, v in multilingual_num_map.items():
+            if re.search(r'[a-z]', k):
+                normalized = re.sub(r'\b' + re.escape(k) + r'\b', v, normalized)
+            else:
+                normalized = normalized.replace(k, v)
+            
+        return normalized
+
+    def parse_datetime_filter(self, text: str) -> dict:
+        """
+        STT正規化を行い、ユーザー入力から全10言語の日付・月名・口語（昨日/yesterday/gestern等）および時間帯を解析して抽出
+        
+        Returns:
+            dict: {
+                "date_str": "2026-07-28",     # YYYY-MM-DD 形式
+                "short_date": "07-28",        # MM-DD 形式
+                "start_hour": int,            # 0~23
+                "end_hour": int               # 0~23
+            }
+        """
+        if not text:
+            return {"date_str": None, "short_date": None, "start_hour": None, "end_hour": None}
+            
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        current_year = now.year
+        
+        # 0. STT入力テキストの表記揺れデコード
+        clean_text = self.normalize_stt_text(text)
+        
+        date_str = None
+        short_date = None
+        start_hour = None
+        end_hour = None
+
+        # 1. 全10言語の相対日付（口語表現）判定
+        # 昨日 (Yesterday)
+        if re.search(r'(昨日|yesterday|gestern|hier|ayer|ontem|вчера|어제|昨天)', clean_text, re.IGNORECASE):
+            target_dt = now - timedelta(days=1)
+            date_str = target_dt.strftime("%Y-%m-%d")
+            short_date = target_dt.strftime("%m-%d")
+        # 一昨日 (Day before yesterday)
+        elif re.search(r'(一昨日|day before yesterday|vorgestern|avant-hier|anteayer|anteontem|позавчера|그저께|前天)', clean_text, re.IGNORECASE):
+            target_dt = now - timedelta(days=2)
+            date_str = target_dt.strftime("%Y-%m-%d")
+            short_date = target_dt.strftime("%m-%d")
+
+        # 2. 明示的な日付パターンの解析（相対日付が指定されなかった場合）
+        if not date_str:
+            # 2-A. YYYY/MM/DD または YYYY-MM-DD
+            m1 = re.search(r'(\d{4})[/-](\d{1,2})[/-](\d{1,2})', clean_text)
+            if m1:
+                y, m, d = int(m1.group(1)), int(m1.group(2)), int(m1.group(3))
+                date_str = f"{y:04d}-{m:02d}-{d:02d}"
+                short_date = f"{m:02d}-{d:02d}"
+            else:
+                # 2-B. 欧州形式 (DD.MM.YYYY または DD.MM. / DD de M月 / DD M月 / DD. M月)
+                m_eu = re.search(r'(\d{1,2})\s*(?:\.|\s*de\s*|\s+)?\s*(\d{1,2})\s*月', clean_text)
+                if m_eu:
+                    d, m = int(m_eu.group(1)), int(m_eu.group(2))
+                    date_str = f"{current_year:04d}-{m:02d}-{d:02d}"
+                    short_date = f"{m:02d}-{d:02d}"
+                else:
+                    m_eu2 = re.search(r'(\d{1,2})\.(\d{1,2})\.?(?:(\d{4}))?', clean_text)
+                    if m_eu2:
+                        d, m = int(m_eu2.group(1)), int(m_eu2.group(2))
+                        y = int(m_eu2.group(3)) if m_eu2.group(3) else current_year
+                        date_str = f"{y:04d}-{m:02d}-{d:02d}"
+                        short_date = f"{m:02d}-{d:02d}"
+
+                # 2-C. M月D日 / M/D / M-D
+                if not date_str:
+                    m2 = re.search(r'(\d{1,2})[/\-月]\s*(\d{1,2})日?', clean_text)
+                    if m2:
+                        m, d = int(m2.group(1)), int(m2.group(2))
+                        date_str = f"{current_year:04d}-{m:02d}-{d:02d}"
+                        short_date = f"{m:02d}-{d:02d}"
+
+        # 3. 多言語時間・時間帯の解析
+        # 午前 / 朝: 0~12時
+        if re.search(r'\b(午前|朝|morning|morgen|matin|mañana|manhã|mattino|утро|아침|早晨|上午)\b', clean_text):
+            start_hour, end_hour = 0, 12
+        # 午後 / 昼: 12~17時
+        elif re.search(r'\b(午後|昼|日中|afternoon|noon|nachmittag|après-midi|tarde|pomeriggio|день|낮|下午)\b', clean_text):
+            start_hour, end_hour = 12, 17
+        # 夕方 / 夜 / 夜間: 17~24時
+        elif re.search(r'\b(夕方|夜|夜間|晩|evening|night|abend|soir|noche|noite|sera|вечер|ночь|저녁|밤|晚上)\b', clean_text):
+            start_hour, end_hour = 17, 24
+
+        # 明示的な「X時以降」「X o'clock」「X Uhr」
+        m_after = re.search(r'(\d{1,2})\s*(?:時|o\'clock|uhr|h)\s*(以降|から|より|after|onwards)?', clean_text)
+        if m_after and m_after.group(2):
+            start_hour = int(m_after.group(1))
+            end_hour = 24
+
+        return {
+            "date_str": date_str,
+            "short_date": short_date,
+            "start_hour": start_hour,
+            "end_hour": end_hour
+        }
+
     def extract_search_keywords(self, text: str) -> list:
         """
         ユーザー入力から検索に有用なキーワード（固有名詞・名詞相当の単語）を抽出
+        （7/28 や 2026-07-28 などの日付表現を保護）
         """
         if not text:
             return []
         
-        # 不要な記号や助詞・指示語の簡易除外
         stop_words = {"これ", "それ", "あれ", "どれ", "私", "あなた", "僕", "俺", "今日", "昨日", "明日", "こと", "もの", "ため", "よう", "さん", "ちゃん", "くん", "様", "情報", "内容", "話", "件"}
         
-        # 漢字・カタカナ・ひらがな含む単語、英数字の連続語（2文字以上）を抽出
-        # 指示語（まとめて/要約等）を除去したテキストを作成
+        # 指示語（まとめて/要約等）を除去
         clean_input = re.sub(SUMMARY_INTENT_PATTERN, "", text)
         
+        # 日付パターン（7/28, 7月28日等）をあらかじめ退避・抽出
+        dates_found = re.findall(r'\d{1,4}[/\-月]\d{1,2}(?:[/\-日]\d{1,2})?日?', clean_input)
+        
+        # 漢字・カタカナ・ひらがな含む単語、英数字の連続語（2文字以上）を抽出
         tokens = re.findall(r'[一-龠ァ-ヶa-zA-Z0-9_]{2,}', clean_input)
         
         keywords = []
+        for d in dates_found:
+            keywords.append(d)
+            
         for token in tokens:
-            if token not in stop_words and len(token) >= 2:
+            if token not in stop_words and len(token) >= 2 and not token.isdigit():
                 keywords.append(token)
         
         # 重複を保持順を保って排除

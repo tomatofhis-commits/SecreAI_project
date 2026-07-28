@@ -847,6 +847,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     lbl_unit_times = tk.Label(tag_interval_frame, text=l_set.get("unit_times", "回に1回"))
     lbl_unit_times.pack(side="left", padx=5)
 
+    dynamic_summary_var = tk.BooleanVar(db_model_group, config.get("DYNAMIC_SUMMARY_ENABLED", True))
+    check_dynamic_summary = tk.Checkbutton(db_model_group, text=l_set.get("dynamic_summary_enabled", "会話意図による過去記憶の動的要約を有効化 (推奨)"), variable=dynamic_summary_var)
+    check_dynamic_summary.pack(anchor="w", pady=(10, 0), padx=5)
+
     # 3. メンテナンスグループ
     maintenance_group = tk.LabelFrame(tab_database, text=f" {l_set.get('db_maintenance_group', 'メンテナンス')} ", padx=10, pady=10)
     maintenance_group.pack(pady=10, fill="x", padx=20)
@@ -1270,6 +1274,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["DISPLAY_TIME"] = int(display_time_var.get())
         config["DB_PROVIDER"] = db_provider_var.get()
         config["DB_MODEL_ID"] = db_model_var.get()
+        config["DYNAMIC_SUMMARY_ENABLED"] = dynamic_summary_var.get()
         try:
             config["TAG_GENERATION_INTERVAL"] = int(tag_interval_var.get())
         except (ValueError, TypeError):

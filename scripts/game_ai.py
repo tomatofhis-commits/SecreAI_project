@@ -331,8 +331,8 @@ def get_feedback_context(root):
         return ctx
     except: return ""
 
-def search_long_term_memory(query, history=None, root=None, n_results=50, is_all_mode=False):
-    """Ver 1.3.2 改善版: ハイブリッド検索＆ワーキングメモリによる多段階フィルタリング長期記憶検索"""
+def search_long_term_memory(query, history=None, root=None, n_results=50, is_all_mode=False, max_limit=50):
+    """Ver 1.3.2 改善版: 日時・時間帯フィルタ＆条件付き上位50件時系列多段階長期記憶検索"""
     try:
         db_path = os.path.join(root, "memory_db")
         if not os.path.exists(db_path): 
@@ -353,10 +353,18 @@ def search_long_term_memory(query, history=None, root=None, n_results=50, is_all
                 context_snippet += clean_msg + " "
             search_query = f"{context_snippet.strip()} {query}"
         
-        # 取得件数の決定（全件モードまたは多段階上位50件）
+        # 1. 日時・時間帯フィルターの解析
+        dt_filter = {"date_str": None, "short_date": None, "start_hour": None, "end_hour": None}
+        if global_working_memory:
+            dt_filter = global_working_memory.parse_datetime_filter(query)
+
+        date_str = dt_filter.get("date_str")
+        short_date = dt_filter.get("short_date")
+        start_h = dt_filter.get("start_hour")
+        end_h = dt_filter.get("end_hour")
+
+        # ChromaDBからの取得
         fetch_limit = 500 if is_all_mode else n_results
-        
-        # 1. ベクトル検索 (意味の類似度)
         results = collection.query(query_texts=[search_query], n_results=fetch_limit)
         
         combined_dict = {}
@@ -368,13 +376,12 @@ def search_long_term_memory(query, history=None, root=None, n_results=50, is_all
                 meta = metas[i] if metas else {}
                 combined_dict[doc_text] = meta
 
-        # 2. 名詞・固有名詞によるハイブリッド検索（ChromaDBテキスト部分一致 / 補強）
+        # 名詞・キーワード検索補強
         if global_working_memory:
             keywords = global_working_memory.extract_search_keywords(query)
             for kw in keywords:
                 try:
-                    # ChromaDB の where_document (contains) でキーワード直接一致を検索
-                    kw_results = collection.get(where_document={"$contains": kw}, limit=20)
+                    kw_results = collection.get(where_document={"$contains": kw}, limit=30)
                     if kw_results and kw_results.get("documents"):
                         kw_docs = kw_results["documents"]
                         kw_metas = kw_results["metadatas"] if kw_results.get("metadatas") else []
@@ -383,44 +390,82 @@ def search_long_term_memory(query, history=None, root=None, n_results=50, is_all
                             m_data = kw_metas[j] if j < len(kw_metas) else {}
                             if d_text not in combined_dict:
                                 combined_dict[d_text] = m_data
-                except Exception as kw_e:
+                except Exception:
                     pass
 
-        # リストに統合
-        combined = [{"doc": doc, "meta": meta} for doc, meta in combined_dict.items()]
-        combined.sort(key=lambda x: x["meta"].get("unix") or 0, reverse=True)
-        
-        # 全件まとめモードの場合は指定キーワードを含む過去ログを最優先抽出
-        if is_all_mode:
-            all_kw_docs = {}
-            if global_working_memory:
-                keywords = global_working_memory.extract_search_keywords(query)
-                for kw in keywords:
-                    try:
-                        kw_all = collection.get(where_document={"$contains": kw})
-                        if kw_all and kw_all.get("documents"):
-                            docs_list = kw_all["documents"]
-                            metas_list = kw_all["metadatas"] if kw_all.get("metadatas") else []
-                            for idx in range(len(docs_list)):
-                                all_kw_docs[docs_list[idx]] = metas_list[idx] if idx < len(metas_list) else {}
-                    except: pass
-            
-            # キーワード一致ログがあればそれを優先、なければ取得分を使用
-            target_list = [{"doc": k, "meta": v} for k, v in all_kw_docs.items()] if all_kw_docs else combined
-            target_list.sort(key=lambda x: x["meta"].get("unix") or 0, reverse=True)
+        # 全エントリーのリスト化
+        candidate_list = [{"doc": doc, "meta": meta} for doc, meta in combined_dict.items()]
 
-            context = "\n【抽出された過去の記憶全件】:\n"
+        # 2. 日時・時間帯による硬性フィルタリング (Hard Filter)
+        if date_str or short_date:
+            filtered_candidates = []
+            for item in candidate_list:
+                m = item["meta"]
+                m_date = m.get("date", "")
+                m_ts = m.get("timestamp", "")
+                d_text = item["doc"]
+
+                # 日付一致チェック
+                match_date = False
+                if date_str and (m_date == date_str or date_str in m_ts or date_str in d_text):
+                    match_date = True
+                elif short_date and (short_date in m_ts or short_date in d_text):
+                    match_date = True
+
+                if match_date:
+                    # 時間帯一致チェック
+                    if start_h is not None and end_h is not None and m_ts:
+                        try:
+                            # "YYYY-MM-DD HH:MM:SS" から HH を取得
+                            time_part = m_ts.split(" ")[1] if " " in m_ts else ""
+                            hour_val = int(time_part.split(":")[0]) if time_part else -1
+                            if start_h <= hour_val <= end_h:
+                                filtered_candidates.append(item)
+                        except:
+                            filtered_candidates.append(item)
+                    else:
+                        filtered_candidates.append(item)
+
+            if filtered_candidates:
+                candidate_list = filtered_candidates
+
+        # 動的まとめモードの場合の絞り込みと時系列ソート
+        if is_all_mode:
+            # 50件以下の場合は絞り込まず全件そのまま採用
+            if len(candidate_list) <= max_limit:
+                target_list = candidate_list
+            else:
+                # 50件を超える場合のみハイブリッド・スコアリング
+                keywords = global_working_memory.extract_search_keywords(query) if global_working_memory else []
+                scored_list = []
+                for idx, item in enumerate(candidate_list):
+                    doc_text = item["doc"]
+                    
+                    # 単語一致スコア
+                    kw_score = sum(10 for kw in keywords if kw in doc_text)
+                    # 類似度順位スコア
+                    order_score = max(0, 50 - idx)
+                    
+                    total_score = kw_score + order_score
+                    scored_list.append((total_score, item))
+                
+                scored_list.sort(key=lambda x: x[0], reverse=True)
+                target_list = [x[1] for x in scored_list[:max_limit]]
+
+            # 時系列昇順（古い順 -> 新しい順）に並べて物語・経緯を美しく保持
+            target_list.sort(key=lambda x: x["meta"].get("unix") or 0)
+
+            context = "\n【抽出された過去の記憶・会話ログ】:\n"
             for item in target_list:
                 date_val = item["meta"].get("timestamp") or "日時不明"
                 context += f"・[{date_val}] {item['doc']}\n"
             return context
 
         if global_working_memory:
-            return global_working_memory.filter_and_format_memory(combined, query)
+            return global_working_memory.filter_and_format_memory(candidate_list, query)
         else:
-            # フォールバック処理
             context = "\n【過去の記憶からの関連情報】:\n"
-            for item in combined[:5]:
+            for item in candidate_list[:5]:
                 date_val = item["meta"].get("timestamp") or "日時不明"
                 context += f"・[{date_val}] {item['doc']}\n"
             return context
@@ -502,6 +547,43 @@ def increment_grounding_count(root):
             send_log_to_hub(f"Grounding Count Increment Error: {e}", is_error=True)
             return 0
 
+def call_summary_llm(config, prompt):
+    """
+    設定されたプロバイダー (Gemini, OpenAI, Local) に応じて動的記憶要約を生成する統合ヘルパー
+    """
+    provider = (config.get("DB_PROVIDER") or config.get("AI_PROVIDER") or "local").lower()
+    
+    # 1. Gemini プロバイダー
+    if provider == "gemini" and gemini_client:
+        try:
+            raw_model = config.get("DB_MODEL_ID") or config.get("MODEL_ID") or "gemini-2.5-flash"
+            model_name = raw_model.split("（")[0].strip()
+            response = gemini_client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
+            if response and response.text:
+                return response.text.strip()
+        except Exception as ge:
+            send_log_to_hub(f"Gemini Dynamic Summary Error: {ge}", is_error=True)
+            
+    # 2. OpenAI プロバイダー
+    if provider == "openai" and openai_client:
+        try:
+            model_name = config.get("DB_MODEL_ID") or config.get("MODEL_ID_GPT") or "gpt-4o-mini"
+            res = openai_client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3
+            )
+            if res and res.choices:
+                return res.choices[0].message.content.strip()
+        except Exception as oe:
+            send_log_to_hub(f"OpenAI Dynamic Summary Error: {oe}", is_error=True)
+            
+    # 3. Local (Ollama / LM Studio) またはフォールバック
+    return call_local_llm_chat(config, [{'role': 'user', 'content': prompt}])
+
 def call_local_llm_chat(config, messages, json_mode=False):
     """プロバイダー設定に応じてOllamaまたはLM StudioのAPIを呼び分けてチャット応答を返すヘルパー"""
     prov = config.get("LOCAL_LLM_PROVIDER", "ollama").lower()
@@ -521,15 +603,34 @@ def call_local_llm_chat(config, messages, json_mode=False):
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
         try:
-            resp = requests.post(api_url, json=payload, timeout=60)
+            resp = requests.post(api_url, json=payload, timeout=30)
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
+        except requests.exceptions.HTTPError as http_err:
+            err_text = ""
+            try:
+                err_text = resp.text
+            except: pass
+            send_log_to_hub(f"LM Studio HTTP Error: {http_err.response.status_code} - {err_text}", is_error=True)
+            
+            # モデル名不一致等による 400 Bad Request の場合はモデル指定を外して現在ロード中のモデルで再試行
+            if http_err.response.status_code == 400 and "model" in payload:
+                try:
+                    payload_no_model = dict(payload)
+                    payload_no_model.pop("model", None)
+                    send_log_to_hub("システム: LM Studioへモデル指定なし(デフォルト)で再試行中...")
+                    resp_retry = requests.post(api_url, json=payload_no_model, timeout=30)
+                    resp_retry.raise_for_status()
+                    return resp_retry.json()["choices"][0]["message"]["content"]
+                except Exception as retry_e:
+                    raise retry_e
+            raise http_err
         except Exception as e:
             if json_mode:
                 # JSONモードでの接続・指定が原因で400等のエラーになった場合は、通常モードで再試行
                 try:
                     payload.pop("response_format", None)
-                    resp = requests.post(api_url, json=payload, timeout=60)
+                    resp = requests.post(api_url, json=payload, timeout=30)
                     resp.raise_for_status()
                     return resp.json()["choices"][0]["message"]["content"]
                 except Exception as retry_err:
@@ -549,15 +650,14 @@ def call_local_llm_chat(config, messages, json_mode=False):
         if json_mode:
             payload["format"] = "json"
         try:
-            resp = requests.post(f"{url}/api/chat", json=payload, timeout=60)
+            resp = requests.post(f"{url}/api/chat", json=payload, timeout=30)
             resp.raise_for_status()
             return resp.json()["message"]["content"]
         except Exception as e:
             if json_mode:
-                # OllamaでもJSON指定起因のエラー時は通常モードで再試行
                 try:
                     payload.pop("format", None)
-                    resp = requests.post(f"{url}/api/chat", json=payload, timeout=60)
+                    resp = requests.post(f"{url}/api/chat", json=payload, timeout=30)
                     resp.raise_for_status()
                     return resp.json()["message"]["content"]
                 except Exception as retry_err:
@@ -881,20 +981,46 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
     global gemini_client, openai_client
     history = load_history_manual(root)
     max_chars = config.get("MAX_CHARS", "700文字以内")
-    # まとめ・要約要求の動的判定 (Ver 1.3.2 多言語対応)
+    # まとめ・要約要求の動的判定 (Ver 1.3.2 全10言語対応 ＋ 全プロバイダー対応 ＋ 多層段階的安全装置)
     lang_pattern = lang_data.get("summary_intent_pattern") if isinstance(lang_data, dict) else None
-    if global_working_memory and global_working_memory.is_summary_request(prompt, custom_pattern=lang_pattern):
-        send_log_to_hub("システム: 「まとめ・要約」要求を検知。条件付き動的ローカル要約を実行中...")
-        raw_all_memory = search_long_term_memory(prompt, history, root, is_all_mode=True)
-        if raw_all_memory:
-            summary_prompt = (
-                "以下の抽出された過去の記憶・会話ログから、ユーザーが求めている主題・出来事・決定事項に関する主要内容と詳細を、"
-                "最大5000文字以内でまとめた要約テキストを作成してください。\n\n"
-                f"【抽出データ】:\n{raw_all_memory}"
-            )
-            summarized_ctx = call_local_llm_chat(config, [{'role': 'user', 'content': summary_prompt}])[:5000]
-            long_term_ctx = f"\n【抽出ログの動的要約 (5000文字以内)】:\n{summarized_ctx}\n"
-        else:
+    log_m = lang_data.get("log_messages", {}) if isinstance(lang_data, dict) else {}
+    is_summary_enabled = config.get("DYNAMIC_SUMMARY_ENABLED", True)
+    
+    if is_summary_enabled and global_working_memory and global_working_memory.is_summary_request(prompt, custom_pattern=lang_pattern):
+        msg_detect = log_m.get("dynamic_summary_detect", "システム: 「まとめ・要約」要求を検知。条件付き動的要約を実行中...")
+        send_log_to_hub(msg_detect)
+        
+        # 多層段階的安全装置 (50件 -> 20件 -> 10件 -> 通常検索フォールバック)
+        limits_to_try = [50, 20, 10]
+        summarized_ctx = None
+        
+        for limit in limits_to_try:
+            try:
+                raw_memory = search_long_term_memory(prompt, history, root, is_all_mode=True, max_limit=limit)
+                if raw_memory:
+                    safe_memory_text = raw_memory[:12000]
+                    summary_prompt = (
+                        "以下の抽出された過去の記憶・会話ログから、ユーザーが求めている主題・出来事・決定事項に関する主要内容と詳細を、"
+                        "最大5000文字以内でまとめた要約テキストを作成してください。\n\n"
+                        f"【抽出データ】:\n{safe_memory_text}"
+                    )
+                    res_text = call_summary_llm(config, summary_prompt)
+                    if res_text and not res_text.startswith("Error:"):
+                        summarized_ctx = res_text[:5000]
+                        msg_complete_tpl = log_m.get("dynamic_summary_complete", "システム: 動的要約が完了しました ({limit}件モード)。")
+                        send_log_to_hub(msg_complete_tpl.format(limit=limit))
+                        long_term_ctx = f"\n【抽出ログの動的要約 (5000文字以内)】:\n{summarized_ctx}\n"
+                        break
+            except Exception as retry_err:
+                send_log_to_hub(f"システム: 動的要約エラー({limit}件モード): {retry_err}", is_error=True)
+                if limit != limits_to_try[-1]:
+                    next_limit = limits_to_try[limits_to_try.index(limit) + 1]
+                    send_log_to_hub(f"システム: 上位{next_limit}件に絞り込んで再試行中...")
+                continue
+
+        if not summarized_ctx:
+            msg_fallback = log_m.get("dynamic_summary_fallback", "システム: 要約処理を安全にスキップし、通常のデータベース読み込み処理へフォールバックしました。")
+            send_log_to_hub(msg_fallback)
             long_term_ctx = search_long_term_memory(prompt, history, root)
     else:
         long_term_ctx = search_long_term_memory(prompt, history, root)

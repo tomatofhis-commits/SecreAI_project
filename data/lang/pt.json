@@ -186,7 +186,8 @@
         "rtt_sens_highest": "Máxima",
         "grounding_info_notice": "O Google Grounding (Google Search) está disponível gratuitamente para até 5.000 prompts por mês.",
         "label_tag_interval": "Intervalo de geração automática de tags (Operações):",
-        "unit_times": "operações"
+        "unit_times": "operações",
+        "dynamic_summary_enabled": "Ativar resumo dinâmico de memória por intenção (Recomendado)"
     },
     "log_messages": {
         "module_loaded": "Sistema: Módulo de atualização de memória carregado.",
@@ -250,7 +251,10 @@
         "edge_tts_error": "Edge-TTS Erro: {e}",
         "voicevox_error": "VOICEVOX Erro: {e}",
         "chromadb_connected": "Conexão ChromaDB concluída: {path}",
-        "chromadb_error": "Erro de conexão ChromaDB: {e}"
+        "chromadb_error": "Erro de conexão ChromaDB: {e}",
+        "dynamic_summary_detect": "Sistema: Intenção de resumo detetada. Executando resumo dinâmico condicional...",
+        "dynamic_summary_complete": "Sistema: Resumo dinâmico concluído (modo de {limit} itens).",
+        "dynamic_summary_fallback": "Sistema: Resumo ignorado com segurança, recorrendo à pesquisa normal."
     },
     "ai_prompt": {
         "extract_keywords": "Você é um mestre na organização de memória.\nAnalise de forma abrangente os \"Dados de tópicos frequentes da última semana\" e as \"Conversas recentes\", e selecione e exiba [exatamente 5] palavras-chave de interesse.\n\n### [Temas/Palavras-chave frequentes da última semana]\n{freq_summary_text}\n\n### [Conversas recentes (Resumo dos últimos 7 dias)]\n{all_7days_summary_text}\n\n### Regras de extração:\n1. Dar a máxima prioridade às informações com alta frequência de ocorrência na conversa.\n2. Se a frequência for semelhante e difícil de afunilar, informações mais recentes podem ser priorizadas.\n3. Saída apenas de palavras-chave separadas por vírgulas.",

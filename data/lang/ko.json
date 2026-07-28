@@ -184,7 +184,8 @@
         "rtt_sens_highest": "최대",
         "grounding_info_notice": "Google Grounding (Google Search)은 월 5,000회 프롬프트까지 무료로 사용 가능합니다.",
         "label_tag_interval": "태그 자동 생성 간격 (작동 횟수):",
-        "unit_times": "회당 1회"
+        "unit_times": "회당 1회",
+        "dynamic_summary_enabled": "대화 의도에 따른 과거 기억의 동적 요약 활성화 (권장)"
     },
     "log_messages": {
         "module_loaded": "시스템: 기억 업데이트 모듈이 로드되었습니다.",
@@ -254,7 +255,10 @@
         "edge_tts_error": "Edge-TTS 오류: {e}",
         "voicevox_error": "VOICEVOX 오류: {e}",
         "chromadb_connected": "ChromaDB 연결 완료: {path}",
-        "chromadb_error": "ChromaDB 연결 오류: {e}"
+        "chromadb_error": "ChromaDB 연결 오류: {e}",
+        "dynamic_summary_detect": "시스템: 「요약/정리」 의도를 감지했습니다. 조건부 동적 요약을 실행 중...",
+        "dynamic_summary_complete": "시스템: 동적 요약이 완료되었습니다 ({limit}개 항목 모드).",
+        "dynamic_summary_fallback": "시스템: 요약 처리를 안전하게 건너뛰고 일반 기억 검색으로 폴백했습니다."
     },
     "ai_prompt": {
         "extract_keywords": "당신은 기억 정리의 전문가입니다.\n다음의 \"지난 1주일간의 자주 언급된 화제 데이터\"와 \"최근 대화\"를 종합적으로 분석하여 관심사 키워드를 [반드시 5개] 선정하여 출력해 주세요.\n\n### [지난 1주일간 반복해서 등장한 자주 언급된 테마/키워드]\n{freq_summary_text}\n\n### [최근 대화 (지난 7일간의 요약)]\n{all_7days_summary_text}\n\n### 추출 규칙:\n1. 대화 내에서 출현 빈도가 높은(반복적으로 언급된) 중요한 정보를 가장重視할 것.\n2. 출현 빈도가 비슷하여 좁히기 어려운 경우 새로운 대화 정보를 우선해도 좋다.\n3. 출력은 키워드만 쉼표로 구분하여 출력할 것(불필요한 설명은 금지).",

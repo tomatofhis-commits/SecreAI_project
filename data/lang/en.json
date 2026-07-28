@@ -59,6 +59,7 @@
         "default_capture": "Select capture window..."
     },
     "settings": {
+        "dynamic_summary_enabled": "Enable dynamic memory summarization by intent (Recommended)",
         "win_title": "SacreAI - Advanced Settings",
         "tab_general": "  General  ",
         "tab_hotkey": "  Hotkeys  ",
@@ -263,7 +264,10 @@
         "chromadb_connected": "ChromaDB connected: {path}",
         "chromadb_error": "ChromaDB error: {e}",
         "gatekeeper_analyzing": "System: Gatekeeper is determining the necessity of search...",
-        "gatekeeper_approve": "System: Gatekeeper approved the search."
+        "gatekeeper_approve": "System: Gatekeeper approved the search.",
+        "dynamic_summary_detect": "System: Summary intent detected. Running conditional dynamic summarization...",
+        "dynamic_summary_complete": "System: Dynamic summarization completed ({limit}-item mode).",
+        "dynamic_summary_fallback": "System: Safely skipped summarization, fallback to normal memory search."
     },
     "ai_prompt": {
         "extract_keywords": "You are a master of memory organization.\nPlease comprehensively analyze the following \"Past 1-week Frequent Topics Data\" and \"Recent Conversations\", and select and output [exactly 5] interest keywords.\n\n### [Frequent Themes/Keywords Appearing Repeatedly in Past 1 Week]\n{freq_summary_text}\n\n### [Recent Conversations (Summary of Past 7 Days)]\n{all_7days_summary_text}\n\n### Extraction Rules:\n1. Prioritize important information with high frequency of occurrence in the conversation.\n2. If frequencies are similar and hard to narrow down, newer conversation information may be prioritized.\n3. Output keywords only separated by commas (no extra explanation).",

@@ -53,6 +53,7 @@
         "window_get_fail": "ウィンドウ取得失敗"
     },
     "settings": {
+        "dynamic_summary_enabled": "会話意図による過去記憶の動的要約を有効化 (推奨)",
         "win_title": "SacreAI - 拡張設定",
         "tab_general": "  全般設定  ",
         "tab_hotkey": "  ホットキー  ",
@@ -248,7 +249,10 @@
         "edge_tts_error": "Edge-TTS エラー: {e}",
         "voicevox_error": "VOICEVOX エラー: {e}",
         "chromadb_connected": "ChromaDB接続完了: {path}",
-        "chromadb_error": "ChromaDB接続エラー: {e}"
+        "chromadb_error": "ChromaDB接続エラー: {e}",
+        "dynamic_summary_detect": "システム: 「まとめ・要約」要求を検知。条件付き動的要約を実行中...",
+        "dynamic_summary_complete": "システム: 動的要約が完了しました ({limit}件モード)。",
+        "dynamic_summary_fallback": "システム: 要約処理を安全にスキップし、通常のデータベース読み込み処理へフォールバックしました。"
     },
     "ai_prompt": {
         "role": "あなたはサポートを得意とする頼もしい秘書兼相棒です。",
