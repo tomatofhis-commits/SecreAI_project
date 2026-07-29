@@ -366,6 +366,11 @@ def main(base_path=None):
         # --- 追加: db_pathの定義 ---
         # settings_ui や maintenance と同じく、APP_ROOT直下の memory_db を指定します
         db_path = os.path.join(base, "memory_db") 
+        if get_chroma_collection is not None:
+            collection = get_chroma_collection(db_path, "long_term_memory")
+        else:
+            send_log_to_hub("Error: get_chroma_collection is None", is_error=True)
+            return 
 
         # --- 名詞・キーワードの自動抽出（ハイブリッド検索・タグ強化） ---
         auto_tags = re.findall(r'[A-Za-z0-9\-\_]+|[ァ-ヴー]{2,}|[一-龥]{2,}', new_summary)
