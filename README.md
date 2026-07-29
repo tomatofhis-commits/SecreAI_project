@@ -11,15 +11,21 @@ SecreAIは、Google Geminiをコアエンジンに据え、ウェブ検索、画
 
 - **マルチモーダル対話 / Multimodal Interaction**: テキスト、音声、視覚（画面キャプチャ）を組み合わせた自然な対話。  
   *Natural conversations combining text, voice, and vision (screen capture).*
-- **ハイブリッド記憶＆ワーキングメモリ (Ver 1.3.2) / Hybrid Memory & Working Memory**:
-  ベクトル検索（意味類似度）とキーワード部分一致検索を併用し、過去の固有名詞検索漏れを防止。コンテキスト枠（1500〜3000文字）と直前検索スロット（TTL制御）でトークン無駄遣いをカット。  
+- **ハイブリッド記憶 (Ver 1.3.2) / Hybrid Memory**:
+  ベクトル検索（意味類似度）とキーワード部分一致検索を併用し、過去の固有名詞検索漏れを防止。コンテキスト枠（1500〜3000文字）と直前検索スロット（3ターンTTL制御）でトークン無駄遣いをカット。  
   *Combines vector search and keyword matching to eliminate missing proper nouns. Context limits (1500-3000 chars) and search slots (TTL) minimize token costs.*
-- **条件付き動的まとめ要約 (Ver 1.3.2) / Dynamic Summary Trigger**:
-  「〜をまとめて」「〜を振り返って」等の特定指示があった場合のみ、ローカルLLM（Gemma 12B）が全件過去ログを5000文字以内に自動要約・集約。通常時は高速応答を維持。  
-  *Triggers local LLM (Gemma 12B) to summarize full logs (up to 5000 chars) on explicit summary requests while preserving fast responses for normal chat.*
+- **動的記憶抽出機能 (Ver 1.3.2) / Dynamic Memory Retrieval Architecture**:
+  「〜をまとめて」「〜を振り返って」等の特定指示があった際、データベースから該当期間の全記憶ログ（最大50件）を時系列昇順で自動抽出・一括提供。長期間の会話や一日の出来事の流れ全体を網羅した高精度かつ爆速な回答作成を実現。  
+  *Retrieves full memory logs (up to 50 items) in chronological order directly on explicit summary requests, delivering complete timeline coverage with sub-second speed.*
+- **全10言語対応 高度日時・期間・イベントパース (Ver 1.3.2) / Multilingual Date & Period Parser**:
+  STT音声表記揺れ（漢数字・英語数詞等）、相対単一日（昨日・一昨日）、複数日期間（この1週間・直近3日）、長期間（先月・今月・今年・過去1年）、季節、世界10か国の大型連休（GW・お盆・Thanksgiving・春节・추석・Ostern等）を正確にISO範囲パース。  
+  *Parses STT number variations, relative dates, multi-day periods, months/years, seasons, and global holidays across 10 languages into precise ISO date ranges.*
 - **タグ自動補完・修復機能 (Ver 1.3.2) / Automatic Tag Repair**:
   記憶保存時および記憶管理画面からのワンクリックで、全過去記憶から名詞キーワードタグ（tags）を一括自動抽出・補完。  
   *Extracts and repairs noun keyword tags (tags) across all long-term memories automatically or via one-click UI.*
+- **APIキャッシュ自動清掃 ＆ 容量上限制御 (Ver 1.3.2) / Cache Auto-Cleanup & LRU Enforcer**:
+  起動時自動一括清掃と最大1,000件のLRU容量上限制御により、古くなったキャッシュによる情報阻害とディスク肥大化を完全防止。  
+  *Enforces auto-cleanup on startup and a 1,000-item LRU capacity limit to prevent stale cache memory interference and disk growth.*
 - **ゲートキーパーAI / Gatekeeper AI**: ウェブ検索の必要性を事前に判断し、APIコストを削減しながら最速の回答を提供。  
   *Predicts search necessity in advance to cut API costs while delivering the fastest responses.*
 - **多層記憶システム / Multi-Layered Memory**: 短期・中期・長期の3段階で記憶を管理。会話を重ねるごとにユーザーの好みを学習。  
@@ -82,14 +88,16 @@ AIのロジック、データベース処理、バックグラウンド並列処
   *Hybrid AI model executing Google Grounding and Tavily searches concurrently (`asyncio.gather`) for accurate fact-checking.*
 - **[update_memory.py](file:///D:/SecreAI_Build/scripts/update_memory.py)**: 過去の対話履歴から重要な要点・事実のみを抽出し、ChromaDBベクターデータベースに書き込むバックグラウンド記憶最適化スクリプト。  
   *Background memory script extracting key facts and writing them into the ChromaDB vector database.*
-- **[working_memory_manager.py](file:///D:/SecreAI_Build/scripts/working_memory_manager.py)**: コンテキスト上限文字数（1500〜3000文字）の動的枠制御、直前検索キャッシュ（3ターンTTL制御）、および要約要求判定（口語パターン）を一括管理するワーキングメモリマネージャー。  
-  *Working memory manager handling dynamic context window control (1500-3000 chars), recent search cache (3-turn TTL), and summary request detection.*
+- **[working_memory_manager.py](file:///D:/SecreAI_Build/scripts/working_memory_manager.py)**: 直前検索スロット（3ターンTTL制御）、ログ重複排除、および要約意図判定ユーティリティを提供するワーキングメモリ最適化モジュール。  
+  *Working memory optimization module providing recent search slots (3-turn TTL), log deduplication, and summary intent detection utilities.*
+- **[multilingual_date_parser.py](file:///D:/SecreAI_Build/scripts/multilingual_date_parser.py)**: 全10言語対応の高度日時・期間・イベントパース専用モジュール。STT表記揺れ、単一日、相対口語、複数日期間、月/年、季節、世界10か国大型連休をISO日付範囲へ変換。  
+  *Dedicated parser module handling STT number variations, relative dates, multi-day periods, months/years, seasons, and global holidays across 10 languages into ISO ranges.*
 - **[memory_viewer.py](file:///D:/SecreAI_Build/scripts/memory_viewer.py)**: ベクターデータベース（ChromaDB）内の長期記憶を検索・閲覧・要約・削除したり、全記憶のメタデータタグを一括補完・修復（「タグ修復」機能）するダッシュボード画面。  
   *Dashboard UI for searching/summarizing/deleting long-term memories in ChromaDB and repairing metadata tags automatically.*
 - **[chromadb_pool.py](file:///D:/SecreAI_Build/scripts/chromadb_pool.py)**: ChromaDB接続をプール（キャッシュ）し、記憶のベクトル検索や読み込み速度を3〜5倍に高速化するモジュール。  
   *Pools ChromaDB connections, accelerating vector searches and retrieval speeds by 3-5x.*
-- **[api_cache_system.py](file:///D:/SecreAI_Build/scripts/api_cache_system.py)**: 同一の質問や画像付き要求に対し、Gemini/OpenAI等のレスポンスをローカルに一時キャッシュ（TTL指定）することで、応答速度を爆速化（0.1s）しAPI費用を節約するキャッシュ。  
-  *Caches API responses locally (with TTL), enabling sub-100ms response times and eliminating redundant costs.*
+- **[api_cache_system.py](file:///D:/SecreAI_Build/scripts/api_cache_system.py)**: 同一の質問や画像付き要求に対しレスポンスをローカルキャッシュ（自動清掃および最大1,000件のLRU容量管理付）することで、応答速度を爆速化（0.1s）しAPI費用を節約するキャッシュ。  
+  *Caches API responses locally (with auto-cleanup and 1,000-item LRU capacity enforcement), enabling sub-100ms response times and eliminating redundant costs.*
 - **[config_manager.py](file:///D:/SecreAI_Build/scripts/config_manager.py)**: `data/config.json` 等の設定を破損せずに安全に排他ロード・セーブする共通ユーティリティ。  
   *Common utility safely loading and saving `data/config.json` with thread safety.*
 - **[clear_history.py](file:///D:/SecreAI_Build/scripts/clear_history.py)**: 長期記憶データベースと同期しながらチャットログ履歴を初期化するスクリプト。  
