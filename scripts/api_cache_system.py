@@ -14,14 +14,19 @@ class APICache:
     - 24時間有効なキャッシュ
     """
     
-    def __init__(self, cache_dir, ttl_hours=24):
+    def __init__(self, cache_dir, ttl_hours=24, max_capacity=1000):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.ttl_seconds = ttl_hours * 3600
+        self.max_capacity = max_capacity
         
         # 統計情報
         self.stats_file = self.cache_dir / "stats.json"
         self.stats = self._load_stats()
+        
+        # 起動時に期限切れキャッシュを一括自動削除＆容量制限超過チェック
+        self.clear_old_caches()
+        self._enforce_capacity_limit()
     
     def _get_cache_key(self, query, image_hash=None, provider="gemini", model=""):
         """クエリからキャッシュキーを生成"""
@@ -93,6 +98,33 @@ class APICache:
             
             with open(cache_file, 'w', encoding='utf-8') as f:
                 json.dump(cache_data, f, ensure_ascii=False, indent=2)
+                
+            self._enforce_capacity_limit()
+        except:
+            pass
+
+    def _enforce_capacity_limit(self):
+        """保持件数が最大容量を超えた場合、最も古いキャッシュから自動削除 (LRU/FIFO)"""
+        try:
+            cache_files = [f for f in self.cache_dir.glob("*.json") if f.name != "stats.json"]
+            if len(cache_files) > self.max_capacity:
+                # タイムスタンプ順にソート (古い順)
+                file_items = []
+                for cf in cache_files:
+                    try:
+                        with open(cf, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        file_items.append((cf, data.get('timestamp', 0)))
+                    except:
+                        file_items.append((cf, 0))
+                
+                file_items.sort(key=lambda x: x[1])
+                excess_count = len(file_items) - self.max_capacity
+                for i in range(excess_count):
+                    try:
+                        file_items[i][0].unlink()
+                    except:
+                        pass
         except:
             pass
     

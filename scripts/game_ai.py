@@ -396,8 +396,33 @@ def search_long_term_memory(query, history=None, root=None, n_results=50, is_all
         # 全エントリーのリスト化
         candidate_list = [{"doc": doc, "meta": meta} for doc, meta in combined_dict.items()]
 
-        # 2. 日時・時間帯による硬性フィルタリング (Hard Filter)
-        if date_str or short_date:
+        # 2. 日時・時間帯・範囲期間による硬性フィルタリング (Hard Filter)
+        start_date = dt_filter.get("start_date")
+        end_date = dt_filter.get("end_date")
+        is_range = dt_filter.get("is_range", False)
+
+        if is_range and start_date and end_date:
+            filtered_candidates = []
+            for item in candidate_list:
+                m = item["meta"]
+                m_date = m.get("date", "")
+                m_ts = m.get("timestamp", "")
+                d_text = item["doc"]
+                
+                match_range = False
+                if m_date and start_date <= m_date <= end_date:
+                    match_range = True
+                elif m_ts and start_date <= m_ts[:10] <= end_date:
+                    match_range = True
+                elif start_date in d_text or end_date in d_text:
+                    match_range = True
+                    
+                if match_range:
+                    filtered_candidates.append(item)
+            if filtered_candidates:
+                candidate_list = filtered_candidates
+
+        elif date_str or short_date:
             filtered_candidates = []
             for item in candidate_list:
                 m = item["meta"]
@@ -416,7 +441,6 @@ def search_long_term_memory(query, history=None, root=None, n_results=50, is_all
                     # 時間帯一致チェック
                     if start_h is not None and end_h is not None and m_ts:
                         try:
-                            # "YYYY-MM-DD HH:MM:SS" から HH を取得
                             time_part = m_ts.split(" ")[1] if " " in m_ts else ""
                             hour_val = int(time_part.split(":")[0]) if time_part else -1
                             if start_h <= hour_val <= end_h:
@@ -977,51 +1001,98 @@ def get_api_cache(config):
         _api_cache_instance = APICache(cache_dir, ttl_hours=ttl_hours)
     return _api_cache_instance
 
+def call_local_llm_chat(config, messages, json_mode=False, timeout=60):
+    """プロバイダー設定に応じてOllamaまたはLM StudioのAPIを呼び分けてチャット応答を返すヘルパー (タイムアウト: 60秒)"""
+    prov = config.get("LOCAL_LLM_PROVIDER", "ollama").lower()
+    model = config.get("MODEL_ID_SUMMARY", "gemma2:9b")
+
+    if prov == "lmstudio":
+        url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1").rstrip("/")
+        url = url.replace("localhost", "127.0.0.1")
+        if not url.endswith("/v1"):
+            url = url + "/v1"
+        api_url = url + "/chat/completions"
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.3,
+        }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        try:
+            resp = requests.post(api_url, json=payload, timeout=timeout)
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+        except requests.exceptions.HTTPError as http_err:
+            err_text = ""
+            try:
+                err_text = resp.text
+            except: pass
+            send_log_to_hub(f"LM Studio HTTP Error: {http_err.response.status_code} - {err_text}", is_error=True)
+            
+            # モデル名不一致等による 400 Bad Request の場合はモデル指定を外して現在ロード中のモデルで再試行
+            if http_err.response.status_code == 400 and "model" in payload:
+                try:
+                    payload_no_model = dict(payload)
+                    payload_no_model.pop("model", None)
+                    send_log_to_hub("システム: LM Studioへモデル指定なし(デフォルト)で再試行中...")
+                    resp_retry = requests.post(api_url, json=payload_no_model, timeout=timeout)
+                    resp_retry.raise_for_status()
+                    return resp_retry.json()["choices"][0]["message"]["content"]
+                except Exception as retry_e:
+                    raise retry_e
+            raise http_err
+        except Exception as e:
+            if json_mode:
+                try:
+                    payload.pop("response_format", None)
+                    resp = requests.post(api_url, json=payload, timeout=timeout)
+                    resp.raise_for_status()
+                    return resp.json()["choices"][0]["message"]["content"]
+                except Exception as retry_err:
+                    raise retry_err
+            raise e
+    else:
+        # Ollama REST API (/api/chat)
+        url = config.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+        url = url.replace("localhost", "127.0.0.1")
+        url = url.split("/v1")[0].rstrip("/")
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+        }
+        if json_mode:
+            payload["format"] = "json"
+        try:
+            resp = requests.post(f"{url}/api/chat", json=payload, timeout=timeout)
+            resp.raise_for_status()
+            return resp.json()["message"]["content"]
+        except Exception as e:
+            if json_mode:
+                try:
+                    payload.pop("format", None)
+                    resp = requests.post(f"{url}/api/chat", json=payload, timeout=timeout)
+                    resp.raise_for_status()
+                    return resp.json()["message"]["content"]
+                except Exception as retry_err:
+                    raise retry_err
+            raise e
+
 def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
     global gemini_client, openai_client
     history = load_history_manual(root)
     max_chars = config.get("MAX_CHARS", "700文字以内")
-    # まとめ・要約要求の動的判定 (Ver 1.3.2 全10言語対応 ＋ 全プロバイダー対応 ＋ 多層段階的安全装置)
+    # まとめ・要約要求の動的判定 (Ver 1.3.2 全10言語対応 ＋ メインAI直通モード)
     lang_pattern = lang_data.get("summary_intent_pattern") if isinstance(lang_data, dict) else None
     log_m = lang_data.get("log_messages", {}) if isinstance(lang_data, dict) else {}
     is_summary_enabled = config.get("DYNAMIC_SUMMARY_ENABLED", True)
     
     if is_summary_enabled and global_working_memory and global_working_memory.is_summary_request(prompt, custom_pattern=lang_pattern):
-        msg_detect = log_m.get("dynamic_summary_detect", "システム: 「まとめ・要約」要求を検知。条件付き動的要約を実行中...")
+        msg_detect = log_m.get("dynamic_summary_detect", "システム: 「まとめ・要約」要求を検知。記憶ログを直接抽出してメインAIへ伝達中...")
         send_log_to_hub(msg_detect)
-        
-        # 多層段階的安全装置 (50件 -> 20件 -> 10件 -> 通常検索フォールバック)
-        limits_to_try = [50, 20, 10]
-        summarized_ctx = None
-        
-        for limit in limits_to_try:
-            try:
-                raw_memory = search_long_term_memory(prompt, history, root, is_all_mode=True, max_limit=limit)
-                if raw_memory:
-                    safe_memory_text = raw_memory[:12000]
-                    summary_prompt = (
-                        "以下の抽出された過去の記憶・会話ログから、ユーザーが求めている主題・出来事・決定事項に関する主要内容と詳細を、"
-                        "最大5000文字以内でまとめた要約テキストを作成してください。\n\n"
-                        f"【抽出データ】:\n{safe_memory_text}"
-                    )
-                    res_text = call_summary_llm(config, summary_prompt)
-                    if res_text and not res_text.startswith("Error:"):
-                        summarized_ctx = res_text[:5000]
-                        msg_complete_tpl = log_m.get("dynamic_summary_complete", "システム: 動的要約が完了しました ({limit}件モード)。")
-                        send_log_to_hub(msg_complete_tpl.format(limit=limit))
-                        long_term_ctx = f"\n【抽出ログの動的要約 (5000文字以内)】:\n{summarized_ctx}\n"
-                        break
-            except Exception as retry_err:
-                send_log_to_hub(f"システム: 動的要約エラー({limit}件モード): {retry_err}", is_error=True)
-                if limit != limits_to_try[-1]:
-                    next_limit = limits_to_try[limits_to_try.index(limit) + 1]
-                    send_log_to_hub(f"システム: 上位{next_limit}件に絞り込んで再試行中...")
-                continue
-
-        if not summarized_ctx:
-            msg_fallback = log_m.get("dynamic_summary_fallback", "システム: 要約処理を安全にスキップし、通常のデータベース読み込み処理へフォールバックしました。")
-            send_log_to_hub(msg_fallback)
-            long_term_ctx = search_long_term_memory(prompt, history, root)
+        # 時系列昇順ソート済みの最大50件のログを抽出して直接メインAIへ引き渡し
+        long_term_ctx = search_long_term_memory(prompt, history, root, is_all_mode=True, max_limit=50)
     else:
         long_term_ctx = search_long_term_memory(prompt, history, root)
 
