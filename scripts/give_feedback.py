@@ -121,8 +121,8 @@ def generate_ai_text(prompt, config, system_instr=None, is_json=False):
                 "messages": [{"role": "user", "content": full_prompt}],
                 "temperature": 0.5
             }
-            if is_json:
-                payload["response_format"] = {"type": "json_object"}
+            # LM Studioは 'json_object' 指定で400になるためプロンプト指示に任せる
+            pass
 
         try:
             res = requests.post(

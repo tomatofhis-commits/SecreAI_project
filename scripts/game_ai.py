@@ -624,8 +624,7 @@ def call_local_llm_chat(config, messages, json_mode=False):
             "messages": messages,
             "temperature": 0.3,
         }
-        if json_mode:
-            payload["response_format"] = {"type": "json_object"}
+        # LM Studio の最新APIは 'json_object' 指定で400エラーになるため、プロンプト指示と切出しロジックに任せる
         try:
             resp = requests.post(api_url, json=payload, timeout=30)
             resp.raise_for_status()
@@ -637,13 +636,14 @@ def call_local_llm_chat(config, messages, json_mode=False):
             except: pass
             send_log_to_hub(f"LM Studio HTTP Error: {http_err.response.status_code} - {err_text}", is_error=True)
             
-            # モデル名不一致等による 400 Bad Request の場合はモデル指定を外して現在ロード中のモデルで再試行
-            if http_err.response.status_code == 400 and "model" in payload:
+            # 400 Bad Request の場合はモデル指定を外して現在ロード中のデフォルトモデルで再試行
+            if http_err.response.status_code == 400:
                 try:
-                    payload_no_model = dict(payload)
-                    payload_no_model.pop("model", None)
+                    payload_retry = dict(payload)
+                    payload_retry.pop("model", None)
+                    payload_retry.pop("response_format", None)
                     send_log_to_hub("システム: LM Studioへモデル指定なし(デフォルト)で再試行中...")
-                    resp_retry = requests.post(api_url, json=payload_no_model, timeout=30)
+                    resp_retry = requests.post(api_url, json=payload_retry, timeout=30)
                     resp_retry.raise_for_status()
                     return resp_retry.json()["choices"][0]["message"]["content"]
                 except Exception as retry_e:

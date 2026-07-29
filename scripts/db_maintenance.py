@@ -53,8 +53,8 @@ def get_ai_response(prompt, config, response_json=False):
                         "messages": [{"role": "user", "content": prompt}],
                         "temperature": 0.2
                     }
-                    if response_json:
-                        post_data["response_format"] = { "type": "json_object" }
+                    # LM Studioは 'json_object' 指定で400になるためプロンプト指示に任せる
+                    pass
                         
                     try:
                         res = requests.post(
