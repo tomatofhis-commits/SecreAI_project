@@ -78,8 +78,10 @@ def deduplicate_logs(logs: list) -> list:
 class WebSearchContextManager:
     """
     直前ネット検索結果の保持 ＆ 3ターン自動消去 (TTLカウントダウン) を担当する最小クラス
+    （全旧メソッドおよびキーワード引数を完全互換サポート）
     """
-    def __init__(self, default_ttl: int = 3):
+    def __init__(self, max_context_chars: int = 3000, default_ttl: int = 3, **kwargs):
+        self.max_context_chars = max_context_chars
         self.default_ttl = default_ttl
         self.web_search_slot = None  # Dict: {"query": str, "summary": str}
         self.web_search_ttl = 0
@@ -98,6 +100,10 @@ class WebSearchContextManager:
         self.web_search_slot = {"query": query, "summary": summary}
         self.web_search_ttl = ttl if ttl is not None else self.default_ttl
 
+    def update_web_search_slot(self, query: str, summary: str, ttl: int = None):
+        """set_web_search_slot の完全互換エイリアス"""
+        self.set_web_search_slot(query, summary, ttl)
+
     def decrement_ttl(self):
         """会話ターン経過に伴いTTLをデクリメント"""
         if self.web_search_ttl > 0:
@@ -112,6 +118,21 @@ class WebSearchContextManager:
             s = self.web_search_slot.get("summary", "")
             return f"【直前のネット検索結果 (参照可能)】:\n検索ワード: {q}\n検索要約: {s}\n"
         return ""
+
+    def filter_and_format_memory(self, candidate_list, query=""):
+        """後方互換用: 重複排除およびフォーマット処理"""
+        unique_list = deduplicate_logs(candidate_list)
+        web_text = self.get_formatted_web_slot()
+        res_parts = []
+        if web_text:
+            res_parts.append(web_text)
+        if unique_list:
+            res_parts.append("【過去の記憶・関連情報】:")
+            for item in unique_list:
+                doc = item.get("doc", "") if isinstance(item, dict) else str(item)
+                ts = item.get("meta", {}).get("timestamp", "過去") if isinstance(item, dict) else "過去"
+                res_parts.append(f"・[{ts}] {doc}")
+        return "\n".join(res_parts)
 
     def clear(self):
         """スロットのクリア"""
