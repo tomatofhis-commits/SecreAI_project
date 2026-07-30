@@ -608,86 +608,6 @@ def call_summary_llm(config, prompt):
     # 3. Local (Ollama / LM Studio) またはフォールバック
     return call_local_llm_chat(config, [{'role': 'user', 'content': prompt}])
 
-def call_local_llm_chat(config, messages, json_mode=False):
-    """プロバイダー設定に応じてOllamaまたはLM StudioのAPIを呼び分けてチャット応答を返すヘルパー"""
-    prov = config.get("LOCAL_LLM_PROVIDER", "ollama").lower()
-    model = config.get("MODEL_ID_SUMMARY", "gemma2:9b")
-
-    if prov == "lmstudio":
-        url = config.get("LMSTUDIO_URL", "http://localhost:1234/v1").rstrip("/")
-        url = url.replace("localhost", "127.0.0.1")
-        if not url.endswith("/v1"):
-            url = url + "/v1"
-        api_url = url + "/chat/completions"
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": 0.3,
-        }
-        # LM Studio の最新APIは 'json_object' 指定で400エラーになるため、プロンプト指示と切出しロジックに任せる
-        try:
-            resp = requests.post(api_url, json=payload, timeout=30)
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
-        except requests.exceptions.HTTPError as http_err:
-            err_text = ""
-            try:
-                err_text = resp.text
-            except: pass
-            send_log_to_hub(f"LM Studio HTTP Error: {http_err.response.status_code} - {err_text}", is_error=True)
-            
-            # 400 Bad Request の場合はモデル指定を外して現在ロード中のデフォルトモデルで再試行
-            if http_err.response.status_code == 400:
-                try:
-                    payload_retry = dict(payload)
-                    payload_retry.pop("model", None)
-                    payload_retry.pop("response_format", None)
-                    send_log_to_hub("システム: LM Studioへモデル指定なし(デフォルト)で再試行中...")
-                    resp_retry = requests.post(api_url, json=payload_retry, timeout=30)
-                    resp_retry.raise_for_status()
-                    return resp_retry.json()["choices"][0]["message"]["content"]
-                except Exception as retry_e:
-                    raise retry_e
-            raise http_err
-        except Exception as e:
-            if json_mode:
-                # JSONモードでの接続・指定が原因で400等のエラーになった場合は、通常モードで再試行
-                try:
-                    payload.pop("response_format", None)
-                    resp = requests.post(api_url, json=payload, timeout=30)
-                    resp.raise_for_status()
-                    return resp.json()["choices"][0]["message"]["content"]
-                except Exception as retry_err:
-                    raise retry_err
-            raise e
-    else:
-        # Ollama REST API (/api/chat)
-        url = config.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-        url = url.replace("localhost", "127.0.0.1")
-        # /v1 が含まれる場合はベースURLのみ抽出
-        url = url.split("/v1")[0].rstrip("/")
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": False,
-        }
-        if json_mode:
-            payload["format"] = "json"
-        try:
-            resp = requests.post(f"{url}/api/chat", json=payload, timeout=30)
-            resp.raise_for_status()
-            return resp.json()["message"]["content"]
-        except Exception as e:
-            if json_mode:
-                try:
-                    payload.pop("format", None)
-                    resp = requests.post(f"{url}/api/chat", json=payload, timeout=30)
-                    resp.raise_for_status()
-                    return resp.json()["message"]["content"]
-                except Exception as retry_err:
-                    raise retry_err
-            raise e
-
 
 def should_execute_search(query, config, log_m):
     """案1: 検索が本当に必要かAI（軽量モデル）で事前判定する"""
@@ -735,6 +655,7 @@ def should_execute_search(query, config, log_m):
             return {"necessary": True, "optimized_query": query, "reason": "Local LLM not running"}
 
         send_log_to_hub(f"Gatekeeper Error: {e}", is_error=True)
+        print(f"[DEBUG should_execute_search Exception Details]: {repr(e)}")
         return {"necessary": True, "optimized_query": query, "reason": f"Gatekeeper failed: {e}"}
 
 def execute_background_search(search_query, config, root, session_data):
@@ -1012,45 +933,32 @@ def call_local_llm_chat(config, messages, json_mode=False, timeout=60):
         if not url.endswith("/v1"):
             url = url + "/v1"
         api_url = url + "/chat/completions"
+
+        # LM Studio でロード中の最新モデル ID を自動取得（モデル名不一致による400エラーを根絶）
+        active_model = model
+        try:
+            models_resp = requests.get(f"{url}/models", timeout=3)
+            if models_resp.status_code == 200:
+                m_data = models_resp.json().get("data", [])
+                if m_data and len(m_data) > 0:
+                    loaded_id = m_data[0].get("id")
+                    if loaded_id:
+                        active_model = loaded_id
+        except:
+            pass
+
         payload = {
-            "model": model,
+            "model": active_model,
             "messages": messages,
             "temperature": 0.3,
         }
-        if json_mode:
-            payload["response_format"] = {"type": "json_object"}
+
         try:
             resp = requests.post(api_url, json=payload, timeout=timeout)
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
-        except requests.exceptions.HTTPError as http_err:
-            err_text = ""
-            try:
-                err_text = resp.text
-            except: pass
-            send_log_to_hub(f"LM Studio HTTP Error: {http_err.response.status_code} - {err_text}", is_error=True)
-            
-            # モデル名不一致等による 400 Bad Request の場合はモデル指定を外して現在ロード中のモデルで再試行
-            if http_err.response.status_code == 400 and "model" in payload:
-                try:
-                    payload_no_model = dict(payload)
-                    payload_no_model.pop("model", None)
-                    send_log_to_hub("システム: LM Studioへモデル指定なし(デフォルト)で再試行中...")
-                    resp_retry = requests.post(api_url, json=payload_no_model, timeout=timeout)
-                    resp_retry.raise_for_status()
-                    return resp_retry.json()["choices"][0]["message"]["content"]
-                except Exception as retry_e:
-                    raise retry_e
-            raise http_err
         except Exception as e:
-            if json_mode:
-                try:
-                    payload.pop("response_format", None)
-                    resp = requests.post(api_url, json=payload, timeout=timeout)
-                    resp.raise_for_status()
-                    return resp.json()["choices"][0]["message"]["content"]
-                except Exception as retry_err:
-                    raise retry_err
+            send_log_to_hub(f"LM Studio Error: {e}", is_error=True)
             raise e
     else:
         # Ollama REST API (/api/chat)
