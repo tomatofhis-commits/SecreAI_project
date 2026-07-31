@@ -711,8 +711,10 @@ def execute_background_search(search_query, config, root, session_data):
                         session_id, session_getter, overlay_queue = session_data[0], session_data[1], session_data[2]
                         if session_id and session_getter and session_getter() != session_id: return
 
-                        trigger_overlay_state(None, None, "OFF", 0, 'idle', overlay_queue)
-                        time.sleep(0.1)
+                        # 通常返答の音声再生が完了するまで待機
+                        while pygame.mixer.get_init() and pygame.mixer.music.get_busy():
+                            if session_id and session_getter and session_getter() != session_id: return
+                            time.sleep(0.2)
                         
                         prefix = ai_p.get("search_appendix_prefix", "Here is some additional information.")
                         speak_and_show(f"{prefix} {summary}", None, config, root, session_data, show_window=True, skip_idle=False)
@@ -810,11 +812,7 @@ def execute_background_search(search_query, config, root, session_data):
             
             while pygame.mixer.get_init() and pygame.mixer.music.get_busy():
                 if session_id and session_getter and session_getter() != session_id: return
-                time.sleep(0.5)
-
-            overlay_queue = session_data[2]
-            trigger_overlay_state(None, None, "OFF", 0, 'idle', overlay_queue)
-            time.sleep(0.1)
+                time.sleep(0.2)
             
             prefix = ai_p.get("search_appendix_prefix", "Here is some additional information.")
             speak_and_show(f"{prefix} {summary}", None, config, root, session_data, show_window=True, skip_idle=False)
