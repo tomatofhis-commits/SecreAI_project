@@ -187,7 +187,7 @@ def managed_mixer(config):
     finally:
         try:
             while pygame.mixer.music.get_busy():
-                time.sleep(0.01)
+                time.sleep(0.05)
             pygame.mixer.music.unload()
         except:
             pass
@@ -1475,7 +1475,7 @@ def run_voicevox_speak(text, config, root, session_data):
                 if session_id and session_getter and session_getter() != session_id:
                     pygame.mixer.music.stop()
                     break
-                time.sleep(0.01)
+                time.sleep(0.05)
             
             # 再生完了後にファイルを削除
             try:
@@ -1575,7 +1575,10 @@ def ensure_voicevox_is_running(config, lang_data):
     if vv_path and os.path.exists(vv_path):
         send_log_to_hub(lang_data["log_messages"]["engine_starting"])
         try:
-            subprocess.Popen([vv_path], creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+            vv_env = os.environ.copy()
+            vv_env["OMP_NUM_THREADS"] = "2"
+            vv_env["ONNXRUNTIME_NUM_THREADS"] = "2"
+            subprocess.Popen([vv_path], env=vv_env, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
             time.sleep(3); return True
         except Exception as e:
             send_log_to_hub(lang_data["log_messages"]["engine_fail"].format(e=e), is_error=True, error_code="voicevox_not_running")
