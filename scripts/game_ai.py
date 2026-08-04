@@ -711,10 +711,10 @@ def execute_background_search(search_query, config, root, session_data):
                         session_id, session_getter, overlay_queue = session_data[0], session_data[1], session_data[2]
                         if session_id and session_getter and session_getter() != session_id: return
 
-                        # 通常返答の音声再生が完了するまで待機
-                        while pygame.mixer.get_init() and pygame.mixer.music.get_busy():
+                        # 通常返答の音声再生およびスレッド処理(speaker_lock)が完全に完了するまで待機
+                        while (pygame.mixer.get_init() and pygame.mixer.music.get_busy()) or speaker_lock.locked():
                             if session_id and session_getter and session_getter() != session_id: return
-                            time.sleep(0.2)
+                            time.sleep(0.1)
                         
                         # 0.5秒の安全マージン（ウェイトタイム）を確保
                         time.sleep(0.5)
@@ -814,9 +814,10 @@ def execute_background_search(search_query, config, root, session_data):
             
             submit_background_task(save_search_to_db, summary, search_query, config, root)
             
-            while pygame.mixer.get_init() and pygame.mixer.music.get_busy():
+            # 通常返答の音声再生およびスレッド処理(speaker_lock)が完全に完了するまで待機
+            while (pygame.mixer.get_init() and pygame.mixer.music.get_busy()) or speaker_lock.locked():
                 if session_id and session_getter and session_getter() != session_id: return
-                time.sleep(0.2)
+                time.sleep(0.1)
             
             # 0.5秒の安全マージン（ウェイトタイム）を確保
             time.sleep(0.5)
