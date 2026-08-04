@@ -43,17 +43,40 @@ def parse_datetime_filter(text: str) -> dict:
 
 def extract_search_keywords(text: str) -> list:
     """
-    プロンプトから名詞・固有名詞などの検索キーとなる重要な単語を抽出
+    プロンプトから名詞・固有名詞および実日付（相対日付からの変換含む）を抽出
     """
     if not text:
         return []
     import re
-    # 記号除去と名詞相当の単語抽出
+    from datetime import datetime
+
+    keywords = []
+
+    # 1. 日時解析（「今日」「昨日」「6月15日」などの実日付数値化・変換）
+    date_res = parse_datetime_filter(text)
+    if date_res.get("date_str"):
+        d_str = date_res["date_str"]  # YYYY-MM-DD
+        keywords.append(d_str)
+        try:
+            dt = datetime.strptime(d_str, "%Y-%m-%d")
+            jp_date = f"{dt.month}月{dt.day}日"
+            jp_full_date = f"{dt.year}年{dt.month}月{dt.day}日"
+            keywords.append(jp_date)
+            keywords.append(jp_full_date)
+        except:
+            pass
+
+    # 2. 記号除去と名詞相当の単語抽出
     clean_t = re.sub(r'[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]', ' ', text)
     tokens = [w.strip() for w in clean_t.split() if len(w.strip()) >= 2]
-    # ストップワード
-    stopwords = {"まとめ", "要約", "教え", "くだ", "さい", "お願い", "について", "話", "こと", "これ", "それ", "あれ", "昨日", "今日"}
-    return [t for t in tokens if t not in stopwords][:5]
+    # ストップワード（今日・昨日・一昨日は除去せず実日付化で対応するため除外）
+    stopwords = {"まとめ", "要約", "教え", "くだ", "さい", "お願い", "について", "話", "こと", "これ", "それ", "あれ"}
+    
+    for t in tokens:
+        if t not in stopwords and t not in keywords:
+            keywords.append(t)
+            
+    return keywords[:8]
 
 def deduplicate_logs(logs: list) -> list:
     """

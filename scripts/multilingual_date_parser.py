@@ -193,12 +193,17 @@ class MultilingualDateParser:
         # D. 単一日付 ＆ 相対口語判定 (範囲指定がなかった場合)
         # ----------------------------------------------------
         if not is_range:
-            # 1. 昨日 (Yesterday)
-            if re.search(r'(昨日|yesterday|gestern|hier|ayer|ontem|вчера|어제|批判|昨日)', clean_text, re.IGNORECASE):
+            # 1. 今日 (Today)
+            if re.search(r'(今日|today|heute|aujourd\'hui|hoy|hoje|сегодня|오늘|今天)', clean_text, re.IGNORECASE):
+                target_dt = now
+                date_str = target_dt.strftime("%Y-%m-%d")
+                short_date = target_dt.strftime("%m-%d")
+            # 2. 昨日 (Yesterday)
+            elif re.search(r'(昨日|yesterday|gestern|hier|ayer|ontem|вчера|어제|批判|昨日)', clean_text, re.IGNORECASE):
                 target_dt = now - timedelta(days=1)
                 date_str = target_dt.strftime("%Y-%m-%d")
                 short_date = target_dt.strftime("%m-%d")
-            # 2. 一昨日 (Day before yesterday)
+            # 3. 一昨日 (Day before yesterday)
             elif re.search(r'(一昨日|day before yesterday|vorgestern|avant-hier|anteayer|anteontem|позавчера|그저께|前天)', clean_text, re.IGNORECASE):
                 target_dt = now - timedelta(days=2)
                 date_str = target_dt.strftime("%Y-%m-%d")
