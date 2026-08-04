@@ -716,6 +716,10 @@ def execute_background_search(search_query, config, root, session_data):
                             if session_id and session_getter and session_getter() != session_id: return
                             time.sleep(0.2)
                         
+                        # 0.5秒の安全マージン（ウェイトタイム）を確保
+                        time.sleep(0.5)
+                        if session_id and session_getter and session_getter() != session_id: return
+                        
                         prefix = ai_p.get("search_appendix_prefix", "Here is some additional information.")
                         speak_and_show(f"{prefix} {summary}", None, config, root, session_data, show_window=True, skip_idle=False)
                         return
@@ -813,6 +817,10 @@ def execute_background_search(search_query, config, root, session_data):
             while pygame.mixer.get_init() and pygame.mixer.music.get_busy():
                 if session_id and session_getter and session_getter() != session_id: return
                 time.sleep(0.2)
+            
+            # 0.5秒の安全マージン（ウェイトタイム）を確保
+            time.sleep(0.5)
+            if session_id and session_getter and session_getter() != session_id: return
             
             prefix = ai_p.get("search_appendix_prefix", "Here is some additional information.")
             speak_and_show(f"{prefix} {summary}", None, config, root, session_data, show_window=True, skip_idle=False)
