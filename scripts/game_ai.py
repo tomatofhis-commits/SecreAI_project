@@ -1443,6 +1443,9 @@ def run_voicevox_speak(text, config, root, session_data):
                 )
                 if r2.status_code == 200:
                     audio_queue.put(r2.content)
+                
+                # VOICEVOX連続リクエストによるCPUスパイク防止用ウェイト（0.2秒）
+                time.sleep(0.2)
             except Exception as e:
                 msg = log_m.get("audio_gen_error", "Audio generation error: {e}").format(e=e)
                 send_log_to_hub(msg, is_error=True)
