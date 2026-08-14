@@ -282,8 +282,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     normal_col.pack(side="left", expand=True, padx=5)
     lbl_model_normal = tk.Label(normal_col, text=l_set.get("model_normal", "Normal Model:"), font=("Segoe UI", 9))
     lbl_model_normal.pack(anchor="w")
-    gemini_models = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3-flash-preview", "gemini-3.6-flash", "gemini-3.1-pro-preview"]
-    model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-3.6-flash"))
+    gemini_models = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3-flash-preview", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.1-pro-preview"]
+    model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-3.7-flash"))
     tk.OptionMenu(normal_col, model_var, *gemini_models).pack(pady=2, fill="x")
 
     # 2. 思考レベル (中央)
@@ -307,7 +307,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     thinking_menu.pack(pady=2, fill="x")
 
     def update_thinking_state(*args):
-        if model_var.get() in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash"):
+        if model_var.get() in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.7-flash"):
             thinking_menu.configure(state="normal")
             thinking_label.configure(fg="black")
         else:
@@ -322,8 +322,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     pro_col.pack(side="left", expand=True, padx=5)
     lbl_model_pro = tk.Label(pro_col, text=l_set.get("model_pro", "Pro Model:"), font=("Segoe UI", 9))
     lbl_model_pro.pack(anchor="w")
-    pro_models = ["gemini-3-flash-preview", "gemini-3.6-flash（中）", "gemini-3.6-flash（高）", "gemini-3.1-pro-preview"]
-    model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.6-flash（中）"))
+    pro_models = ["gemini-3-flash-preview", "gemini-3.6-flash（中）", "gemini-3.6-flash（高）", "gemini-3.7-flash（中）", "gemini-3.7-flash（高）", "gemini-3.1-pro-preview"]
+    model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.7-flash（中）"))
     tk.OptionMenu(pro_col, model_pro_var, *pro_models).pack(pady=2, fill="x")
 
     # OpenAI Frame
@@ -805,8 +805,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         
         provider = db_provider_var.get()
         if provider == "gemini":
-            # 最新の gemini-3.6-flash を筆頭に配置（思考レベルは降順）
-            models = ["gemini-3.6-flash（高）", "gemini-3.6-flash（中）", "gemini-3.6-flash（低）", "gemini-3.6-flash（最小）", "gemini-3.5-flash-lite（高）", "gemini-3.5-flash-lite（中）", "gemini-3.1-flash-lite（高）", "gemini-3.1-flash-lite（中）", "gemini-3-flash-preview", "gemini-3.1-pro-preview"]
+            # 最新の gemini-3.7-flash を筆頭に配置（思考レベルは降順）
+            models = ["gemini-3.7-flash（高）", "gemini-3.7-flash（中）", "gemini-3.7-flash（低）", "gemini-3.7-flash（最小）", "gemini-3.6-flash（高）", "gemini-3.6-flash（中）", "gemini-3.6-flash（低）", "gemini-3.6-flash（最小）", "gemini-3.5-flash-lite（高）", "gemini-3.5-flash-lite（中）", "gemini-3.1-flash-lite（高）", "gemini-3.1-flash-lite（中）", "gemini-3-flash-preview", "gemini-3.1-pro-preview"]
         elif provider == "openai":
             models = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4-mini", "gpt-5.4-nano"]
         else: # local

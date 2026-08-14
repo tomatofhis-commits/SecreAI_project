@@ -165,7 +165,7 @@ def main(base_path=None):
     elif provider == "local":
         model_id = config.get("MODEL_ID_LOCAL", "llama3.2-vision:11b")
     else:  # gemini
-        model_id = config.get("MODEL_ID", "gemini-3.6-flash")
+        model_id = config.get("MODEL_ID", "gemini-3.7-flash")
 
     # APIキャッシュの初期化
     cache_enabled = config.get("API_CACHE_ENABLED", True)
@@ -266,7 +266,7 @@ def main(base_path=None):
                     level = thinking_budget
 
                 is_thinking_supported = (
-                    local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.1-flash-lite-preview")
+                    local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.1-flash-lite-preview")
                 )
 
                 if is_thinking_supported and level:
@@ -340,7 +340,7 @@ def main(base_path=None):
                     level = thinking_budget
 
                 is_thinking_supported = (
-                    local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.1-flash-lite-preview")
+                    local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.1-flash-lite-preview")
                 )
 
                 if is_thinking_supported and level:

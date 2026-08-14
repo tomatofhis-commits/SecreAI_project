@@ -87,7 +87,7 @@ def main():
         config = json.load(f)
 
     db_provider = config.get("DB_PROVIDER", config.get("AI_PROVIDER", "gemini")).lower()
-    db_model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-3.6-flash"))
+    db_model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-3.7-flash"))
     lang_code = config.get("LANGUAGE", "ja")
     lang_data = load_lang_file(lang_code)
     if not lang_data: return
@@ -165,7 +165,7 @@ def main():
                         level = thinking_budget
 
                     is_thinking_supported = (
-                        local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.1-flash-lite-preview")
+                        local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.1-flash-lite-preview")
                     )
 
                     if is_thinking_supported and level:
@@ -213,7 +213,7 @@ def main():
                 elif main_provider == "local":
                     main_model_id = config.get("MODEL_ID_LOCAL", "llama3.2-vision:11b")
                 else:  # gemini
-                    main_model_id = config.get("MODEL_ID", "gemini-3.6-flash")
+                    main_model_id = config.get("MODEL_ID", "gemini-3.7-flash")
                 
                 def generate_text_main(prompt):
                     """タグ生成用: メインAIモデルを使用"""
@@ -237,7 +237,7 @@ def main():
                         
                         gemini_config_obj = {}
                         thinking_budget = config.get("THINKING_BUDGET", "medium")
-                        if main_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash"):
+                        if main_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.7-flash"):
                             if main_model_id == "gemini-3.5-flash-lite" and thinking_budget.lower() not in ("medium", "high"):
                                 thinking_budget = "medium"
                             gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}

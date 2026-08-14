@@ -1,4 +1,4 @@
-# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.2)
+# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.3)
 
 ![SecreAI Logo](SecreAI.ico)
 
