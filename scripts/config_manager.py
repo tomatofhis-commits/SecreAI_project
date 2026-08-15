@@ -126,44 +126,18 @@ def migrate_config(config):
 
         migrated = True
 
-    # 廃止モデルの自動置換 (v1.0.6)
-    _model_renames = {
-        "gpt-5-mini": "gpt-5.4-mini",
-        "gpt-5.2": "gpt-5.4",
-        "gpt-4o": "gpt-5.4",
-        "gpt-4o-mini": "gpt-5.4-mini",
-        "gpt-5.5-2026-04-23": "gpt-5.5",
-        "o3-mini（低）": "gpt-5-mini",
-        "o3-mini（中）": "gpt-5-mini",
-        "o3-mini（高）": "gpt-5-mini",
-        "o1（低）": "gpt-5",
-        "o1（中）": "gpt-5",
-        "o1（高）": "gpt-5"
-    }
-    for _key in ("MODEL_ID_GPT", "DB_MODEL_ID"):
-        if config.get(_key) in _model_renames:
-            config[_key] = _model_renames[config[_key]]
-            migrated = True
+    # 廃止・旧世代モデルの自動置換 (model_registry を利用)
+    try:
+        from model_registry import migrate_model_name
+    except ImportError:
+        from scripts.model_registry import migrate_model_name
 
-    # Gemini 旧モデルの自動置換 (gemini-3.7-flash への移行)
-    _gemini_renames = {
-        "gemini-2.0-flash": "gemini-3.7-flash",
-        "gemini-2.5-flash-lite": "gemini-3.7-flash",
-        "gemini-2.5-flash": "gemini-3.7-flash",
-        "gemini-3.5-flash": "gemini-3.7-flash"
-    }
-    
-    if config.get("MODEL_ID") in _gemini_renames:
-        config["MODEL_ID"] = _gemini_renames[config["MODEL_ID"]]
-        migrated = True
-        
-    if config.get("MODEL_ID_PRO") in ("gemini-2.0-flash-thinking-exp", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.5-flash（中）", "gemini-3.5-flash（高）"):
-        config["MODEL_ID_PRO"] = "gemini-3.7-flash（中）"
-        migrated = True
-        
-    if config.get("DB_MODEL_ID") in ("gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.5-flash（中）", "gemini-3.5-flash（高）", "gemini-3.5-flash（低）", "gemini-3.5-flash（最小）"):
-        config["DB_MODEL_ID"] = "gemini-3.7-flash（中）"
-        migrated = True
+    for _key in ("MODEL_ID", "MODEL_ID_PRO", "MODEL_ID_GPT", "DB_MODEL_ID"):
+        if _key in config:
+            _new_val, _changed = migrate_model_name(config[_key])
+            if _changed:
+                config[_key] = _new_val
+                migrated = True
 
     # 常に最新のデフォルト値で不足しているキーを補完する
     for key, default_value in DEFAULT_CONFIG.items():
@@ -222,33 +196,10 @@ def save_config(config_path, config):
 
 def parse_model_name(model_name):
     """
-    モデル名から実モデル名と指定された思考レベル（またはreasoning_effort）をパースする。
-    例:
-      'gemini-3.5-flash（中）' -> ('gemini-3.5-flash', 'medium')
-      'o3-mini（低）' -> ('o3-mini', 'low')
+    モデル名から実モデル名と指定された思考レベル（またはreasoning_effort）をパースする（model_registryへ委譲）。
     """
-    if not model_name:
-        return "", None
-        
-    import re
-    # 全角・半角のカッコに対応
-    m = re.match(r"^([a-zA-Z0-9\.\-_:]+)[（\‍(]([^）\‍)]+)[）\‍)]$", model_name.strip())
-    if m:
-        actual_name = m.group(1).strip()
-        level_str = m.group(2).strip()
-        
-        # 思考レベルのマッピング
-        level_map = {
-            "最小": "minimal",
-            "minimal": "minimal",
-            "低": "low",
-            "low": "low",
-            "中": "medium",
-            "medium": "medium",
-            "高": "high",
-            "high": "high"
-        }
-        level = level_map.get(level_str, None)
-        return actual_name, level
-        
-    return model_name.strip(), None
+    try:
+        from model_registry import parse_model_name as _pmn
+    except ImportError:
+        from scripts.model_registry import parse_model_name as _pmn
+    return _pmn(model_name)

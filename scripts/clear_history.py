@@ -164,11 +164,12 @@ def main():
                         thinking_budget = config.get("THINKING_BUDGET", "medium").lower()
                         level = thinking_budget
 
-                    is_thinking_supported = (
-                        local_db_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.1-flash-lite-preview")
-                    )
+                    try:
+                        from model_registry import supports_thinking
+                    except ImportError:
+                        from scripts.model_registry import supports_thinking
 
-                    if is_thinking_supported and level:
+                    if supports_thinking(local_db_model_id) and level:
                         if local_db_model_id == "gemini-3.5-flash-lite":
                             if level not in ("medium", "high"):
                                 level = "medium"
@@ -237,7 +238,7 @@ def main():
                         
                         gemini_config_obj = {}
                         thinking_budget = config.get("THINKING_BUDGET", "medium")
-                        if main_model_id in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.7-flash"):
+                        if supports_thinking(main_model_id):
                             if main_model_id == "gemini-3.5-flash-lite" and thinking_budget.lower() not in ("medium", "high"):
                                 thinking_budget = "medium"
                             gemini_config_obj["thinking_config"] = {"thinking_level": thinking_budget.upper()}

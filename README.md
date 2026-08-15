@@ -7,11 +7,14 @@ SecreAIは、Google Geminiをコアエンジンに据え、ウェブ検索、画
 
 ---
 
-## 主要機能 / Key Features (Ver 1.3.2)
+## 主要機能 / Key Features (Ver 1.3.3)
 
+- **Gemini 3.7 Flash 標準搭載 & モデルレジストリ一元化 (Ver 1.3.3) / Gemini 3.7 Flash & Unified Model Registry**:
+  Google最新モデル `gemini-3.7-flash` を標準搭載し、思考レベル制御（Thinking Budget）に完全対応。内部アーキテクチャのモデルレジストリ一元化により、高い堅牢性と拡張性を実現。  
+  *Features Google's newest `gemini-3.7-flash` as default with full thinking budget support, backed by a unified Model Registry architecture.*
 - **マルチモーダル対話 / Multimodal Interaction**: テキスト、音声、視覚（画面キャプチャ）を組み合わせた自然な対話。  
   *Natural conversations combining text, voice, and vision (screen capture).*
-- **ハイブリッド記憶 (Ver 1.3.2) / Hybrid Memory**:
+- **ハイブリッド記憶 / Hybrid Memory**:
   ベクトル検索（意味類似度）とキーワード部分一致検索を併用し、過去の固有名詞検索漏れを防止。コンテキスト枠（1500〜3000文字）と直前検索スロット（3ターンTTL制御）でトークン無駄遣いをカット。  
   *Combines vector search and keyword matching to eliminate missing proper nouns. Context limits (1500-3000 chars) and search slots (TTL) minimize token costs.*
 - **動的記憶抽出機能 (Ver 1.3.2) / Dynamic Memory Retrieval Architecture**:

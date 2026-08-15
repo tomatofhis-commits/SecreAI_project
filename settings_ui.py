@@ -31,11 +31,12 @@ try:
     # Nuitka ビルド時は scripts パッケージ配下としてインポート
     try:
         from scripts.db_maintenance import get_db_stats, clean_up_database
-        from scripts import game_ai, config_manager
-        print("DEBUG: db_maintenance, game_ai and config_manager loaded via scripts")
+        from scripts import game_ai, config_manager, model_registry
+        print("DEBUG: db_maintenance, game_ai, config_manager and model_registry loaded via scripts")
     except ImportError:
         # 開発時のフォールバック
         import game_ai
+        import model_registry
         from scripts import config_manager
         try:
             import db_maintenance
@@ -282,7 +283,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     normal_col.pack(side="left", expand=True, padx=5)
     lbl_model_normal = tk.Label(normal_col, text=l_set.get("model_normal", "Normal Model:"), font=("Segoe UI", 9))
     lbl_model_normal.pack(anchor="w")
-    gemini_models = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3-flash-preview", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.1-pro-preview"]
+    gemini_models = model_registry.GEMINI_NORMAL_MODELS
     model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-3.7-flash"))
     tk.OptionMenu(normal_col, model_var, *gemini_models).pack(pady=2, fill="x")
 
@@ -307,7 +308,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     thinking_menu.pack(pady=2, fill="x")
 
     def update_thinking_state(*args):
-        if model_var.get() in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.7-flash"):
+        if model_registry.supports_thinking(model_var.get()):
             thinking_menu.configure(state="normal")
             thinking_label.configure(fg="black")
         else:
@@ -322,7 +323,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     pro_col.pack(side="left", expand=True, padx=5)
     lbl_model_pro = tk.Label(pro_col, text=l_set.get("model_pro", "Pro Model:"), font=("Segoe UI", 9))
     lbl_model_pro.pack(anchor="w")
-    pro_models = ["gemini-3-flash-preview", "gemini-3.6-flash（中）", "gemini-3.6-flash（高）", "gemini-3.7-flash（中）", "gemini-3.7-flash（高）", "gemini-3.1-pro-preview"]
+    pro_models = model_registry.GEMINI_PRO_MODELS
     model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.7-flash（中）"))
     tk.OptionMenu(pro_col, model_pro_var, *pro_models).pack(pady=2, fill="x")
 
@@ -333,7 +334,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     openai_key_entry = tk.Entry(openai_frame, width=50, show="*")
     openai_key_entry.insert(0, config.get("OPENAI_API_KEY", ""))
     openai_key_entry.pack(pady=2)
-    gpt_models = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4-mini", "gpt-5.4-nano"]
+    gpt_models = model_registry.OPENAI_MODELS
     gpt_model_var = tk.StringVar(openai_frame, config.get("MODEL_ID_GPT", "gpt-5.4-mini"))
     tk.OptionMenu(openai_frame, gpt_model_var, *gpt_models).pack(pady=2)
 
@@ -805,10 +806,9 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         
         provider = db_provider_var.get()
         if provider == "gemini":
-            # 最新の gemini-3.7-flash を筆頭に配置（思考レベルは降順）
-            models = ["gemini-3.7-flash（高）", "gemini-3.7-flash（中）", "gemini-3.7-flash（低）", "gemini-3.7-flash（最小）", "gemini-3.6-flash（高）", "gemini-3.6-flash（中）", "gemini-3.6-flash（低）", "gemini-3.6-flash（最小）", "gemini-3.5-flash-lite（高）", "gemini-3.5-flash-lite（中）", "gemini-3.1-flash-lite（高）", "gemini-3.1-flash-lite（中）", "gemini-3-flash-preview", "gemini-3.1-pro-preview"]
+            models = model_registry.GEMINI_DB_MODELS.copy()
         elif provider == "openai":
-            models = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4-mini", "gpt-5.4-nano"]
+            models = model_registry.OPENAI_MODELS.copy()
         else: # local
             # APIから取得したプロバイダ別のリストを使用
             loc_prov = local_provider_var.get()
