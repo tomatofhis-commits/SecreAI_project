@@ -187,7 +187,10 @@
         "grounding_info_notice": "O Google Grounding (Google Search) está disponível gratuitamente para até 5.000 prompts por mês.",
         "label_tag_interval": "Intervalo de geração automática de tags (Operações):",
         "unit_times": "operações",
-        "dynamic_summary_enabled": "Ativar resumo dinâmico de memória por intenção (Recomendado)"
+        "dynamic_summary_enabled": "Ativar resumo dinâmico de memória por intenção (Recomendado)",
+        "btn_refresh_speakers": "Atualizar Lista de Vozes",
+        "btn_speaker_updated": "Atualizado",
+        "btn_speaker_failed": "Falha (Não iniciado)"
     },
     "log_messages": {
         "module_loaded": "Sistema: Módulo de atualização de memória carregado.",

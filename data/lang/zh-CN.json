@@ -187,7 +187,10 @@
         "grounding_info_notice": "Google Grounding (Google Search) 每月最多可免费使用 5,000 次。",
         "label_tag_interval": "自动生成标签间隔 (运行次数):",
         "unit_times": "次 / 1次",
-        "dynamic_summary_enabled": "按意图启用过去记忆的动态摘要（推荐）"
+        "dynamic_summary_enabled": "按意图启用过去记忆的动态摘要（推荐）",
+        "btn_refresh_speakers": "刷新发音人列表",
+        "btn_speaker_updated": "更新完成",
+        "btn_speaker_failed": "更新失败(未启动)"
     },
     "log_messages": {
         "module_loaded": "系统: 记忆更新模块已加载。",

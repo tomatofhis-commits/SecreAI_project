@@ -185,7 +185,10 @@
         "grounding_info_notice": "Google Grounding (Google Search)은 월 5,000회 프롬프트까지 무료로 사용 가능합니다.",
         "label_tag_interval": "태그 자동 생성 간격 (작동 횟수):",
         "unit_times": "회당 1회",
-        "dynamic_summary_enabled": "대화 의도에 따른 과거 기억의 동적 요약 활성화 (권장)"
+        "dynamic_summary_enabled": "대화 의도에 따른 과거 기억의 동적 요약 활성화 (권장)",
+        "btn_refresh_speakers": "화자 목록 갱신",
+        "btn_speaker_updated": "갱신 완료",
+        "btn_speaker_failed": "갱신 실패(미실행)"
     },
     "log_messages": {
         "module_loaded": "시스템: 기억 업데이트 모듈이 로드되었습니다.",

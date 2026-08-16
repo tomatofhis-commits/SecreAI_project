@@ -66,7 +66,7 @@ except ImportError:
 # ------------------------
 # 🔹 GLOBAL CONFIGURATION 🔹
 # ------------------------
-VERSION = "1.3.3"
+VERSION = "1.3.4"
 CONFIG_VERSION = "2.0"
 APP_NAME = f"SecreAI - NextGen {VERSION}"
 
@@ -573,6 +573,7 @@ class MainApp(ctk.CTk):
             lines = [l.strip() for l in r.stdout.splitlines() if l.strip()]
             if lines:
                 self.cached_gpus = lines
+                self.config_data["CACHED_GPUS"] = lines
         except: pass
 
         # 2. VOICEVOX 話者取得
@@ -580,6 +581,7 @@ class MainApp(ctk.CTk):
             resp = requests.get("http://127.0.0.1:50021/speakers", timeout=2.0)
             if resp.status_code == 200:
                 self.cached_speakers = {s['name']: s['styles'][0]['id'] for s in resp.json()}
+                self.config_data["CACHED_VOICEVOX_SPEAKERS"] = self.cached_speakers
         except: pass
 
         # 3. Ollama モデル取得 (URLが設定されている場合)

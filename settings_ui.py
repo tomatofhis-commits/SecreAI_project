@@ -23,31 +23,12 @@ def get_root_dir():
 
 base_dir = get_root_dir()
 
-# --- 自作モジュールのインポート ---
-get_db_stats = None
-clean_up_database = None
-
+# --- 自作モジュールのインポート（軽量モジュールのみ即時インポート、重いモジュールは遅延ロード） ---
 try:
-    # Nuitka ビルド時は scripts パッケージ配下としてインポート
-    try:
-        from scripts.db_maintenance import get_db_stats, clean_up_database
-        from scripts import game_ai, config_manager, model_registry
-        print("DEBUG: db_maintenance, game_ai, config_manager and model_registry loaded via scripts")
-    except ImportError:
-        # 開発時のフォールバック
-        import game_ai
-        import model_registry
-        from scripts import config_manager
-        try:
-            import db_maintenance
-            get_db_stats = db_maintenance.get_db_stats
-            clean_up_database = db_maintenance.clean_up_database
-        except ImportError:
-            get_db_stats = None
-            clean_up_database = None
-        print("DEBUG: db_maintenance, game_ai and config_manager loaded via direct import")
-except Exception as e:
-    print(f"DEBUG: Import failed. Error: {e}")
+    from scripts import config_manager, model_registry
+except ImportError:
+    import config_manager
+    import model_registry
 
 # --- Helper: Fetch Ollama Models ---
 def get_ollama_models(ollama_url):
@@ -187,6 +168,9 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         lbl_vv_path.config(text=l_set.get("label_vv_path", "VOICEVOX Path:"))
         btn_browse.config(text=l_set.get("browse", "Browse"))
         lbl_vv_speaker.config(text=l_set.get("voicevox_speaker", "Speaker:"))
+        if 'btn_refresh_spk' in locals() or 'btn_refresh_spk' in globals():
+            try: btn_refresh_spk.config(text=l_set.get("btn_refresh_speakers", l_set.get("btn_refresh", "Refresh Speakers")))
+            except: pass
 
         # Hotkeys
         lbl_hk_title.config(text=l_set.get("hotkey_title", "Hotkeys"))
@@ -463,10 +447,17 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     view_group = tk.LabelFrame(tab_audio_view, text=" View & Window Settings ", padx=10, pady=10)
     view_group.pack(pady=10, fill="x", padx=20)
 
-    # 文字数制限の動的読み込み
-    lbl_max_chars = add_label(view_group, l_set.get("max_chars", "Max Characters:"), pady=0)
+    # 2x2 グリッド配置用フレーム
+    view_grid_frame = tk.Frame(view_group)
+    view_grid_frame.pack(fill="x", padx=5, pady=5)
+    view_grid_frame.columnconfigure(0, weight=1)
+    view_grid_frame.columnconfigure(1, weight=1)
+
+    # [左上] 文字数制限
+    cell_max_chars = tk.Frame(view_grid_frame)
+    cell_max_chars.grid(row=0, column=0, padx=10, pady=6, sticky="ew")
+    lbl_max_chars = add_label(cell_max_chars, l_set.get("max_chars", "Max Characters:"), pady=0)
     
-    # 言語ファイルから選択肢を取得 (存在しない場合のフォールバック)
     char_opts_data = l_set.get("max_chars_options", {
         "labels": ["300文字以内", "700文字以内", "1000文字以内"],
         "values": [300, 700, 1000]
@@ -476,41 +467,37 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     val_to_label = dict(zip(char_values, char_labels))
     label_to_val = dict(zip(char_labels, char_values))
 
-    # 現在の設定値を取得・変換
     raw_max_chars = config.get("MAX_CHARS", 700)
-    # 古い形式（文字列）が保存されている場合の移行処理
     if isinstance(raw_max_chars, str):
         if "300" in raw_max_chars: raw_max_chars = 300
         elif "1000" in raw_max_chars: raw_max_chars = 1000
         else: raw_max_chars = 700
     
-    # 現在のラベルを決定（リストにない場合はデフォルト値を使用）
     current_char_label = val_to_label.get(raw_max_chars, char_labels[1])
-    char_limit_var = tk.StringVar(view_group, current_char_label)
-    
-    # 言語が変更されたときに選択肢を更新する関数
-    def update_char_limit_options(*args):
-        # 最新の言語ファイルからオプションを再取得
-        # (save_all はまだ呼ばれていない可能性があるので、lang_var から直接読み込む必要はないか?)
-        # 実際には OptionMenu を作り直すか、内容を更新する必要があるが、
-        # 設定画面を開き直すのが一般的。今回は「言語切り替え」→「保存」→「反映」のフローなので
-        # とりあえず現状の言語に基づいた初期化で十分。
-        pass
+    char_limit_var = tk.StringVar(cell_max_chars, current_char_label)
+    tk.OptionMenu(cell_max_chars, char_limit_var, *char_labels).pack(pady=3)
 
-    tk.OptionMenu(view_group, char_limit_var, *char_labels).pack(pady=5)
-
-    lbl_window_alpha = add_label(view_group, l_set.get("window_alpha", "Window Alpha:"), pady=0)
+    # [右上] ウィンドウ不透明度
+    cell_alpha = tk.Frame(view_grid_frame)
+    cell_alpha.grid(row=0, column=1, padx=10, pady=6, sticky="ew")
+    lbl_window_alpha = add_label(cell_alpha, l_set.get("window_alpha", "Window Alpha:"), pady=0)
     alpha_opts = ["OFF", "0.3", "0.6", "0.8"]
-    alpha_var = tk.StringVar(view_group, str(config.get("WINDOW_ALPHA", 0.6)))
-    tk.OptionMenu(view_group, alpha_var, *alpha_opts).pack(pady=5)
+    alpha_var = tk.StringVar(cell_alpha, str(config.get("WINDOW_ALPHA", 0.6)))
+    tk.OptionMenu(cell_alpha, alpha_var, *alpha_opts).pack(pady=3)
 
-    lbl_font_size = add_label(view_group, l_set.get("font_size", "Font Size") + " (Log Window):")
-    font_size_var = tk.StringVar(view_group, str(config.get("LOG_FONT_SIZE", "13")))
-    tk.OptionMenu(view_group, font_size_var, "10", "12", "13", "15", "18", "20", "24").pack(pady=5)
+    # [左下] フォントサイズ
+    cell_font = tk.Frame(view_grid_frame)
+    cell_font.grid(row=1, column=0, padx=10, pady=6, sticky="ew")
+    lbl_font_size = add_label(cell_font, l_set.get("font_size", "Font Size") + " (Log Window):")
+    font_size_var = tk.StringVar(cell_font, str(config.get("LOG_FONT_SIZE", "13")))
+    tk.OptionMenu(cell_font, font_size_var, "10", "12", "13", "15", "18", "20", "24").pack(pady=3)
 
-    lbl_display_time = add_label(view_group, l_set.get("display_time", "Display Time") + " (Overlay):")
-    display_time_var = tk.StringVar(view_group, str(config.get("DISPLAY_TIME", "60")))
-    tk.OptionMenu(view_group, display_time_var, "30", "60", "90", "120").pack(pady=5)
+    # [右下] メッセージ表示時間
+    cell_time = tk.Frame(view_grid_frame)
+    cell_time.grid(row=1, column=1, padx=10, pady=6, sticky="ew")
+    lbl_display_time = add_label(cell_time, l_set.get("display_time", "Display Time") + " (Overlay):")
+    display_time_var = tk.StringVar(cell_time, str(config.get("DISPLAY_TIME", "60")))
+    tk.OptionMenu(cell_time, display_time_var, "30", "60", "90", "120").pack(pady=3)
 
     audio_group = tk.LabelFrame(tab_audio_view, text=" Audio Settings ", padx=10, pady=10)
     audio_group.pack(pady=10, fill="x", padx=20)
@@ -587,10 +574,17 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         session_id_at_start = (test_session_id, parent.active_session_id)
         session_data = (session_id_at_start, lambda: (test_session_id, parent.active_session_id), None)
 
-        try:
-            threading.Thread(target=game_ai.speak_and_show, args=(test_text, None, test_config, base_dir, session_data, False), daemon=True).start()
-        except Exception as e:
-            messagebox.showerror("Error", f"Test failed: {e}")
+        def _play():
+            try:
+                try:
+                    from scripts import game_ai
+                except ImportError:
+                    import game_ai
+                game_ai.speak_and_show(test_text, None, test_config, base_dir, session_data, False)
+            except Exception as e:
+                root.after(0, lambda: messagebox.showerror("Error", f"Test failed: {e}"))
+
+        threading.Thread(target=_play, daemon=True).start()
 
     def stop_test_audio():
         nonlocal test_session_id
@@ -640,18 +634,72 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     btn_browse.pack(side="left", padx=5)
 
     lbl_vv_speaker = add_label(audio_group, l_set.get("voicevox_speaker", "Speaker:"), pady=0)
-    # 本体側で取得済みのキャッシュを使用
-    speaker_map = getattr(parent, "cached_speakers", {"ずんだもん": 3, "四国めたん": 2, "春日部つむぎ": 8, "雨晴はう": 10})
+    # キャッシュまたは設定から話者マップを即座に取得（起動時HTTPリクエストを行わない）
+    speaker_map = getattr(parent, "cached_speakers", None) or config.get("CACHED_VOICEVOX_SPEAKERS", {})
+    if not speaker_map or not isinstance(speaker_map, dict):
+        speaker_map = {"ずんだもん": 3, "四国めたん": 2, "春日部つむぎ": 8, "雨晴はう": 10}
+
+    spk_frame = tk.Frame(audio_group)
+    spk_frame.pack(pady=5)
     
-    # フォールバック取得（キャッシュが空の場合のみ）
-    if len(speaker_map) <= 4:
-        try:
-            resp = requests.get("http://127.0.0.1:50021/speakers", timeout=0.5)
-            if resp.status_code == 200:
-                speaker_map = {s['name']: s['styles'][0]['id'] for s in resp.json()}
-        except: pass
     speaker_var = tk.StringVar(audio_group, config.get("SPEAKER_NAME", "ずんだもん"))
-    tk.OptionMenu(audio_group, speaker_var, *speaker_map.keys()).pack(pady=5)
+    opt_speaker = tk.OptionMenu(spk_frame, speaker_var, *speaker_map.keys())
+    opt_speaker.pack(side="left", padx=5)
+
+    def refresh_vv_speakers_async():
+        def _fetch():
+            try:
+                resp = requests.get("http://127.0.0.1:50021/speakers", timeout=2.0)
+                if resp.status_code == 200:
+                    new_map = {s['name']: s['styles'][0]['id'] for s in resp.json()}
+                    if new_map:
+                        speaker_map.clear()
+                        speaker_map.update(new_map)
+                        config["CACHED_VOICEVOX_SPEAKERS"] = new_map
+                        if hasattr(parent, "cached_speakers"):
+                            parent.cached_speakers = new_map
+                        
+                        def _update_menu():
+                            try:
+                                menu = opt_speaker["menu"]
+                                menu.delete(0, "end")
+                                for spk in speaker_map.keys():
+                                    menu.add_command(label=spk, command=tk._setit(speaker_var, spk))
+                                if speaker_var.get() not in speaker_map:
+                                    speaker_var.set(next(iter(speaker_map.keys())))
+                                cur_l = parent.lang.get("settings", l_set) if hasattr(parent, "lang") else l_set
+                                btn_refresh_spk.config(text="✓ " + cur_l.get("btn_speaker_updated", "更新完了"), state="disabled")
+                                root.after(1500, lambda: btn_refresh_spk.config(text=cur_l.get("btn_refresh_speakers", cur_l.get("btn_refresh", "話者リスト更新")), state="normal"))
+                            except Exception:
+                                pass
+                        
+                        try:
+                            root.after(0, _update_menu)
+                        except Exception:
+                            pass
+                        return
+            except Exception:
+                pass
+            
+            def _show_fail():
+                try:
+                    cur_l = parent.lang.get("settings", l_set) if hasattr(parent, "lang") else l_set
+                    btn_refresh_spk.config(text=cur_l.get("btn_speaker_failed", "更新失敗(未起動)"), state="disabled")
+                    root.after(1500, lambda: btn_refresh_spk.config(text=cur_l.get("btn_refresh_speakers", cur_l.get("btn_refresh", "話者リスト更新")), state="normal"))
+                except Exception:
+                    pass
+
+            try:
+                root.after(0, _show_fail)
+            except Exception:
+                pass
+
+        cur_l = parent.lang.get("settings", l_set) if hasattr(parent, "lang") else l_set
+        btn_refresh_spk.config(text=cur_l.get("btn_fetching", "取得中..."), state="disabled")
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    btn_refresh_spk = tk.Button(spk_frame, text=l_set.get("btn_refresh_speakers", l_set.get("btn_refresh", "話者リスト更新")), command=refresh_vv_speakers_async)
+    btn_refresh_spk.pack(side="left", padx=5)
 
     # --- 3. ホットキー設定タブ ---
     lbl_hk_title = tk.Label(tab_hotkeys, text=l_set.get("hotkey_title", "Hotkeys"), font=("MS Gothic", 12, "bold"))
@@ -765,19 +813,38 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     stats_label.pack(pady=5)
 
     def refresh_stats():
-        if get_db_stats:
+        def _task():
             try:
-                # get_root_dir() で取得した base_dir (ルート) の直下にある memory_db を指定
-                current_db_path = os.path.join(base_dir, "memory_db")
-                
-                c, s = get_db_stats(current_db_path)
-                stats_tpl = l_set.get("db_stats_format", "合計記憶数： {count} 件\nDBサイズ： {size} MB")
-                stats_label.config(text=stats_tpl.format(count=c, size=s), fg="black")
+                try:
+                    from scripts.db_maintenance import get_db_stats
+                except ImportError:
+                    try:
+                        import db_maintenance
+                        get_db_stats = db_maintenance.get_db_stats
+                    except ImportError:
+                        get_db_stats = None
+
+                if get_db_stats:
+                    current_db_path = os.path.join(base_dir, "memory_db")
+                    c, s = get_db_stats(current_db_path)
+                    stats_tpl = l_set.get("db_stats_format", "合計記憶数： {count} 件\nDBサイズ： {size} MB")
+                    try:
+                        root.after(0, lambda: stats_label.config(text=stats_tpl.format(count=c, size=s), fg="black"))
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        root.after(0, lambda: stats_label.config(text=l_set.get("db_error_module", "Error: db_maintenance module missing."), fg="red"))
+                    except Exception:
+                        pass
             except Exception as e:
-                stats_label.config(text=f"Error: {str(e)}", fg="red")
-        else:
-            # get_db_stats が None の場合（インポート失敗時）
-            stats_label.config(text=l_set.get("db_error_module", "Error: db_maintenance module missing."), fg="red")
+                try:
+                    root.after(0, lambda: stats_label.config(text=f"Error: {str(e)}", fg="red"))
+                except Exception:
+                    pass
+
+        stats_label.config(text=l_set.get("db_stats_loading", "集計中..."), fg="gray")
+        threading.Thread(target=_task, daemon=True).start()
 
     refresh_stats()
     btn_stats_ref = tk.Button(stats_group, text=l_set.get("btn_refresh", "更新"), command=refresh_stats)
@@ -1069,10 +1136,10 @@ def open_settings_window(parent, config_path, current_config, save_callback):
 
     # 実際のGPUをwmic/PowerShellで取得
     def _detect_gpus():
-        """システムのGPU名一覧を取得する。wmic → PowerShell の順で試みる。"""
-        # 本体が取得済みのキャッシュがあればそれを使用（高速化）
-        if hasattr(parent, "cached_gpus") and parent.cached_gpus:
-            return parent.cached_gpus
+        """システムのGPU名一覧を取得する。キャッシュがあればそれを最優先で使用（高速化）。"""
+        cached = getattr(parent, "cached_gpus", None) or config.get("CACHED_GPUS", [])
+        if cached:
+            return cached
 
         import subprocess as _sp
 

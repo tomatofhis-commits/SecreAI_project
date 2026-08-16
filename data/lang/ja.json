@@ -185,7 +185,10 @@
         "rtt_sens_highest": "最大",
         "grounding_info_notice": "Google Grounding (Google Search) は月 5,000 プロンプトまで無料で利用可能です。",
         "label_tag_interval": "タグ自動生成の間隔 (動作回数):",
-        "unit_times": "回に1回"
+        "unit_times": "回に1回",
+        "btn_refresh_speakers": "話者リスト更新",
+        "btn_speaker_updated": "更新完了",
+        "btn_speaker_failed": "更新失敗(未起動)"
     },
     "log_messages": {
         "module_loaded": "システム: 記憶更新モジュールをロードしました。",

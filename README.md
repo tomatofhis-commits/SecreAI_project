@@ -1,4 +1,4 @@
-# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.3)
+# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.4)
 
 ![SecreAI Logo](SecreAI.ico)
 
@@ -7,9 +7,12 @@ SecreAIは、Google Geminiをコアエンジンに据え、ウェブ検索、画
 
 ---
 
-## 主要機能 / Key Features (Ver 1.3.3)
+## 主要機能 / Key Features (Ver 1.3.4)
 
-- **Gemini 3.7 Flash 標準搭載 & モデルレジストリ一元化 (Ver 1.3.3) / Gemini 3.7 Flash & Unified Model Registry**:
+- **設定UI起動の高速化＆スマートキャッシュ連携 (Ver 1.3.4) / Instant Settings Startup & Smart Caching**:
+  設定画面起動時の同期HTTPリクエストを完全撤廃し、即時起動（0ms遅延）を実現。Main起動時のバックグラウンド話者キャッシュ保存および非同期手動更新機能を追加。  
+  *Eliminates synchronous HTTP requests during settings launch for instant opening, coupled with background speaker caching and async manual update triggers.*
+- **Gemini 3.7 Flash 標準搭載 & モデルレジストリ一元化 / Gemini 3.7 Flash & Unified Model Registry**:
   Google最新モデル `gemini-3.7-flash` を標準搭載し、思考レベル制御（Thinking Budget）に完全対応。内部アーキテクチャのモデルレジストリ一元化により、高い堅牢性と拡張性を実現。  
   *Features Google's newest `gemini-3.7-flash` as default with full thinking budget support, backed by a unified Model Registry architecture.*
 - **マルチモーダル対話 / Multimodal Interaction**: テキスト、音声、視覚（画面キャプチャ）を組み合わせた自然な対話。  

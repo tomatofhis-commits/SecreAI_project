@@ -187,7 +187,10 @@
         "grounding_info_notice": "Google Grounding (Google Search) est disponible gratuitement jusqu'à 5 000 requêtes par mois.",
         "label_tag_interval": "Intervalle de génération automatique de tags (Opérations):",
         "unit_times": "opérations",
-        "dynamic_summary_enabled": "Activer le résumé dynamique de la mémoire par intention (Recommandé)"
+        "dynamic_summary_enabled": "Activer le résumé dynamique de la mémoire par intention (Recommandé)",
+        "btn_refresh_speakers": "Actualiser les voix",
+        "btn_speaker_updated": "Mis à jour",
+        "btn_speaker_failed": "Échec (Non démarré)"
     },
     "log_messages": {
         "module_loaded": "Système: Module de mise à jour de la mémoire chargé.",

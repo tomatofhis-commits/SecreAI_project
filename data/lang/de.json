@@ -133,7 +133,7 @@
         "label_ollama_endpoint": "Ollama-Endpunkt:",
         "tab_extensions_title": "Erweiterungen (Experimentell)",
         "extensions_group_api": " API / WebSockets ",
-        "btn_fetching": "Abrufen...",
+        "btn_fetching": "Wird geladen...",
         "btn_fetch_success": "Erfolg!",
         "btn_fetch_ollama": "Lokale LLM-Modellliste abrufen und aktualisieren",
         "tab_rtt": "RT-Übersetzer",
@@ -187,7 +187,10 @@
         "grounding_info_notice": "Google Grounding (Google Search) ist bis zu 5.000 Prompts pro Monat kostenlos verfügbar.",
         "label_tag_interval": "Intervall für automatische Tag-Generierung (Vorgänge):",
         "unit_times": "Vorgänge",
-        "dynamic_summary_enabled": "Dynamische Speicherzusammenfassung nach Absicht aktivieren (Empfohlen)"
+        "dynamic_summary_enabled": "Dynamische Speicherzusammenfassung nach Absicht aktivieren (Empfohlen)",
+        "btn_refresh_speakers": "Sprecherliste aktualisieren",
+        "btn_speaker_updated": "Aktualisiert",
+        "btn_speaker_failed": "Fehlgeschlagen (Nicht gestartet)"
     },
     "log_messages": {
         "module_loaded": "System: Gedächtnisaktualisierungsmodul geladen.",

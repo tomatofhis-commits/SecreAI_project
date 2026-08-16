@@ -200,7 +200,10 @@
         "rtt_sens_highest": "Highest",
         "grounding_info_notice": "Google Grounding (Google Search) is available for free up to 5,000 prompts per month.",
         "label_tag_interval": "Auto Tag Generation Interval (Operations):",
-        "unit_times": "ops / tag"
+        "unit_times": "ops / tag",
+        "btn_refresh_speakers": "Refresh Speakers",
+        "btn_speaker_updated": "Updated",
+        "btn_speaker_failed": "Failed (Not Running)"
     },
     "log_messages": {
         "module_loaded": "System: Memory update module loaded.",

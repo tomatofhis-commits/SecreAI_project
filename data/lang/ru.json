@@ -187,7 +187,10 @@
         "grounding_info_notice": "Google Grounding (Google Search) предоставляется бесплатно до 5000 запросов в месяц.",
         "label_tag_interval": "Интервал автогенерации тегов (Операции):",
         "unit_times": "операций",
-        "dynamic_summary_enabled": "Включить динамическое суммаризирование памяти по намерению (Рекомендуется)"
+        "dynamic_summary_enabled": "Включить динамическое суммаризирование памяти по намерению (Рекомендуется)",
+        "btn_refresh_speakers": "Обновить список дикторов",
+        "btn_speaker_updated": "Обновлено",
+        "btn_speaker_failed": "Ошибка (Не запущен)"
     },
     "log_messages": {
         "module_loaded": "Система: Модуль обновления памяти загружен.",
