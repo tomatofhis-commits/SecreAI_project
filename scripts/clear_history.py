@@ -28,6 +28,16 @@ except ImportError:
     except ImportError:
         get_chroma_collection = None
 
+# Model Registry のインポート
+try:
+    from model_registry import supports_thinking
+except ImportError:
+    try:
+        from scripts.model_registry import supports_thinking
+    except ImportError:
+        def supports_thinking(model_id: str) -> bool:
+            return False
+
 # === 1. パス解決・言語管理 ===
 def get_app_root():
     if getattr(sys, 'frozen', False):
@@ -163,11 +173,6 @@ def main():
                     if level is None:
                         thinking_budget = config.get("THINKING_BUDGET", "medium").lower()
                         level = thinking_budget
-
-                    try:
-                        from model_registry import supports_thinking
-                    except ImportError:
-                        from scripts.model_registry import supports_thinking
 
                     if supports_thinking(local_db_model_id) and level:
                         if local_db_model_id == "gemini-3.5-flash-lite":
