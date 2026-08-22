@@ -108,6 +108,8 @@ class WebSearchContextManager:
         self.default_ttl = default_ttl
         self.web_search_slot = None  # Dict: {"query": str, "summary": str}
         self.web_search_ttl = 0
+        self.dictionary_slot = None  # Dict: {"term": str, "info": str}
+        self.dictionary_ttl = 0
 
     def is_summary_request(self, text: str, custom_pattern: str = None) -> bool:
         return is_summary_request(text, custom_pattern)
@@ -127,12 +129,22 @@ class WebSearchContextManager:
         """set_web_search_slot の完全互換エイリアス"""
         self.set_web_search_slot(query, summary, ttl)
 
+    def set_dictionary_slot(self, term: str, info: str, ttl: int = None):
+        """辞書補完結果をスロットに保持しTTLを初期化"""
+        self.dictionary_slot = {"term": term, "info": info}
+        self.dictionary_ttl = ttl if ttl is not None else self.default_ttl
+
     def decrement_ttl(self):
         """会話ターン経過に伴いTTLをデクリメント"""
         if self.web_search_ttl > 0:
             self.web_search_ttl -= 1
             if self.web_search_ttl == 0:
                 self.web_search_slot = None
+
+        if self.dictionary_ttl > 0:
+            self.dictionary_ttl -= 1
+            if self.dictionary_ttl == 0:
+                self.dictionary_slot = None
 
     def get_formatted_web_slot(self) -> str:
         """有効なネット検索スロットのフォーマット文字列を取得"""
@@ -142,13 +154,24 @@ class WebSearchContextManager:
             return f"【直前のネット検索結果 (参照可能)】:\n検索ワード: {q}\n検索要約: {s}\n"
         return ""
 
+    def get_formatted_dictionary_slot(self) -> str:
+        """有効な辞書補完スロットのフォーマット文字列を取得"""
+        if self.dictionary_slot and self.dictionary_ttl > 0:
+            term = self.dictionary_slot.get("term", "")
+            info = self.dictionary_slot.get("info", "")
+            return f"【直前の辞書補完情報 (参照可能)】:\n用語: {term}\n詳細: {info}\n"
+        return ""
+
     def filter_and_format_memory(self, candidate_list, query=""):
         """後方互換用: 重複排除およびフォーマット処理"""
         unique_list = deduplicate_logs(candidate_list)
         web_text = self.get_formatted_web_slot()
+        dict_text = self.get_formatted_dictionary_slot()
         res_parts = []
         if web_text:
             res_parts.append(web_text)
+        if dict_text:
+            res_parts.append(dict_text)
         if unique_list:
             res_parts.append("【過去の記憶・関連情報】:")
             for item in unique_list:
@@ -161,6 +184,8 @@ class WebSearchContextManager:
         """スロットのクリア"""
         self.web_search_slot = None
         self.web_search_ttl = 0
+        self.dictionary_slot = None
+        self.dictionary_ttl = 0
 
 
 # 後方互換性のためのエイリアス

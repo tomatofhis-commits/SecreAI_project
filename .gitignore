@@ -39,11 +39,17 @@ tests/
 scratch/
 translation_cache.json
 更新計画.txt
+*ロードマップ.txt
 stop.flag
 *.wav
 *.mp3
 *.log
 nuitka-crash-report.xml
+
+# Dictionaries (ユーザー個別データ・キャッシュ除外)
+dictionary/*.json
+dictionary/.cache/
+tools/
 
 # Backup
 scripts - コピー/

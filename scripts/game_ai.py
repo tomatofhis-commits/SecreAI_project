@@ -61,6 +61,27 @@ except ImportError:
 
 global_working_memory = WorkingMemoryManager(max_context_chars=3000) if WorkingMemoryManager else None
 
+# 辞書エンジンのインポート (STT誤変換補正・知識注入)
+try:
+    from src.dictionary_engine import DictionaryEngine
+except ImportError:
+    try:
+        from dictionary_engine import DictionaryEngine
+    except ImportError:
+        DictionaryEngine = None
+        print("警告: dictionary_engine.py が見つかりません。辞書機能が無効化されています。")
+
+global_dict_engine = None
+def get_dictionary_engine(root_dir, config=None):
+    global global_dict_engine
+    if global_dict_engine is None and DictionaryEngine:
+        dict_path = os.path.join(root_dir, "dictionary")
+        global_dict_engine = DictionaryEngine(dictionary_dir=dict_path)
+        enabled_files = config.get("ENABLED_DICTIONARIES") if isinstance(config, dict) else None
+        global_dict_engine.initialize(enabled_files=enabled_files)
+    return global_dict_engine
+
+
 # --- 1. ロックの準備 ---
 file_lock = threading.Lock()
 active_session_id = None
@@ -101,15 +122,107 @@ def submit_background_task(func, *args, timeout=None):
     
     executor.submit(wrapped_task)
 
-# ThreadPoolExecutor for parallel processing (並列処理用)
+# ThreadPoolExecutor for serial background processing (直列処理用キュー)
 _thread_pool_executor = None
+recent_logged_dict_terms = set()  # 直近出力済み用語の履歴キャッシュ
 
-def get_thread_pool_executor(max_workers=3):
-    """ThreadPoolExecutorのグローバルインスタンスを取得"""
+def get_thread_pool_executor(max_workers=1):
+    """ThreadPoolExecutorのグローバルインスタンスを取得 (直列FIFO実行でGPU/API競合を防止)"""
     global _thread_pool_executor
     if _thread_pool_executor is None:
         _thread_pool_executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
     return _thread_pool_executor
+
+def async_evaluate_and_log_dictionary(user_query, ai_response, config, root):
+    """
+    バックグラウンド非同期タスク:
+    「ユーザーの質問意図」「メインAIの返答」「双方から引いた辞書候補」をDB用AIに提示し、
+    真に必要な辞書詳細情報（オラクル・地名解説等）をHubログに必要最小限だけ補完出力する。
+    """
+    global recent_logged_dict_terms
+    if not config.get("DICTIONARY_LOG_ENABLED", False):
+        return
+
+    d_engine = get_dictionary_engine(root, config)
+    if not d_engine:
+        return
+
+    # 1. ユーザー質問とAI返答の両方から辞書単語を走査
+    combined_text = f"{user_query or ''} {ai_response or ''}".strip()
+    if not combined_text:
+        return
+
+    _, matched_entries = d_engine.correct_text(combined_text)
+    if not matched_entries:
+        return
+
+    # 直近出力済みの単語をフィルタリング（重複ガード）
+    fresh_entries = []
+    seen_names = set()
+    for e in matched_entries:
+        if e.name not in recent_logged_dict_terms and e.name not in seen_names and e.info:
+            fresh_entries.append(e)
+            seen_names.add(e.name)
+
+    if not fresh_entries:
+        return
+
+    target_entries = fresh_entries[:5]  # 最大5件をAIに提示
+
+    # 2. 判定用プロンプトの構築
+    candidates_text = "\n".join([f"{i+1}. 【{e.name}】 {e.info}" for i, e in enumerate(target_entries)])
+    prompt = (
+        "あなたはAIアシスタントの補助エンジンです。\n"
+        "ユーザーとメインAIの対話において、辞書データから詳細な補完情報をログに出力すべきかを判断してください。\n\n"
+        f"【ユーザーの質問】\n{user_query}\n\n"
+        f"【メインAIの返答】\n{ai_response}\n\n"
+        f"【参照辞書候補（質問および返答から抽出された用語情報）】\n{candidates_text}\n\n"
+        "【指示】\n"
+        "ユーザーの質問の意図とメインAIの返答内容を精査し、辞書候補の中から「ユーザーにとって真に補完情報として残すべき用語」の番号のみをカンマ区切りで出力してください（例: 1 または 1,2）。\n"
+        "メインAIの返答で十分に説明されている場合や、補完が不要・不適切な場合は「不要」と出力してください。\n"
+        "余計な挨拶や解説は省き、番号または「不要」のみを出力してください。"
+    )
+
+    # 3. DB用モデル（ローカルLLM / Gemini Flash-Lite等）を呼び出して判定
+    try:
+        decision_raw = None
+        db_provider = config.get("DB_PROVIDER", "local").lower()
+        if db_provider == "gemini" and gemini_client:
+            db_model = config.get("DB_MODEL_ID", "gemini-2.5-flash-lite")
+            res_obj = gemini_client.models.generate_content(model=db_model, contents=prompt)
+            decision_raw = res_obj.text.strip() if res_obj else None
+        else:
+            decision_raw = call_local_llm_chat(config, [{'role': 'user', 'content': prompt}])
+
+        if not decision_raw or "不要" in decision_raw:
+            return
+
+        # 4. 出力番号を抽出してログ出力
+        import re
+        nums = re.findall(r'\d+', decision_raw)
+        selected_indices = [int(n) - 1 for n in nums if 0 <= int(n) - 1 < len(target_entries)]
+
+        lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
+        log_m = lang_data.get("log_messages", {})
+        detail_fmt = log_m.get("dict_detail_header", "【辞書詳細: {term}】 {info}")
+
+        for idx in selected_indices:
+            selected_entry = target_entries[idx]
+            send_log_to_hub(detail_fmt.format(term=selected_entry.name, info=selected_entry.info))
+            recent_logged_dict_terms.add(selected_entry.name)
+
+            # ワーキングメモリのスロットに直前の知識として保持 (次期プロンプトへの自動注入)
+            try:
+                if global_working_memory:
+                    global_working_memory.set_dictionary_slot(selected_entry.name, selected_entry.info)
+            except Exception:
+                pass
+
+        if len(recent_logged_dict_terms) > 30:
+            recent_logged_dict_terms = set(list(recent_logged_dict_terms)[-15:])
+
+    except Exception as e:
+        pass
 
 def run_with_timeout(func, timeout, *args, **kwargs):
     """
@@ -609,22 +722,24 @@ def call_summary_llm(config, prompt):
     return call_local_llm_chat(config, [{'role': 'user', 'content': prompt}])
 
 
-def should_execute_search(query, config, log_m):
-    """案1: 検索が本当に必要かAI（軽量モデル）で事前判定する"""
+def should_execute_search(user_query, search_query, config, log_m):
+    """検索が本当に必要かAI（軽量モデル）で事前判定する"""
     try:
         prompt = (
-            "あなたは検索のゲートキーパーです。ユーザーの質問に答えるために、インターネットでのリアルタイム検索が【絶対に】必要かどうかを判定してください。\n"
+            "あなたは検索のゲートキーパーです。ユーザーの質問に答えるために、インターネットでのリアルタイム検索が【絶対に】必要かどうかを判定してください。\n\n"
             "以下の場合は 'False' と判定してください：\n"
             "- 既にAIが知っている一般的な事実（例：歴史、数学、プログラムの書き方）\n"
             "- 日常会話や挨拶、単なるおしゃべり\n"
-            "- 直前の会話の流れから、検索しなくても推論できる場合\n\n"
+            "- 直前の会話の流れから、検索しなくても推論できる場合\n"
+            "- AIが提案した検索クエリが、ユーザーの質問の意図から明らかに外れている場合\n\n"
             "以下の場合は 'True' と判定してください：\n"
             "- 最新のニュース、天気、株価、発売日などのリアルタイム情報\n"
             "- AIの知識カットオフ以降の出来事\n"
             "- 具体的な事実確認が必要な専門的な内容\n\n"
             "回答はJSON形式で返してください：\n"
             "{\"necessary\": boolean, \"optimized_query\": \"検索に適した短いキーワード\", \"reason\": \"理由\"}\n\n"
-            f"判定対象のクエリ: {query}"
+            f"【ユーザーの元の質問】: {user_query}\n"
+            f"【AIが提案した検索クエリ】: {search_query}"
         )
 
         content = call_local_llm_chat(config, [{'role': 'user', 'content': prompt}], json_mode=True)
@@ -632,14 +747,12 @@ def should_execute_search(query, config, log_m):
         try:
             res_data = json.loads(content_str)
         except json.JSONDecodeError:
-            # Markdownブロック（```json ... ```）や、前後にテキストが入っている場合のロバスト抽出
             cleaned = content_str
             if "```json" in cleaned:
                 cleaned = cleaned.split("```json")[1].split("```")[0].strip()
             elif "```" in cleaned:
                 cleaned = cleaned.split("```")[1].split("```")[0].strip()
             
-            # 最初の中括弧 { から最後の中括弧 } までを切り出す
             start_idx = cleaned.find('{')
             end_idx = cleaned.rfind('}')
             if start_idx != -1 and end_idx != -1:
@@ -652,13 +765,13 @@ def should_execute_search(query, config, log_m):
         err_str = str(e).lower()
         if "connection" in err_str or "refused" in err_str:
             send_log_to_hub(f"Gatekeeper Warning: ローカルLLM接続失敗。検索にフォールバックします。", is_error=True)
-            return {"necessary": True, "optimized_query": query, "reason": "Local LLM not running"}
+            return {"necessary": True, "optimized_query": search_query, "reason": "Local LLM not running"}
 
         send_log_to_hub(f"Gatekeeper Error: {e}", is_error=True)
         print(f"[DEBUG should_execute_search Exception Details]: {repr(e)}")
-        return {"necessary": True, "optimized_query": query, "reason": f"Gatekeeper failed: {e}"}
+        return {"necessary": True, "optimized_query": search_query, "reason": f"Gatekeeper failed: {e}"}
 
-def execute_background_search(search_query, config, root, session_data):
+def execute_background_search(user_query, search_query, config, root, session_data):
     global gemini_client
     summary = None
     try:
@@ -669,7 +782,7 @@ def execute_background_search(search_query, config, root, session_data):
 
         # --- ゲートキーパー判定 ---
         send_log_to_hub(log_m.get("gatekeeper_analyzing", "システム: ゲートキーパーが検索の必要性を判定中..."))
-        gatekeeper_res = should_execute_search(search_query, config, log_m)
+        gatekeeper_res = should_execute_search(user_query, search_query, config, log_m)
         if not gatekeeper_res.get("necessary", True):
             msg = log_m.get("gatekeeper_skip", "System: Search skipped by Gatekeeper (Reason: {reason})").format(reason=gatekeeper_res.get('reason', 'N/A'))
             send_log_to_hub(msg)
@@ -994,7 +1107,7 @@ def call_local_llm_chat(config, messages, json_mode=False, timeout=60):
                     raise retry_err
             raise e
 
-def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
+def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None, dict_context=None):
     global gemini_client, openai_client
     history = load_history_manual(root)
     max_chars = config.get("MAX_CHARS", "700文字以内")
@@ -1015,6 +1128,9 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
     if global_working_memory:
         global_working_memory.decrement_ttl()
 
+    # 辞書コンテキスト（会話中に出現した用語・カードの知識注入）
+    dict_ctx_str = f"\n{dict_context}\n" if dict_context else ""
+
     today_ctx_str = f"\n【現在の状況】: {config.get('TODAY_CONTEXT', '')}\n" if config.get('TODAY_CONTEXT') else ""
     feedback_ctx = get_feedback_context(root)
     mid_term_ctx = get_mid_term_context(root)
@@ -1026,7 +1142,7 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
         f"{p['instruction'].format(max_chars=max_chars)}\n"
         f"{p['stt_notice']}\n"
         f"{p['memory_priority']}\n"
-        f"{today_ctx_str}{long_term_ctx}{feedback_ctx}{mid_term_ctx}"
+        f"{today_ctx_str}{dict_ctx_str}{long_term_ctx}{feedback_ctx}{mid_term_ctx}"
         f"\n【前提条件に日時情報がなければ：】今日は {current_time_str} です。"
     )
 
@@ -1040,6 +1156,15 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None):
             send_log_to_hub("システム: 検索ロジックをシステム命令に統合しました。")
         else:
             send_log_to_hub("警告: search_switchはONですが、ja.json内にsearch_logicが見つかりません。", is_error=True)
+
+    # 画面・画像（Vision）解析時の固有名詞自己学習プロンプト
+    if image:
+        system_instr += (
+            "\n【画像・画面からの固有名詞自己学習ルール】\n"
+            "画面上に明確に表示されている固有名詞（地名・カード名・モンスター名等）と、"
+            "ユーザーの音声入力テキストに明らかな誤認識・当て字のズレがある場合（例: 画面に「Göteborg/ヨーテボリ」があり音声が「両手掘り」など）、"
+            "回答の末尾に必ず `[LEARN_ALIAS: 正式名称 = 誤認識単語]` という形式で学習タグを出力してください。\n"
+        )
 
     answer_text = ""
     image_bytes = None
@@ -1670,6 +1795,23 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
         else:
             query = get_voice_input(log_m.get("voice_guide", "How can I help you?"), config, root, lang_data, session_data)
 
+        # --- 辞書エンジンによるSTT誤認識補正 & 知識抽出 ---
+        dict_context_str = ""
+        if query:
+            d_engine = get_dictionary_engine(root, config)
+            if d_engine:
+                corrected_query, matched_entries = d_engine.correct_text(query)
+                if corrected_query != query:
+                    msg_corr = f"システム: 【辞書補正】STT誤認識を補正 '{query}' -> '{corrected_query}'"
+                    send_log_to_hub(msg_corr)
+                    query = corrected_query
+                if matched_entries:
+                    knowledge_lines = [f"- 【{e.name}】: {e.info}" for e in matched_entries if e.info]
+                    if knowledge_lines:
+                        dict_context_str = "【参照辞書データ (会話中に出現した用語の知識)】\n" + "\n".join(knowledge_lines)
+                        msg_know = f"システム: 【辞書知識】関連単語 {len(knowledge_lines)} 件をAIプロンプトに動的注入しました。"
+                        send_log_to_hub(msg_know)
+
         # --- モード分岐：複合AIモードか通常モードか ---
         res = None
 
@@ -1692,9 +1834,22 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
         
         # 複合AIがオフ、またはエラーで res が空の場合に通常モードを実行
         if not res:
-            res = chat_with_ai(query, Image.open(abs_path) if abs_path else None, config, root, lang_data)
+            res = chat_with_ai(query, Image.open(abs_path) if abs_path else None, config, root, lang_data, dict_context=dict_context_str)
 
         if res:
+            # 自己学習タグの抽出と辞書への即時登録 (Vision/OCR照合時)
+            learn_match = re.search(r'\[LEARN_ALIAS:\s*(.*?)\s*=\s*(.*?)\]', res)
+            if learn_match:
+                canonical_name = learn_match.group(1).strip()
+                misrecognized_alias = learn_match.group(2).strip()
+                d_engine = get_dictionary_engine(root)
+                if d_engine and canonical_name and misrecognized_alias:
+                    success = d_engine.add_learned_alias(canonical_name, misrecognized_alias, category="画面認識学習")
+                    if success:
+                        send_log_to_hub(f"システム: 【自己学習】画面上の『{canonical_name}』に基づき誤認識『{misrecognized_alias}』を辞書に学習しました。")
+                # 出力テキストから学習タグを除去
+                res = re.sub(r'\[LEARN_ALIAS:.*?\]', '', res).strip()
+
             search_match = re.search(r'\[SEARCH:\s*(.*?)\]', res)
             clean_res = re.sub(r'\[SEARCH:.*\]', '', res).strip()
 
@@ -1707,9 +1862,13 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
                 # but for now we pass session_data as the last arg to execute_background_search 
                 # replacing stop_flag. Logic inside execute_background_search needs update for this.
                 # 検索タスクは音声読み上げを含むため、タイムアウトなしで実行
-                submit_background_task(execute_background_search, s_query, config, root, session_data, timeout=None)
+                submit_background_task(execute_background_search, query, s_query, config, root, session_data, timeout=None)
 
             speak_and_show(clean_res, abs_path, config, root, session_data)
+
+            # --- 事後処理: 非同期AI文脈判断型 辞書詳細ログ補完 (ネット検索がない通常会話時) ---
+            if not search_match and config.get("DICTIONARY_LOG_ENABLED", False):
+                submit_background_task(async_evaluate_and_log_dictionary, query, clean_res, config, root)
 
         if update_memory and len(load_history_manual(root)) >= 16:
             # 辞書から予約ログを取得

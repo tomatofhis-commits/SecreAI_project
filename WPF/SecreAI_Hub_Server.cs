@@ -191,7 +191,7 @@ namespace SecreAI_Hub
                     var statusData = new Dictionary<string, object>
                     {
                         { "status", "ok" },
-                        { "version", "1.3.4" },
+                        { "version", "1.3.5" },
                         { "rtt_process", isRttProcessRunning ? "running" : "stopped" }
                     };
 

@@ -203,7 +203,14 @@
         "unit_times": "ops / tag",
         "btn_refresh_speakers": "Refresh Speakers",
         "btn_speaker_updated": "Updated",
-        "btn_speaker_failed": "Failed (Not Running)"
+        "btn_speaker_failed": "Failed (Not Running)",
+        "tab_dictionary": "Dictionary / Knowledge",
+        "dict_guide": "[User Dictionary & STT Correction Settings]\nYou can individually enable or disable JSON dictionaries in the dictionary/ folder.",
+        "dict_log_enabled": "Display complementary term details (oracles, lore, etc.) in the log",
+        "dict_list_title": "Registered Dictionaries",
+        "btn_open_dict": "Open Dictionary Folder",
+        "btn_refresh_dict": "Refresh List",
+        "dict_no_files": "No dictionary files found. Click below to open the folder and add JSON files."
     },
     "log_messages": {
         "module_loaded": "System: Memory update module loaded.",
@@ -270,7 +277,11 @@
         "gatekeeper_approve": "System: Gatekeeper approved the search.",
         "dynamic_summary_detect": "System: Summary intent detected. Running conditional dynamic summarization...",
         "dynamic_summary_complete": "System: Dynamic summarization completed ({limit}-item mode).",
-        "dynamic_summary_fallback": "System: Safely skipped summarization, fallback to normal memory search."
+        "dynamic_summary_fallback": "System: Safely skipped summarization, fallback to normal memory search.",
+        "dict_corrected": "System: [Dictionary Correction] Corrected STT input '{original}' -> '{corrected}'",
+        "dict_knowledge_injected": "System: [Dictionary Knowledge] Injected {count} related terms into AI prompt.",
+        "dict_learned": "System: [Self-Learned] Learned misrecognition '{alias}' for on-screen term '{canonical}'.",
+        "dict_detail_header": "[Dictionary Detail: {term}] {info}"
     },
     "ai_prompt": {
         "extract_keywords": "You are a master of memory organization.\nPlease comprehensively analyze the following \"Past 1-week Frequent Topics Data\" and \"Recent Conversations\", and select and output [exactly 5] interest keywords.\n\n### [Frequent Themes/Keywords Appearing Repeatedly in Past 1 Week]\n{freq_summary_text}\n\n### [Recent Conversations (Summary of Past 7 Days)]\n{all_7days_summary_text}\n\n### Extraction Rules:\n1. Prioritize important information with high frequency of occurrence in the conversation.\n2. If frequencies are similar and hard to narrow down, newer conversation information may be prioritized.\n3. Output keywords only separated by commas (no extra explanation).",

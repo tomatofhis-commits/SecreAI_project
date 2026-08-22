@@ -1,10 +1,10 @@
 ; ============================================================
-;  SecreAI + RTtranslator 統合インストーラー (v1.3.4)
+;  SecreAI + RTtranslator 統合インストーラー (v1.3.5)
 ;  Inno Setup 6 スクリプト
 ; ============================================================
 
 #define MyAppName        "SecreAI"
-#define MyAppVersion     "1.3.4"
+#define MyAppVersion     "1.3.5"
 #define MyAppPublisher   "SecreAI Dev Team"
 #define MyAppExeName     "secreAI.exe"
 
@@ -41,6 +41,10 @@ Name: "english";  MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[Dirs]
+; ユーザー辞書用フォルダ（空のフォルダを作成。ユーザーの既存辞書は上書き・削除しない）
+Name: "{app}\dictionary"
+
 [InstallDelete]
 ; 古いPython版ハブがルート上に配置していたDLLや.pyd等のファイルをクリーンアップします（データフォルダは保護されます）
 Type: files; Name: "{app}\*.pyd"
@@ -55,6 +59,7 @@ Type: files; Name: "{app}\secreAI.exe"
 ;  2. 個人データ・会話データベース (chat_history.json, memory_db\* 等) はプライバシーと初期化のため同梱禁止。
 ;  3. キャッシュ (api_cache\*, search_cache\*, wav\* 音声合成キャッシュ等) は配布サイズ削減のため同梱禁止。
 ;  4. 各種ログファイル (*.log) やキャプチャ中の一時画像 (temp_ss.png, temp_query_image.png) は同梱禁止。
+;  5. ユーザー辞書の中身は同梱禁止（空の dictionary フォルダのみ作成し、ユーザーデータを保護）。
 ; ==============================================================================
 
 ; 1. SecreAI WPFハブ本体（ビルドされた SecreAI_Hub.exe を secreAI.exe としてメインパスへコピー）
@@ -66,7 +71,13 @@ Source: "d:\SecreAI_Build\python_runtime\*"; DestDir: "{app}\python_runtime"; Fl
 ; 1.3 Python スクリプト群（ハブから起動される game_ai.py 等のスクリプトとライブラリ、不要なキャッシュ・一時データを除外）
 Source: "d:\SecreAI_Build\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pyc, __pycache__\*"
 
-; 1.4 ルート階層の重要 Python スクリプト群の同梱 (設定画面・ウィザード起動用)
+; 1.4 コアソースの同梱
+Source: "d:\SecreAI_Build\src\*"; DestDir: "{app}\src"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pyc, __pycache__\*"
+
+; 1.5 ユーザー辞書ガイド（既存ファイルがある場合は上書きせず保護）
+Source: "d:\SecreAI_Build\dictionary\README.md"; DestDir: "{app}\dictionary"; Flags: ignoreversion onlyifdoesntexist
+
+; 1.6 ルート階層の重要 Python スクリプト群の同梱 (設定画面・ウィザード起動用)
 Source: "d:\SecreAI_Build\settings_ui.py";  DestDir: "{app}"; Flags: ignoreversion
 Source: "d:\SecreAI_Build\setup_wizard.py"; DestDir: "{app}"; Flags: ignoreversion
 

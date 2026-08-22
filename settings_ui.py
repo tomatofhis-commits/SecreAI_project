@@ -22,13 +22,21 @@ def get_root_dir():
             return current_file_path
 
 base_dir = get_root_dir()
+if base_dir not in sys.path:
+    sys.path.insert(0, base_dir)
+scripts_dir = os.path.join(base_dir, "scripts")
+if scripts_dir not in sys.path:
+    sys.path.insert(0, scripts_dir)
 
 # --- 自作モジュールのインポート（軽量モジュールのみ即時インポート、重いモジュールは遅延ロード） ---
 try:
-    from scripts import config_manager, model_registry
-except ImportError:
     import config_manager
     import model_registry
+except ImportError:
+    try:
+        from scripts import config_manager, model_registry
+    except ImportError:
+        pass
 
 # --- Helper: Fetch Ollama Models ---
 def get_ollama_models(ollama_url):
@@ -112,6 +120,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     tab_search = tk.Frame(notebook)
     tab_database = tk.Frame(notebook)
     tab_extensions = tk.Frame(notebook)
+    tab_dictionary = tk.Frame(notebook)
     tab_rtt = tk.Frame(notebook)
 
     notebook.add(tab_general, text=l_set.get("tab_general", "General"))
@@ -120,6 +129,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     notebook.add(tab_search, text=l_set.get("tab_search", "Search"))
     notebook.add(tab_database, text=l_set.get("tab_database", "Database"))
     notebook.add(tab_extensions, text=l_set.get("tab_extensions", "Extensions"))
+    notebook.add(tab_dictionary, text=l_set.get("tab_dictionary", "辞書 / 知識"))
     notebook.add(tab_rtt, text=l_set.get("tab_rtt", "RTトランスレーター"))
 
     # RTTモデル OptionMenu 更新用の参照オブジェクト（NameError回避のため関数上部で初期化）
@@ -1295,13 +1305,111 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         tk.Label(rtt_tick_frame, text=tick_lbl, font=("", 8), fg="gray", width=5).pack(side="left")
 
 
-# --- 保存処理 ---
-# （以下、save_all関数の内容およびSave & Closeボタンのコードは一切変更ありません。元のコードを維持してください）
+    # =========================================================================
+    # --- 辞書 / 知識 タブ (tab_dictionary) ---
+    # =========================================================================
+    dict_container = tk.Frame(tab_dictionary)
+    dict_container.pack(fill="both", expand=True, padx=15, pady=10)
+
+    lbl_dict_guide = tk.Label(
+        dict_container,
+        text=l_set.get("dict_guide", "[ユーザー辞書・STT誤認識補正設定]\ndictionary/ フォルダ内のJSON辞書を個別に有効/無効化できます。"),
+        justify="left", anchor="w", fg="#444"
+    )
+    lbl_dict_guide.pack(fill="x", pady=(0, 10))
+
+    dict_log_var = tk.BooleanVar(value=config.get("DICTIONARY_LOG_ENABLED", False))
+    chk_dict_log = tk.Checkbutton(
+        dict_container,
+        text=l_set.get("dict_log_enabled", "登録用語の詳細情報をログに補完表示する"),
+        variable=dict_log_var
+    )
+    chk_dict_log.pack(anchor="w", pady=(0, 10))
+
+    dict_list_group = tk.LabelFrame(dict_container, text=l_set.get("dict_list_title", "登録されている辞書一覧"), padx=10, pady=10)
+    dict_list_group.pack(fill="both", expand=True, pady=(0, 10))
+
+    dict_canvas = tk.Canvas(dict_list_group, borderwidth=0, highlightthickness=0)
+    dict_scrollbar = ttk.Scrollbar(dict_list_group, orient="vertical", command=dict_canvas.yview)
+    dict_scroll_frame = tk.Frame(dict_canvas)
+
+    dict_scroll_frame.bind(
+        "<Configure>",
+        lambda e: dict_canvas.configure(scrollregion=dict_canvas.bbox("all"))
+    )
+    dict_canvas.create_window((0, 0), window=dict_scroll_frame, anchor="nw")
+    dict_canvas.configure(yscrollcommand=dict_scrollbar.set)
+
+    dict_canvas.pack(side="left", fill="both", expand=True)
+    dict_scrollbar.pack(side="right", fill="y")
+
+    dict_vars = {}
+    dict_dir_path = os.path.join(base_dir, "dictionary")
+    saved_enabled_dicts = config.get("ENABLED_DICTIONARIES", None)
+
+    def refresh_dictionary_list():
+        for widget in dict_scroll_frame.winfo_children():
+            widget.destroy()
+        dict_vars.clear()
+
+        if not os.path.exists(dict_dir_path):
+            os.makedirs(dict_dir_path, exist_ok=True)
+
+        json_files = [f for f in os.listdir(dict_dir_path) if f.endswith(".json") and not f.startswith(".")]
+        
+        if not json_files:
+            no_file_text = l_set.get("dict_no_files", "辞書ファイルが見つかりません。下のボタンからフォルダを開いてJSONを追加してください。")
+            tk.Label(dict_scroll_frame, text=no_file_text, fg="gray").pack(anchor="w", pady=10)
+            return
+
+        for fname in sorted(json_files):
+            is_enabled = True
+            if saved_enabled_dicts is not None:
+                is_enabled = (fname in saved_enabled_dicts)
+            
+            var = tk.BooleanVar(value=is_enabled)
+            dict_vars[fname] = var
+
+            item_frame = tk.Frame(dict_scroll_frame)
+            item_frame.pack(fill="x", pady=2, anchor="w")
+
+            chk = tk.Checkbutton(item_frame, text=fname, variable=var, font=("", 10, "bold"))
+            chk.pack(side="left")
+
+            try:
+                with open(os.path.join(dict_dir_path, fname), "r", encoding="utf-8") as f:
+                    d_meta = json.load(f)
+                if isinstance(d_meta, dict) and "meta" in d_meta:
+                    title = d_meta["meta"].get("title", "")
+                    if title:
+                        tk.Label(item_frame, text=f"({title})", fg="#666").pack(side="left", padx=6)
+            except Exception:
+                pass
+
+    refresh_dictionary_list()
+
+    dict_btn_frame = tk.Frame(dict_container)
+    dict_btn_frame.pack(fill="x", pady=(5, 0))
+
+    def open_dict_folder():
+        if not os.path.exists(dict_dir_path):
+            os.makedirs(dict_dir_path, exist_ok=True)
+        if sys.platform == "win32":
+            os.startfile(dict_dir_path)
+
+    btn_open_dict = tk.Button(dict_btn_frame, text=l_set.get("btn_open_dict", "辞書フォルダを開く"), command=open_dict_folder)
+    btn_open_dict.pack(side="left", padx=(0, 8))
+
+    btn_refresh_dict = tk.Button(dict_btn_frame, text=l_set.get("btn_refresh_dict", "一覧を更新"), command=refresh_dictionary_list)
+    btn_refresh_dict.pack(side="left")
+
 
     # --- 保存処理 ---
 
     def save_all(close_after=True, btn_ref=None):
-        config["USE_INTERSECTING_AI"] = intersecting_ai_var.get() # これを追加
+        config["DICTIONARY_LOG_ENABLED"] = dict_log_var.get()
+        config["ENABLED_DICTIONARIES"] = [fname for fname, var in dict_vars.items() if var.get()]
+        config["USE_INTERSECTING_AI"] = intersecting_ai_var.get()
         config["search_switch"] = search_switch_var.get()
         config["ENABLE_SUBTITLE"] = subtitle_en_var.get()
         config["CACHED_OLLAMA_MODELS"] = ollama_dynamic_models

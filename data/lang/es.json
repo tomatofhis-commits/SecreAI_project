@@ -190,7 +190,14 @@
         "dynamic_summary_enabled": "Habilitar resumen dinámico de memoria por intención (Recomendado)",
         "btn_refresh_speakers": "Actualizar Voces",
         "btn_speaker_updated": "Actualizado",
-        "btn_speaker_failed": "Error (No iniciado)"
+        "btn_speaker_failed": "Error (No iniciado)",
+        "tab_dictionary": "Diccionario / Conocimiento",
+        "dict_guide": "[Configuración de diccionario de usuario y corrección STT]\nPuede activar o desactivar individualmente los diccionarios JSON en la carpeta dictionary/.",
+        "dict_log_enabled": "Mostrar detalles complementarios de términos (oráculos, datos de lugares, etc.) en el registro",
+        "dict_list_title": "Diccionarios registrados",
+        "btn_open_dict": "Abrir carpeta de diccionarios",
+        "btn_refresh_dict": "Actualizar lista",
+        "dict_no_files": "No se encontraron archivos de diccionario. Haga clic abajo para abrir la carpeta y agregar archivos JSON."
     },
     "log_messages": {
         "module_loaded": "Sistema: Módulo de actualización de memoria cargado.",
@@ -263,7 +270,11 @@
         "chromadb_error": "Error de conexión de ChromaDB: {e}",
         "dynamic_summary_detect": "Sistema: Intención de resumen detectada. Ejecutando resumen dinámico condicional...",
         "dynamic_summary_complete": "Sistema: Resumen dinámico completado (modo de {limit} elementos).",
-        "dynamic_summary_fallback": "Sistema: Resumen omitido de forma segura, recurriendo a búsqueda normal."
+        "dynamic_summary_fallback": "Sistema: Resumen omitido de forma segura, recurriendo a búsqueda normal.",
+        "dict_corrected": "Sistema: [Corrección de diccionario] Entrada STT corregida '{original}' -> '{corrected}'",
+        "dict_knowledge_injected": "Sistema: [Conocimiento de diccionario] {count} términos relacionados inyectados en el prompt.",
+        "dict_learned": "Sistema: [Autoaprendizaje] Se aprendió el error '{alias}' para el término en pantalla '{canonical}'.",
+        "dict_detail_header": "[Detalle del diccionario: {term}] {info}"
     },
     "ai_prompt": {
         "extract_keywords": "Eres un maestro en la organización de la memoria.\nAnaliza exhaustivamente los siguientes \"Datos de temas frecuentes de la última semana\" y las \"Conversaciones recientes\", y selecciona y emite [exactamente 5] palabras clave de interés.\n\n### [Temas/Palabras clave frecuentes de la última semana]\n{freq_summary_text}\n\n### [Conversaciones recientes (Resumen de los últimos 7 días)]\n{all_7days_summary_text}\n\n### Reglas de extracción:\n1. Dar la máxima prioridad a la información que aparezca con más frecuencia en la conversación.\n2. Si la frecuencia es similar y difícil de reducir, se puede dar prioridad a la información más reciente.\n3. Emitir solo palabras clave separadas por comas.",

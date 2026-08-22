@@ -190,7 +190,14 @@
         "dynamic_summary_enabled": "Ativar resumo dinâmico de memória por intenção (Recomendado)",
         "btn_refresh_speakers": "Atualizar Lista de Vozes",
         "btn_speaker_updated": "Atualizado",
-        "btn_speaker_failed": "Falha (Não iniciado)"
+        "btn_speaker_failed": "Falha (Não iniciado)",
+        "tab_dictionary": "Dicionário / Conhecimento",
+        "dict_guide": "[Configurações de dicionário do usuário e correção STT]\nVocê pode ativar ou desativar individualmente os dicionários JSON na pasta dictionary/.",
+        "dict_log_enabled": "Exibir detalhes complementares de termos (oráculos, locais, etc.) no registro",
+        "dict_list_title": "Dicionários registrados",
+        "btn_open_dict": "Abrir pasta de dicionários",
+        "btn_refresh_dict": "Atualizar lista",
+        "dict_no_files": "Nenhum arquivo de dicionário encontrado. Clique abaixo para abrir a pasta e adicionar arquivos JSON."
     },
     "log_messages": {
         "module_loaded": "Sistema: Módulo de atualização de memória carregado.",
@@ -257,7 +264,11 @@
         "chromadb_error": "Erro de conexão ChromaDB: {e}",
         "dynamic_summary_detect": "Sistema: Intenção de resumo detetada. Executando resumo dinâmico condicional...",
         "dynamic_summary_complete": "Sistema: Resumo dinâmico concluído (modo de {limit} itens).",
-        "dynamic_summary_fallback": "Sistema: Resumo ignorado com segurança, recorrendo à pesquisa normal."
+        "dynamic_summary_fallback": "Sistema: Resumo ignorado com segurança, recorrendo à pesquisa normal.",
+        "dict_corrected": "Sistema: [Correção de dicionário] Entrada STT corrigida '{original}' -> '{corrected}'",
+        "dict_knowledge_injected": "Sistema: [Conhecimento de dicionário] {count} termos relacionados injetados no prompt.",
+        "dict_learned": "Sistema: [Autoaprendizado] Erro '{alias}' aprendido para o termo na tela '{canonical}'.",
+        "dict_detail_header": "[Detalhe do dicionário: {term}] {info}"
     },
     "ai_prompt": {
         "extract_keywords": "Você é um mestre na organização de memória.\nAnalise de forma abrangente os \"Dados de tópicos frequentes da última semana\" e as \"Conversas recentes\", e selecione e exiba [exatamente 5] palavras-chave de interesse.\n\n### [Temas/Palavras-chave frequentes da última semana]\n{freq_summary_text}\n\n### [Conversas recentes (Resumo dos últimos 7 dias)]\n{all_7days_summary_text}\n\n### Regras de extração:\n1. Dar a máxima prioridade às informações com alta frequência de ocorrência na conversa.\n2. Se a frequência for semelhante e difícil de afunilar, informações mais recentes podem ser priorizadas.\n3. Saída apenas de palavras-chave separadas por vírgulas.",

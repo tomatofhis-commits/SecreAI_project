@@ -190,7 +190,14 @@
         "dynamic_summary_enabled": "Activer le résumé dynamique de la mémoire par intention (Recommandé)",
         "btn_refresh_speakers": "Actualiser les voix",
         "btn_speaker_updated": "Mis à jour",
-        "btn_speaker_failed": "Échec (Non démarré)"
+        "btn_speaker_failed": "Échec (Non démarré)",
+        "tab_dictionary": "Dictionnaire / Connaissances",
+        "dict_guide": "[Paramètres du dictionnaire utilisateur et correction STT]\nVous pouvez activer ou désactiver individuellement les dictionnaires JSON dans le dossier dictionary/.",
+        "dict_log_enabled": "Afficher les détails complémentaires des termes (oracles, lieux, etc.) dans le journal",
+        "dict_list_title": "Dictionnaires enregistrés",
+        "btn_open_dict": "Ouvrir le dossier du dictionnaire",
+        "btn_refresh_dict": "Actualiser la liste",
+        "dict_no_files": "Aucun fichier de dictionnaire trouvé. Cliquez ci-dessous pour ouvrir le dossier et ajouter des fichiers JSON."
     },
     "log_messages": {
         "module_loaded": "Système: Module de mise à jour de la mémoire chargé.",
@@ -263,7 +270,11 @@
         "chromadb_error": "Erreur de connexion ChromaDB: {e}",
         "dynamic_summary_detect": "Système : Intention de résumé détectée. Exécution du résumé dynamique conditionnel...",
         "dynamic_summary_complete": "Système : Résumé dynamique terminé (mode {limit} éléments).",
-        "dynamic_summary_fallback": "Système : Résumé ignoré en toute sécurité, basculement vers la recherche normale."
+        "dynamic_summary_fallback": "Système : Résumé ignoré en toute sécurité, basculement vers la recherche normale.",
+        "dict_corrected": "Système: [Correction du dictionnaire] Entrée STT corrigée '{original}' -> '{corrected}'",
+        "dict_knowledge_injected": "Système: [Connaissances du dictionnaire] {count} termes associés injectés dans le prompt.",
+        "dict_learned": "Système: [Auto-apprentissage] Erreur de reconnaissance '{alias}' apprise pour le terme à l'écran '{canonical}'.",
+        "dict_detail_header": "[Détail du dictionnaire: {term}] {info}"
     },
     "ai_prompt": {
         "extract_keywords": "Vous êtes un maître de l'organisation de la mémoire.\nVeuillez analyser de manière globale les \"Données des sujets fréquents de la semaine écoulée\" et les \"Conversations récentes\" suivantes, et sélectionner [exactement 5] mots-clés d'intérêt.\n\n### [Thèmes/Mots-clés fréquents de la semaine écoulée]\n{freq_summary_text}\n\n### [Conversations récentes (Résumé des 7 derniers jours)]\n{all_7days_summary_text}\n\n### Règles d'extraction :\n1. Accorder la plus haute importance aux informations les plus fréquentes dans la conversation.\n2. Si la fréquence est similaire et difficile à départager, les informations les plus récentes peuvent être privilégiées.\n3. Afficher uniquement les mots-clés séparés par des virgules.",

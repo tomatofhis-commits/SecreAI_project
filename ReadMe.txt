@@ -1,4 +1,4 @@
-　SecreAI - ユーザーガイド (Ver 1.3.4)
+　SecreAI - ユーザーガイド (Ver 1.3.5)
 
 この度は「AI秘書システム SecreAI」をご利用いただきありがとうございます。
 本システムは、Googleの最新AI「Gemini」をメインエンジンとして使用し、会話・視覚（画面キャプチャ）・ネット検索を組み合わせた高度な応答を生成します。
@@ -21,13 +21,15 @@ https://github.com/tomatofhis-commits/SecreAI_project
 【2. AIコアエンジン (Python scripts/)】
 ・scripts/              : AI対話や記憶、検索最適化を行うプログラム群です。
   - game_ai.py          : 音声認識/画像認識/会話を司るメインエンジン（スレッドプール自動制御）。
-  - working_memory_manager.py : ワーキングメモリ・直前ネット検索TTL管理・重複排除を行うモジュール。
+  - working_memory_manager.py : ワーキングメモリ・辞書補完スロット・直前ネット検索TTL管理を行うモジュール。
   - multilingual_date_parser.py : 全10言語高度日時・期間・イベントパース専用モジュール。
   - intersecting_ai.py  : Google Grounding と Tavily 検索を並列で行うハイブリッド検索AI。
   - update_memory.py    : 会話の要点を抽出し ChromaDB へ保存するバックグラウンド記憶定着タスク。
   - memory_viewer.py    : 長期記憶の検索・削除・タグ一括修復および統計ダッシュボード画面。
   - chromadb_pool.py    : ChromaDB接続をプールし、記憶のベクトル検索を高速化するモジュール。
   - api_cache_system.py : 同一の質問の再計算を防ぎ、応答速度を上げAPI費を節約するキャッシュ機構（自動清掃・LRU容量管理付）。
+・src/                  : 共通コアモジュール群です。
+  - dictionary_engine.py: 最長一致Trie検索によるユーザー辞書・STT誤認識補正エンジン。
 
 【3. リアルタイム翻訳エンジン (RTtranslator/)】
 ・RTtranslator_core.exe : 画面OCRおよび翻訳エンジン本体（PythonよりNuitkaビルド）。
@@ -36,7 +38,8 @@ https://github.com/tomatofhis-commits/SecreAI_project
   - ocr.py              : Windows内蔵OCR / PaddleOCRによる高精度文字検出。
   - translator.py       : Ollamaや翻訳APIを用いた多言語翻訳。
 
-【4. アセット・設定・ビルドスクリプト】
+【4. アセット・設定・辞書・ビルドスクリプト】
+・dictionary/           : ユーザー辞書フォルダ（JSON形式の用語・オラクル・ルールデータを配置）。
 ・data/                 : 設定ファイル（config.json, rtt_config.json）、言語データ、対話履歴、一時音声wavが格納されます。
 ・memory_db/            : ChromaDB（ベクトルデータベース）による長期記憶の実データです。
 ・models/               : 翻訳エンジンの言語判定用AIモデルデータです。
@@ -86,17 +89,17 @@ https://github.com/tomatofhis-commits/SecreAI_project
 ・Good/Badフィードバック: AIの回答を評価します。AIはこれを分析して学習します。
 ・今日の前置条件: AIにその日の状況（遊んでいるゲームなど）を事前に伝えておけます。
 
-4. Ver 1.3.4 の注目機能
-◆ 設定画面起動の高速化（同期通信の完全撤廃＆即時表示）
-　設定を開く際の同期HTTPリクエストを完全撤廃。設定キャッシュ（CACHED_VOICEVOX_SPEAKERS）から瞬時にUIを展開し、待ち時間 0秒（0ms）の即時起動を実現しました。
-◆ Main起動時のバックグラウンド話者キャッシュ保存
-　アプリ起動時の非同期バックグラウンド処理で VOICEVOX の話者情報を自動取得し、キャッシュへ保存する連動を強化しました。
-◆ 音声設定タブ内のVOICEVOX話者非同期手動更新機能
-　設定画面の音声（Audio）タブに「話者リスト更新」ボタンを新設。画面をブロックせずに最新の話者リストを手動取得・反映できるようになりました。
-◆ Google 最新AI「Gemini 3.7 Flash」の標準搭載 ＆ 内部モデルレジストリ一元化
-　次世代高速モデル「gemini-3.7-flash」を標準搭載。思考レベル（最小/低/中/高）を指定した高精度な推論が可能になりました。
+4. Ver 1.3.5 の注目機能
+◆ ユーザー辞書エンジン ＆ 音声認識（STT）誤認識自動補正
+　dictionary/ フォルダ内のJSON辞書（MTG公式カードデータ等）から最長一致Trie検索により用語を即時照合。音声入力の表記揺れや誤認識を全自動で正表記に補正します。
+◆ 設定画面「辞書 / 知識」管理タブ
+　辞書ごとの個別有効/無効化やフォルダ即時展開、詳細ログ出力トグルを自由に設定可能です。
+◆ 非同期AI文脈判断型 辞書詳細ログ補完 ＆ ワーキングメモリ自動注入
+　ユーザーの質問意図とAI返答から本当に必要な辞書詳細（オラクル・適法性等）のみを厳選してログ出力し、ワーキングメモリへ保持して次期プロンプトへ自動注入します。
+◆ ネット検索ゲートキーパー判定強化
+　ユーザーの元の質問をゲートキーパーに直接提示し、質問意図から外れた検索クエリを確実にスキップします。
 
-5. 以前のバージョン（Ver 1.3.2 / Ver 1.3.1 / Ver 1.1.0）の注目機能
+5. 以前のバージョン（Ver 1.3.4 / Ver 1.3.3 / Ver 1.3.2）の注目機能
 ◆ ローカルLLM（Ollama / LM Studio）のマルチプロバイダ対応
 　これまでの Ollama に加え、OpenAI互換APIを持つ「LM Studio」との連携に完全対応しました。設定画面でラジオボタンを切り替えるだけで簡単接続。
 ◆ RTトランスレーター統合

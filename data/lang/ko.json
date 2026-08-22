@@ -188,7 +188,14 @@
         "dynamic_summary_enabled": "대화 의도에 따른 과거 기억의 동적 요약 활성화 (권장)",
         "btn_refresh_speakers": "화자 목록 갱신",
         "btn_speaker_updated": "갱신 완료",
-        "btn_speaker_failed": "갱신 실패(미실행)"
+        "btn_speaker_failed": "갱신 실패(미실행)",
+        "tab_dictionary": "사전 / 지식",
+        "dict_guide": "[사용자 사전 및 STT 오인식 보정 설정]\ndictionary/ 폴더 내의 JSON 사전을 개별적으로 활성화/비활성화할 수 있습니다.",
+        "dict_log_enabled": "등록 용어의 상세 정보(오라클, 지명 해설 등)를 로그에 보완 표시",
+        "dict_list_title": "등록된 사전 목록",
+        "btn_open_dict": "사전 폴더 열기",
+        "btn_refresh_dict": "목록 새로고침",
+        "dict_no_files": "사전 파일을 찾을 수 없습니다. 아래 버튼을 눌러 폴더를 열고 JSON을 추가하세요."
     },
     "log_messages": {
         "module_loaded": "시스템: 기억 업데이트 모듈이 로드되었습니다.",
@@ -261,7 +268,11 @@
         "chromadb_error": "ChromaDB 연결 오류: {e}",
         "dynamic_summary_detect": "시스템: 「요약/정리」 의도를 감지했습니다. 조건부 동적 요약을 실행 중...",
         "dynamic_summary_complete": "시스템: 동적 요약이 완료되었습니다 ({limit}개 항목 모드).",
-        "dynamic_summary_fallback": "시스템: 요약 처리를 안전하게 건너뛰고 일반 기억 검색으로 폴백했습니다."
+        "dynamic_summary_fallback": "시스템: 요약 처리를 안전하게 건너뛰고 일반 기억 검색으로 폴백했습니다.",
+        "dict_corrected": "시스템: [사전 보정] STT 오인식 보정 '{original}' -> '{corrected}'",
+        "dict_knowledge_injected": "시스템: [사전 지식] 관련 단어 {count}건을 AI 프롬프트에 동적 주입했습니다.",
+        "dict_learned": "시스템: [자동 학습] 화면의 '{canonical}'을(를) 바탕으로 오인식 '{alias}'을(를) 사전에 학습했습니다.",
+        "dict_detail_header": "[사전 상세: {term}] {info}"
     },
     "ai_prompt": {
         "extract_keywords": "당신은 기억 정리의 전문가입니다.\n다음의 \"지난 1주일간의 자주 언급된 화제 데이터\"와 \"최근 대화\"를 종합적으로 분석하여 관심사 키워드를 [반드시 5개] 선정하여 출력해 주세요.\n\n### [지난 1주일간 반복해서 등장한 자주 언급된 테마/키워드]\n{freq_summary_text}\n\n### [최근 대화 (지난 7일간의 요약)]\n{all_7days_summary_text}\n\n### 추출 규칙:\n1. 대화 내에서 출현 빈도가 높은(반복적으로 언급된) 중요한 정보를 가장重視할 것.\n2. 출현 빈도가 비슷하여 좁히기 어려운 경우 새로운 대화 정보를 우선해도 좋다.\n3. 출력은 키워드만 쉼표로 구분하여 출력할 것(불필요한 설명은 금지).",

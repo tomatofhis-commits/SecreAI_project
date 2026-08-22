@@ -190,7 +190,14 @@
         "dynamic_summary_enabled": "按意图启用过去记忆的动态摘要（推荐）",
         "btn_refresh_speakers": "刷新发音人列表",
         "btn_speaker_updated": "更新完成",
-        "btn_speaker_failed": "更新失败(未启动)"
+        "btn_speaker_failed": "更新失败(未启动)",
+        "tab_dictionary": "词典 / 知识",
+        "dict_guide": "【用户词典与STT语音识别修正设置】\n可在此单独启用或禁用 dictionary/ 目录下的各JSON词典。",
+        "dict_log_enabled": "在日志中补充显示注册术语的详细信息（规则释义、地名解析等）",
+        "dict_list_title": "已注册词典列表",
+        "btn_open_dict": "打开词典目录",
+        "btn_refresh_dict": "刷新列表",
+        "dict_no_files": "未找到词典文件。请点击下方按钮打开目录并添加JSON文件。"
     },
     "log_messages": {
         "module_loaded": "系统: 记忆更新模块已加载。",
@@ -263,7 +270,11 @@
         "chromadb_error": "ChromaDB连接错误: {e}",
         "dynamic_summary_detect": "系统：检测到“总结/摘要”意图。正在执行条件动态摘要...",
         "dynamic_summary_complete": "系统：动态摘要已完成（{limit}条模式）。",
-        "dynamic_summary_fallback": "系统：安全跳过摘要处理，已降级回普通记忆检索。"
+        "dynamic_summary_fallback": "系统：安全跳过摘要处理，已降级回普通记忆检索。",
+        "dict_corrected": "系统: 【词典修正】已修正STT识别错误 '{original}' -> '{corrected}'",
+        "dict_knowledge_injected": "系统: 【词典知识】已向AI提示词动态注入 {count} 条相关词条知识。",
+        "dict_learned": "系统: 【自主学习】已根据画面中的『{canonical}』学习语音误识别『{alias}』到词典。",
+        "dict_detail_header": "【词典详细: {term}】 {info}"
     },
     "ai_prompt": {
         "extract_keywords": "你是记忆整理的专家。\n请综合分析以下“过去1周的高频话题数据”和“近期最新对话”，精选并输出【务必5个】关注点关键词。\n\n### 【过去1周内反复出现的频出主题/关键词】\n{freq_summary_text}\n\n### 【近期最新对话 (过去7天总结)】\n{all_7days_summary_text}\n\n### 提取规则：\n1. 最重视对话中出现频率高（反复提及）的重要信息。\n2. 若出现频率相当且难以筛选，可优先选择较新的对话信息。\n3. 输出仅限关键词，用逗号分隔（无需多余解释）。",

@@ -190,7 +190,14 @@
         "dynamic_summary_enabled": "Abilita riassunto dinamico della memoria per intenzione (Consigliato)",
         "btn_refresh_speakers": "Aggiorna elenco voci",
         "btn_speaker_updated": "Aggiornato",
-        "btn_speaker_failed": "Non riuscito (Non avviato)"
+        "btn_speaker_failed": "Non riuscito (Non avviato)",
+        "tab_dictionary": "Dizionario / Conoscenza",
+        "dict_guide": "[Impostazioni dizionario utente e correzione STT]\nÈ possibile abilitare o disabilitare singolarmente i dizionari JSON nella cartella dictionary/.",
+        "dict_log_enabled": "Mostra i dettagli complementari dei termini (oracoli, luoghi, ecc.) nel registro",
+        "dict_list_title": "Dizionari registrati",
+        "btn_open_dict": "Apri cartella dizionario",
+        "btn_refresh_dict": "Aggiorna elenco",
+        "dict_no_files": "Nessun file di dizionario trovato. Fai clic sotto per aprire la cartella e aggiungere file JSON."
     },
     "log_messages": {
         "module_loaded": "Sistema: Modulo aggiornamento memoria caricato.",
@@ -257,7 +264,11 @@
         "chromadb_error": "Errore di connessione a ChromaDB: {e}",
         "dynamic_summary_detect": "Sistema: Rilevata intenzione di riassunto. Esecuzione riassunto dinamico condizionale...",
         "dynamic_summary_complete": "Sistema: Riassunto dinamico completato (modalità {limit} elementi).",
-        "dynamic_summary_fallback": "Sistema: Riassunto ignorato in sicurezza, fallback alla ricerca normale."
+        "dynamic_summary_fallback": "Sistema: Riassunto ignorato in sicurezza, fallback alla ricerca normale.",
+        "dict_corrected": "Sistema: [Correzione dizionario] Input STT corretto '{original}' -> '{corrected}'",
+        "dict_knowledge_injected": "Sistema: [Conoscenza dizionario] {count} termini correlati inseriti nel prompt.",
+        "dict_learned": "Sistema: [Autoapprendimento] Riconoscimento errato '{alias}' appreso per il termine a schermo '{canonical}'.",
+        "dict_detail_header": "[Dettaglio dizionario: {term}] {info}"
     },
     "ai_prompt": {
         "extract_keywords": "Sei un maestro dell'organizzazione della memoria.\nAnalizza in modo approfondito i seguenti \"Dati sui argomenti frequenti dell'ultima settimana\" e le \"Conversazioni recenti\", e seleziona e restituisci [esattamente 5] parole chiave di interesse.\n\n### [Temi/Parole chiave frequenti dell'ultima settimana]\n{freq_summary_text}\n\n### [Conversazioni recenti (Riepilogo degli ultimi 7 giorni)]\n{all_7days_summary_text}\n\n### Regole di estrazione:\n1. Dare la massima importanza alle informazioni con un'alta frequenza di comparsa.\n2. Se la frequenza è simile e difficile da restringere, è possibile dare priorità alle informazioni più recenti.\n3. Output solo parole chiave separate da virgole.",

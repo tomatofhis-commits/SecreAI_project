@@ -188,7 +188,14 @@
         "unit_times": "回に1回",
         "btn_refresh_speakers": "話者リスト更新",
         "btn_speaker_updated": "更新完了",
-        "btn_speaker_failed": "更新失敗(未起動)"
+        "btn_speaker_failed": "更新失敗(未起動)",
+        "tab_dictionary": "辞書 / 知識",
+        "dict_guide": "【ユーザー辞書・STT誤認識補正設定】\ndictionary/ フォルダ内のJSON辞書を個別に有効/無効化できます。",
+        "dict_log_enabled": "登録用語の詳細情報（オラクル・地名解説等）をログに補完表示する",
+        "dict_list_title": "登録されている辞書一覧",
+        "btn_open_dict": "辞書フォルダを開く",
+        "btn_refresh_dict": "一覧を更新",
+        "dict_no_files": "辞書ファイルが見つかりません。下のボタンからフォルダを開いてJSONを追加してください。"
     },
     "log_messages": {
         "module_loaded": "システム: 記憶更新モジュールをロードしました。",
@@ -255,7 +262,11 @@
         "chromadb_error": "ChromaDB接続エラー: {e}",
         "dynamic_summary_detect": "システム: 「まとめ・要約」要求を検知。条件付き動的要約を実行中...",
         "dynamic_summary_complete": "システム: 動的要約が完了しました ({limit}件モード)。",
-        "dynamic_summary_fallback": "システム: 要約処理を安全にスキップし、通常のデータベース読み込み処理へフォールバックしました。"
+        "dynamic_summary_fallback": "システム: 要約処理を安全にスキップし、通常のデータベース読み込み処理へフォールバックしました。",
+        "dict_corrected": "システム: 【辞書補正】STT誤認識を補正 '{original}' -> '{corrected}'",
+        "dict_knowledge_injected": "システム: 【辞書知識】関連単語 {count} 件をAIプロンプトに動的注入しました。",
+        "dict_learned": "システム: 【自己学習】画面上の『{canonical}』に基づき誤認識『{alias}』を辞書に学習しました。",
+        "dict_detail_header": "【辞書詳細: {term}】 {info}"
     },
     "ai_prompt": {
         "role": "あなたはサポートを得意とする頼もしい秘書兼相棒です。",

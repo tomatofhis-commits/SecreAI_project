@@ -190,7 +190,14 @@
         "dynamic_summary_enabled": "Dynamische Speicherzusammenfassung nach Absicht aktivieren (Empfohlen)",
         "btn_refresh_speakers": "Sprecherliste aktualisieren",
         "btn_speaker_updated": "Aktualisiert",
-        "btn_speaker_failed": "Fehlgeschlagen (Nicht gestartet)"
+        "btn_speaker_failed": "Fehlgeschlagen (Nicht gestartet)",
+        "tab_dictionary": "Wörterbuch / Wissen",
+        "dict_guide": "[Benutzerwörterbuch & STT-Korrektureinstellungen]\nSie können JSON-Wörterbücher im Ordner dictionary/ einzeln aktivieren oder deaktivieren.",
+        "dict_log_enabled": "Ergänzende Begriffsdetails (Orakeltext, Ortsdaten etc.) im Protokoll anzeigen",
+        "dict_list_title": "Registrierte Wörterbücher",
+        "btn_open_dict": "Wörterbuch-Ordner öffnen",
+        "btn_refresh_dict": "Liste aktualisieren",
+        "dict_no_files": "Keine Wörterbuchdateien gefunden. Klicken Sie unten, um den Ordner zu öffnen und JSON-Dateien hinzuzufügen."
     },
     "log_messages": {
         "module_loaded": "System: Gedächtnisaktualisierungsmodul geladen.",
@@ -257,7 +264,11 @@
         "chromadb_error": "ChromaDB Verbindungsfehler: {e}",
         "dynamic_summary_detect": "System: Zusammenfassungsabsicht erkannt. Konditionelle dynamische Zusammenfassung läuft...",
         "dynamic_summary_complete": "System: Dynamische Zusammenfassung abgeschlossen ({limit}-Elemente-Modus).",
-        "dynamic_summary_fallback": "System: Zusammenfassung sicher übersprungen, Fallback auf normale Suche."
+        "dynamic_summary_fallback": "System: Zusammenfassung sicher übersprungen, Fallback auf normale Suche.",
+        "dict_corrected": "System: [Wörterbuch-Korrektur] STT-Eingabe korrigiert '{original}' -> '{corrected}'",
+        "dict_knowledge_injected": "System: [Wörterbuch-Wissen] {count} verwandte Begriffe in den Prompt eingefügt.",
+        "dict_learned": "System: [Selbst gelernt] Falscherkennung '{alias}' für Bildschirmsbegriff '{canonical}' gelernt.",
+        "dict_detail_header": "[Wörterbuch-Details: {term}] {info}"
     },
     "ai_prompt": {
         "extract_keywords": "Sie sind ein Meister der Speicherorganisation.\nBitte analysieren Sie die folgenden \"Häufigen Themen der letzten Woche\" und \"Neuesten Gespräche\" umfassend und wählen Sie [genau 5] Interessenschlüsselwörter aus.\n\n### [Häufige Themen/Schlüsselwörter der letzten Woche]\n{freq_summary_text}\n\n### [Neueste Gespräche (Zusammenfassung der letzten 7 Tage)]\n{all_7days_summary_text}\n\n### Extraktionsregeln:\n1. Relevante Informationen mit hoher Häufigkeit im Gespräch am stärksten berücksichtigen.\n2. Wenn die Häufigkeit ähnlich ist und eine Eingrenzung schwierig ist, können neuere Gesprächsinformationen bevorzugt werden.\n3. Nur Schlüsselwörter durch Kommas getrennt ausgeben.",
