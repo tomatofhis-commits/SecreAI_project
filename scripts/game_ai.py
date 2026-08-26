@@ -726,18 +726,23 @@ def should_execute_search(user_query, search_query, config, log_m):
     """検索が本当に必要かAI（軽量モデル）で事前判定する"""
     try:
         prompt = (
-            "あなたは検索のゲートキーパーです。ユーザーの質問に答えるために、インターネットでのリアルタイム検索が【絶対に】必要かどうかを判定してください。\n\n"
+            "あなたは検索のゲートキーパーです。ユーザーの質問に答えるために、インターネットでのリアルタイム検索が【絶対に】必要かどうかを判定し、最適な検索クエリを生成してください。\n\n"
             "以下の場合は 'False' と判定してください：\n"
             "- 既にAIが知っている一般的な事実（例：歴史、数学、プログラムの書き方）\n"
             "- 日常会話や挨拶、単なるおしゃべり\n"
             "- 直前の会話の流れから、検索しなくても推論できる場合\n"
-            "- AIが提案した検索クエリが、ユーザーの質問の意図から明らかに外れている場合\n\n"
+            "- AIが提案した検索クエリが、ユーザーの質問の意図から明らかに外れており検索の必要性自体がない場合\n\n"
             "以下の場合は 'True' と判定してください：\n"
-            "- 最新のニュース、天気、株価、発売日などのリアルタイム情報\n"
-            "- AIの知識カットオフ以降の出来事\n"
-            "- 具体的な事実確認が必要な専門的な内容\n\n"
-            "回答はJSON形式で返してください：\n"
-            "{\"necessary\": boolean, \"optimized_query\": \"検索に適した短いキーワード\", \"reason\": \"理由\"}\n\n"
+            "- 最新のニュース、天気、株価、発売日、イベント日程などのリアルタイム情報\n"
+            "- AIの知識カットオフ以降の出来事や最新アップデート\n"
+            "- 具体的な事実確認が必要な専門的・最新の内容\n\n"
+            "【検索クエリ最適化（optimized_query）の最重要ルール】\n"
+            "1. 【ユーザーの元の質問】が持つ本来の知りたい対象・主語・固有名詞・目的を絶対に改変・逸脱させず、質問の意図を正確に反映させること。\n"
+            "2. 【AIが提案した検索クエリ】がユーザーの元の質問の意図から少しでもズレている場合は、AIの提案を無視し、【ユーザーの元の質問】から直接検索キーワードを構築すること。\n"
+            "3. 検索エンジン（Google/Tavily等）で最もヒットしやすいよう、余計な助詞・会話文を省き、核心となる具体的かつ簡潔な検索キーワード（2〜4単語程度）にすること。\n"
+            "4. 質問が外国語（英語等）の場合は、検索に適した言語のキーワードにすること。\n\n"
+            "回答は必ず以下のJSON形式のみで返してください：\n"
+            "{\"necessary\": boolean, \"optimized_query\": \"質問の意図を正確に反映した検索キーワード\", \"reason\": \"理由\"}\n\n"
             f"【ユーザーの元の質問】: {user_query}\n"
             f"【AIが提案した検索クエリ】: {search_query}"
         )
@@ -778,7 +783,9 @@ def execute_background_search(user_query, search_query, config, root, session_da
         lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
         log_m = lang_data.get("log_messages", {})
         ai_p = lang_data.get("ai_prompt", {})
-        max_chars = config.get("MAX_CHARS", 700)
+        raw_max_chars = config.get("MAX_CHARS", 700)
+        m_chars = re.search(r'\d+', str(raw_max_chars))
+        max_chars = int(m_chars.group()) if m_chars else 700
 
         # --- ゲートキーパー判定 ---
         send_log_to_hub(log_m.get("gatekeeper_analyzing", "システム: ゲートキーパーが検索の必要性を判定中..."))
@@ -1110,7 +1117,9 @@ def call_local_llm_chat(config, messages, json_mode=False, timeout=60):
 def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None, dict_context=None):
     global gemini_client, openai_client
     history = load_history_manual(root)
-    max_chars = config.get("MAX_CHARS", "700文字以内")
+    raw_max_chars = config.get("MAX_CHARS", 700)
+    m_chars = re.search(r'\d+', str(raw_max_chars))
+    max_chars = int(m_chars.group()) if m_chars else 700
     # まとめ・要約要求の動的判定 (Ver 1.3.2 全10言語対応 ＋ メインAI直通モード)
     lang_pattern = lang_data.get("summary_intent_pattern") if isinstance(lang_data, dict) else None
     log_m = lang_data.get("log_messages", {}) if isinstance(lang_data, dict) else {}
@@ -1723,8 +1732,25 @@ def ensure_voicevox_is_running(config, lang_data):
         send_log_to_hub(lang_data["log_messages"]["engine_path_error"], is_error=True, error_code="voicevox_not_running")
     return False
 
+# Google Speech Recognition (STT) 言語コードマッピング
+STT_LANG_MAP = {
+    "ja": "ja-JP",
+    "en": "en-US",
+    "zh": "zh-CN",
+    "zh-CN": "zh-CN",
+    "ko": "ko-KR",
+    "es": "es-ES",
+    "fr": "fr-FR",
+    "de": "de-DE",
+    "it": "it-IT",
+    "pt": "pt-BR",
+    "ru": "ru-RU",
+    "vi": "vi-VN",
+}
+
 def get_voice_input(guide, config, root, lang_data, session_data, image_path=None):
-    stt_lang = 'ja-JP' if config.get("LANGUAGE", "ja") == "ja" else 'en-US'
+    lang_code = config.get("LANGUAGE", "ja")
+    stt_lang = STT_LANG_MAP.get(lang_code, "ja-JP")
     session_id, session_getter, _ = session_data[:3] if session_data else (None, None, None)
 
     # ガイダンス音声を別スレッドで再生（同時に入力を開始できるようにする）

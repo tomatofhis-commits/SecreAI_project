@@ -1,10 +1,10 @@
 ; ============================================================
-;  SecreAI + RTtranslator 統合インストーラー (v1.3.5)
+;  SecreAI + RTtranslator 統合インストーラー (v1.3.6)
 ;  Inno Setup 6 スクリプト
 ; ============================================================
 
 #define MyAppName        "SecreAI"
-#define MyAppVersion     "1.3.5"
+#define MyAppVersion     "1.3.6"
 #define MyAppPublisher   "SecreAI Dev Team"
 #define MyAppExeName     "secreAI.exe"
 

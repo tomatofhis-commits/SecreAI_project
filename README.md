@@ -1,4 +1,4 @@
-# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.5)
+# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.6)
 
 ![SecreAI Logo](SecreAI.ico)
 
@@ -7,15 +7,15 @@ SecreAIは、Google Geminiをコアエンジンに据え、ウェブ検索、画
 
 ---
 
-## 主要機能 / Key Features (Ver 1.3.5)
+## 主要機能 / Key Features (Ver 1.3.6)
 
-- **ユーザー辞書エンジン ＆ STT誤認識自動補正 (Ver 1.3.5) / User Dictionary Engine & STT Correction**:
+- **ユーザー辞書エンジン ＆ STT誤認識自動補正 (Ver 1.3.6) / User Dictionary Engine & STT Correction**:
   `dictionary/` フォルダ内のJSON辞書（MTG公式全カードデータ等）から最長一致Trie検索により用語を即時検出。音声認識の誤認識を全自動で正表記へ補正し、AIプロンプトへ知識を動的注入。  
   *Detects domain terms instantly using a longest-match Trie search across JSON dictionaries, auto-correcting speech recognition errors and dynamically injecting knowledge into AI prompts.*
-- **非同期AI文脈判断 辞書詳細ログ補完 ＆ ワーキングメモリ自動注入 (Ver 1.3.5) / Intelligent Async Dictionary Logging & Working Memory Slot**:
+- **非同期AI文脈判断 辞書詳細ログ補完 ＆ ワーキングメモリ自動注入 (Ver 1.3.6) / Intelligent Async Dictionary Logging & Working Memory Slot**:
   ユーザーの質問意図・AI返答・辞書候補から真に必要な情報のみを厳選してログ出力。ワーキングメモリに保持して次期プロンプトへ自動注入。  
   *Contextually evaluates and outputs only necessary dictionary details to the log, retaining them in working memory to automatically feed into the next prompt context.*
-- **ゲートキーパー判定強化 (Ver 1.3.5) / Enhanced Search Gatekeeper**:
+- **ゲートキーパー判定強化 (Ver 1.3.6) / Enhanced Search Gatekeeper**:
   ユーザーの元の質問をゲートキーパーに直接提示し、質問意図から外れた検索クエリを確実にスキップ。  
   *Directly presents user intent to the gatekeeper to reliably block irrelevant web search queries.*
 - **設定UI起動の高速化＆スマートキャッシュ連携 / Instant Settings Startup & Smart Caching**:

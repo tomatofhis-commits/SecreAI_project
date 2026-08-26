@@ -129,7 +129,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     notebook.add(tab_search, text=l_set.get("tab_search", "Search"))
     notebook.add(tab_database, text=l_set.get("tab_database", "Database"))
     notebook.add(tab_extensions, text=l_set.get("tab_extensions", "Extensions"))
-    notebook.add(tab_dictionary, text=l_set.get("tab_dictionary", "辞書 / 知識"))
+    notebook.add(tab_dictionary, text=l_set.get("tab_dictionary", "ユーザー辞書"))
     notebook.add(tab_rtt, text=l_set.get("tab_rtt", "RTトランスレーター"))
 
     # RTTモデル OptionMenu 更新用の参照オブジェクト（NameError回避のため関数上部で初期化）
@@ -152,7 +152,8 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         notebook.tab(3, text=l_set.get("tab_search", "Search"))
         notebook.tab(4, text=l_set.get("tab_database", "Database"))
         notebook.tab(5, text=l_set.get("tab_extensions", "Extensions"))
-        notebook.tab(6, text=l_set.get("tab_rtt", "RTトランスレーター"))
+        notebook.tab(6, text=l_set.get("tab_dictionary", "ユーザー辞書"))
+        notebook.tab(7, text=l_set.get("tab_rtt", "RTトランスレーター"))
 
         # 全般設定
         lbl_ai_provider.config(text=l_set.get("label_ai_provider", "AI Provider:"))
