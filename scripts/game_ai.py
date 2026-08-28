@@ -722,30 +722,35 @@ def call_summary_llm(config, prompt):
     return call_local_llm_chat(config, [{'role': 'user', 'content': prompt}])
 
 
-def should_execute_search(user_query, search_query, config, log_m):
+def should_execute_search(user_query, search_query, config, log_m, ai_p=None):
     """検索が本当に必要かAI（軽量モデル）で事前判定する"""
     try:
-        prompt = (
+        if not ai_p:
+            lang_data = load_lang_file(config.get("LANGUAGE", "ja"))
+            ai_p = lang_data.get("ai_prompt", {}) if isinstance(lang_data, dict) else {}
+
+        default_gatekeeper_prompt = (
             "あなたは検索のゲートキーパーです。ユーザーの質問に答えるために、インターネットでのリアルタイム検索が【絶対に】必要かどうかを判定し、最適な検索クエリを生成してください。\n\n"
             "以下の場合は 'False' と判定してください：\n"
             "- 既にAIが知っている一般的な事実（例：歴史、数学、プログラムの書き方）\n"
             "- 日常会話や挨拶、単なるおしゃべり\n"
             "- 直前の会話の流れから、検索しなくても推論できる場合\n"
-            "- AIが提案した検索クエリが、ユーザーの質問の意図から明らかに外れており検索の必要性自体がない場合\n\n"
+            "- AIが提案した検索クエリが明らかに【ユーザーの質問】と無関係な場合\n\n"
             "以下の場合は 'True' と判定してください：\n"
             "- 最新のニュース、天気、株価、発売日、イベント日程などのリアルタイム情報\n"
             "- AIの知識カットオフ以降の出来事や最新アップデート\n"
             "- 具体的な事実確認が必要な専門的・最新の内容\n\n"
-            "【検索クエリ最適化（optimized_query）の最重要ルール】\n"
-            "1. 【ユーザーの元の質問】が持つ本来の知りたい対象・主語・固有名詞・目的を絶対に改変・逸脱させず、質問の意図を正確に反映させること。\n"
-            "2. 【AIが提案した検索クエリ】がユーザーの元の質問の意図から少しでもズレている場合は、AIの提案を無視し、【ユーザーの元の質問】から直接検索キーワードを構築すること。\n"
-            "3. 検索エンジン（Google/Tavily等）で最もヒットしやすいよう、余計な助詞・会話文を省き、核心となる具体的かつ簡潔な検索キーワード（2〜4単語程度）にすること。\n"
-            "4. 質問が外国語（英語等）の場合は、検索に適した言語のキーワードにすること。\n\n"
+            "【検索クエリ最適化のルール】\n"
+            "1. 検索エンジンで最もヒットしやすいよう、余計な助詞・会話文を省き、核心となる簡潔な検索キーワード（2〜4単語程度）にすること。\n"
+            "2. 大幅な言い換えや抽象化は禁止。\n\n"
             "回答は必ず以下のJSON形式のみで返してください：\n"
-            "{\"necessary\": boolean, \"optimized_query\": \"質問の意図を正確に反映した検索キーワード\", \"reason\": \"理由\"}\n\n"
-            f"【ユーザーの元の質問】: {user_query}\n"
-            f"【AIが提案した検索クエリ】: {search_query}"
+            "{{\"necessary\": boolean, \"optimized_query\": \"検索キーワード\", \"reason\": \"理由\"}}\n\n"
+            "【ユーザーの質問】: {user_query}\n"
+            "【AI提案クエリ】: {search_query}"
         )
+
+        prompt_template = ai_p.get("gatekeeper_prompt", default_gatekeeper_prompt)
+        prompt = prompt_template.format(user_query=user_query, search_query=search_query)
 
         content = call_local_llm_chat(config, [{'role': 'user', 'content': prompt}], json_mode=True)
         content_str = content.strip()
@@ -776,7 +781,7 @@ def should_execute_search(user_query, search_query, config, log_m):
         print(f"[DEBUG should_execute_search Exception Details]: {repr(e)}")
         return {"necessary": True, "optimized_query": search_query, "reason": f"Gatekeeper failed: {e}"}
 
-def execute_background_search(user_query, search_query, config, root, session_data):
+def execute_background_search(user_query, search_query, config, root, session_data, ai_response=""):
     global gemini_client
     summary = None
     try:
@@ -789,7 +794,7 @@ def execute_background_search(user_query, search_query, config, root, session_da
 
         # --- ゲートキーパー判定 ---
         send_log_to_hub(log_m.get("gatekeeper_analyzing", "システム: ゲートキーパーが検索の必要性を判定中..."))
-        gatekeeper_res = should_execute_search(user_query, search_query, config, log_m)
+        gatekeeper_res = should_execute_search(user_query, search_query, config, log_m, ai_p=ai_p)
         if not gatekeeper_res.get("necessary", True):
             msg = log_m.get("gatekeeper_skip", "System: Search skipped by Gatekeeper (Reason: {reason})").format(reason=gatekeeper_res.get('reason', 'N/A'))
             send_log_to_hub(msg)
@@ -851,8 +856,8 @@ def execute_background_search(user_query, search_query, config, root, session_da
             increment_grounding_count(root)
             g_model = "gemini-2.5-flash-lite"
             config_g = {'tools': [{'google_search': {}}]}
-            prompt = f"「{search_query}」について最新情報を調査してください。網羅的で正確な事実関係を報告してください。"
-            response = gemini_client.models.generate_content(model=g_model, contents=prompt, config=config_g)
+            prompt_g = f"「{search_query}」について最新情報を調査してください。網羅的で正確な事実関係を報告してください。"
+            response = gemini_client.models.generate_content(model=g_model, contents=prompt_g, config=config_g)
             return response.text
 
         def _call_tavily():
@@ -912,17 +917,26 @@ def execute_background_search(user_query, search_query, config, root, session_da
                 send_log_to_hub(f"エラー: {label} がタイムアウトしました。", is_error=True)
                 return
             ctx = res_grounding
-            role = ai_p.get("search_grounding_summary", "Grounding要約プロンプト").format(max_chars=max_chars)
+            role_tmpl = ai_p.get("search_single_summary", ai_p.get("search_grounding_summary", "要約プロンプト"))
+            role = role_tmpl.format(max_chars=max_chars)
         else:  # tavily
             if not res_tavily:
                 send_log_to_hub("エラー: Tavily検索がタイムアウトしました。", is_error=True)
                 return
             ctx = res_tavily
-            role = ai_p.get("search_tavily_summary", "Tavily要約プロンプト").format(max_chars=max_chars)
+            role_tmpl = ai_p.get("search_single_summary", ai_p.get("search_tavily_summary", "要約プロンプト"))
+            role = role_tmpl.format(max_chars=max_chars)
+
+        user_content_str = (
+            f"{role}\n\n"
+            f"【ユーザーへの初期回答】: {ai_response or 'なし'}\n"
+            f"【検索キーワード】: {search_query}\n"
+            f"【検索結果ソース】:\n{ctx}"
+        )
 
         summary = call_local_llm_chat(
             config,
-            [{'role': 'user', 'content': f"{role}\n\n検索結果クエリ: {search_query}\n情報ソース:\n{ctx}"}]
+            [{'role': 'user', 'content': user_content_str}]
         )
 
         if summary:
@@ -1888,7 +1902,7 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
                 # but for now we pass session_data as the last arg to execute_background_search 
                 # replacing stop_flag. Logic inside execute_background_search needs update for this.
                 # 検索タスクは音声読み上げを含むため、タイムアウトなしで実行
-                submit_background_task(execute_background_search, query, s_query, config, root, session_data, timeout=None)
+                submit_background_task(execute_background_search, query, s_query, config, root, session_data, clean_res, timeout=None)
 
             speak_and_show(clean_res, abs_path, config, root, session_data)
 

@@ -294,11 +294,11 @@
         "feedback_neg_style": "[Stile da evitare]: {neg}\n",
         "tag_reference": "\n[Parole chiave passate]: {tags}\n",
         "search_logic": "\nAggiungi se necessario [SEARCH: Query inglese] su una riga alla fine.",
-        "search_grounding_summary": "Riassumi i fatti da Google Search in modo conciso in italiano entro {max_chars} parole/caratteri. Evita lunghe introduzioni.",
-        "search_tavily_summary": "Riassumi i risultati di Tavily in modo conciso in italiano entro {max_chars} parole/caratteri. Evita lunghe introduzioni.",
-        "search_integrated_summary": "Integra i fatti e riassumi in modo conciso in italiano entro {max_chars} parole/caratteri. Evita lunghe introduzioni.",
+        "search_integrated_summary": "L'utente ha fornito due fonti di ricerca (Google Grounding e Tavily Search) per integrare le informazioni mancanti nella [Risposta Iniziale].\nConfronta e integra entrambe le fonti, e riassumi solo i nuovi dettagli supplementari, cifre concrete e fatti in italiano entro {max_chars} parole/caratteri.\n\n[Regole severe]\n1. Sono vietate lunghe introduzioni o premesse del tipo 'Ho cercato...'.\n2. Se i risultati di ricerca non contengono informazioni pertinenti, non inventare nulla e comunicalo brevemente.",
         "search_save_db_role": "Riassumi i risultati in meno di 200 caratteri/parole in italiano.",
-        "search_appendix_prefix": "Ecco i risultati di ricerca supplementari."
+        "search_appendix_prefix": "Ecco i risultati di ricerca supplementari.",
+        "gatekeeper_prompt": "Sei il gatekeeper della ricerca. Determina se una ricerca Internet in tempo reale è ASSOLUTAMENTE necessaria e genera la query ottimale.\n\nValuta come 'False' nei seguenti casi:\n- Fatti generali già noti all'IA\n- Conversazioni quotidiane, saluti, chiacchiere\n- Situazioni deducibili dal contesto senza effettuare ricerche\n- La query proposta dall'IA è chiaramente non correlata alla [Domanda dell'utente]\n\nValuta come 'True' nei seguenti casi:\n- Informazioni in tempo reale (ultime notizie, meteo, date di eventi, ecc.)\n- Eventi successivi al cut-off di conoscenza dell'IA\n- Dati specifici che richiedono verifiche recenti\n\n[Regole di ottimizzazione della query]\n1. Rimuovi parole superflue; mantieni 2-4 parole chiave essenziali.\n2. Sono vietate parafrasi drastiche o astrazioni eccessive.\n\nRispondi SOLO nel seguente formato JSON:\n{{\"necessary\": boolean, \"optimized_query\": \"parole chiave di ricerca\", \"reason\": \"motivo\"}}\n\n[Domanda dell'utente]: {user_query}\n[Query proposta dall'IA]: {search_query}",
+        "search_single_summary": "L'utente ha fornito i seguenti risultati di ricerca per integrare le informazioni mancanti nella [Risposta Iniziale].\nRiassumi solo i nuovi dettagli supplementari, cifre concrete e fatti in italiano entro {max_chars} parole/caratteri.\n\n[Regole severe]\n1. Sono vietate lunghe introduzioni o premesse del tipo 'Ho cercato...'.\n2. Se i risultati di ricerca non contengono informazioni pertinenti, non inventare nulla e comunicalo brevemente."
     },
     "setup_wizard": {
         "title": "Configurazione guidata di SecreAI",
