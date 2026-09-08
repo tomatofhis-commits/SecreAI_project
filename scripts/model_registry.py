@@ -16,9 +16,9 @@ from typing import Tuple, Optional, List, Dict, Any
 # デフォルトモデル設定
 DEFAULT_MODELS = {
     "gemini": {
-        "normal": "gemini-3.7-flash",
-        "pro": "gemini-3.7-flash（中）",
-        "db": "gemini-3.7-flash（中）",
+        "normal": "gemini-3.8-flash",
+        "pro": "gemini-3.8-flash（中）",
+        "db": "gemini-3.8-flash（中）",
     },
     "openai": {
         "normal": "gpt-5.4-mini",
@@ -38,7 +38,7 @@ GEMINI_NORMAL_MODELS = [
     "gemini-3.5-flash-lite",
     "gemini-3-flash-preview",
     "gemini-3.6-flash",
-    "gemini-3.7-flash",
+    "gemini-3.8-flash",
     "gemini-3.1-pro-preview"
 ]
 
@@ -46,16 +46,16 @@ GEMINI_PRO_MODELS = [
     "gemini-3-flash-preview",
     "gemini-3.6-flash（中）",
     "gemini-3.6-flash（高）",
-    "gemini-3.7-flash（中）",
-    "gemini-3.7-flash（高）",
+    "gemini-3.8-flash（中）",
+    "gemini-3.8-flash（高）",
     "gemini-3.1-pro-preview"
 ]
 
 GEMINI_DB_MODELS = [
-    "gemini-3.7-flash（高）",
-    "gemini-3.7-flash（中）",
-    "gemini-3.7-flash（低）",
-    "gemini-3.7-flash（最小）",
+    "gemini-3.8-flash（高）",
+    "gemini-3.8-flash（中）",
+    "gemini-3.8-flash（低）",
+    "gemini-3.8-flash（最小）",
     "gemini-3.6-flash（高）",
     "gemini-3.6-flash（中）",
     "gemini-3.6-flash（低）",
@@ -81,7 +81,7 @@ THINKING_SUPPORTED_MODELS = {
     "gemini-3.1-flash-lite",
     "gemini-3.5-flash-lite",
     "gemini-3.6-flash",
-    "gemini-3.7-flash",
+    "gemini-3.8-flash",
     "gemini-3.1-flash-lite-preview"
 }
 
@@ -116,15 +116,20 @@ MODEL_RENAME_MAP = {
     "o1（中）": "gpt-5.6-sol",
     "o1（高）": "gpt-5.6-sol",
     # Gemini
-    "gemini-2.0-flash": "gemini-3.7-flash",
-    "gemini-2.5-flash-lite": "gemini-3.7-flash",
-    "gemini-2.5-flash": "gemini-3.7-flash",
-    "gemini-3.5-flash": "gemini-3.7-flash",
-    "gemini-2.0-flash-thinking-exp": "gemini-3.7-flash（中）",
-    "gemini-3.5-flash（中）": "gemini-3.7-flash（中）",
-    "gemini-3.5-flash（高）": "gemini-3.7-flash（中）",
-    "gemini-3.5-flash（低）": "gemini-3.7-flash（中）",
-    "gemini-3.5-flash（最小）": "gemini-3.7-flash（中）",
+    "gemini-2.0-flash": "gemini-3.8-flash",
+    "gemini-2.5-flash-lite": "gemini-3.8-flash",
+    "gemini-2.5-flash": "gemini-3.8-flash",
+    "gemini-3.5-flash": "gemini-3.8-flash",
+    "gemini-3.7-flash": "gemini-3.8-flash",
+    "gemini-2.0-flash-thinking-exp": "gemini-3.8-flash（中）",
+    "gemini-3.5-flash（中）": "gemini-3.8-flash（中）",
+    "gemini-3.5-flash（高）": "gemini-3.8-flash（中）",
+    "gemini-3.5-flash（低）": "gemini-3.8-flash（中）",
+    "gemini-3.5-flash（最小）": "gemini-3.8-flash（中）",
+    "gemini-3.7-flash（高）": "gemini-3.8-flash（高）",
+    "gemini-3.7-flash（中）": "gemini-3.8-flash（中）",
+    "gemini-3.7-flash（低）": "gemini-3.8-flash（低）",
+    "gemini-3.7-flash（最小）": "gemini-3.8-flash（最小）",
 }
 
 # ==============================================================================
@@ -135,9 +140,9 @@ def parse_model_name(model_name: str) -> Tuple[str, Optional[str]]:
     """
     モデル名から実モデル名と指定された思考レベル（またはreasoning_effort）をパースする。
     例:
-      'gemini-3.7-flash（中）' -> ('gemini-3.7-flash', 'medium')
+      'gemini-3.8-flash（中）' -> ('gemini-3.8-flash', 'medium')
       'o3-mini（低）' -> ('o3-mini', 'low')
-      'gemini-3.7-flash' -> ('gemini-3.7-flash', None)
+      'gemini-3.8-flash' -> ('gemini-3.8-flash', None)
     """
     if not model_name:
         return "", None
@@ -163,10 +168,16 @@ def supports_thinking(model_name: str) -> bool:
     return actual_name in THINKING_SUPPORTED_MODELS
 
 
-def migrate_model_name(model_name: str) -> Tuple[str, bool]:
+def get_default_model(provider: str = "gemini", role: str = "normal") -> str:
+    """指定プロバイダー・ロールの推奨デフォルトモデル名を取得する。"""
+    provider_config = DEFAULT_MODELS.get(provider.lower(), DEFAULT_MODELS["gemini"])
+    return provider_config.get(role, provider_config.get("normal", "gemini-3.8-flash"))
+
+
+def get_migrated_model_name(model_name: str) -> Tuple[str, bool]:
     """
-    指定されたモデル名が古い世代の場合、最新の推奨モデルに置換する。
-    Returns:
+    旧モデル名が指定されていた場合、後継モデル名へ自動変換する。
+    戻り値:
       (置換後モデル名, 置換が発生したかどうかのbool)
     """
     if not model_name:
@@ -177,7 +188,11 @@ def migrate_model_name(model_name: str) -> Tuple[str, bool]:
         return MODEL_RENAME_MAP[clean_name], True
 
     # DB_MODEL_ID や MODEL_ID_PRO で 2.x 系列などが指定されている場合の包括的フォールバック
-    if any(clean_name.startswith(prefix) for prefix in ("gemini-2.0", "gemini-2.5")):
-        return "gemini-3.7-flash", True
+    if any(clean_name.startswith(prefix) for prefix in ("gemini-2.0", "gemini-2.5", "gemini-3.7")):
+        return "gemini-3.8-flash", True
 
     return clean_name, False
+
+
+# 後方互換用エイリアス
+migrate_model_name = get_migrated_model_name

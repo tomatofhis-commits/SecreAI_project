@@ -19,7 +19,7 @@ except ImportError:
 
 def get_ai_response(prompt, config, response_json=False):
     provider = config.get("DB_PROVIDER", config.get("AI_PROVIDER", "gemini")).lower()
-    model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-3.7-flash"))
+    model_id = config.get("DB_MODEL_ID", config.get("MODEL_ID", "gemini-3.8-flash"))
 
     try:
         from config_manager import parse_model_name

@@ -12,8 +12,8 @@ DEFAULT_CONFIG = {
     "GEMINI_API_KEY": "",
     "OPENAI_API_KEY": "",
     "TAVILY_API_KEY": "",
-    "MODEL_ID": "gemini-3.7-flash",
-    "MODEL_ID_PRO": "gemini-3.7-flash（中）",
+    "MODEL_ID": "gemini-3.8-flash",
+    "MODEL_ID_PRO": "gemini-3.8-flash（中）",
     "MODEL_ID_GPT": "gpt-5.4-mini",
     "LOCAL_LLM_PROVIDER": "ollama",
     "OLLAMA_URL": "http://localhost:11434/v1",
@@ -21,7 +21,7 @@ DEFAULT_CONFIG = {
     "MODEL_ID_LOCAL": "gemma3:12b",
     "MODEL_ID_SUMMARY": "gemma3:4b",
     "DB_PROVIDER": "gemini",
-    "DB_MODEL_ID": "gemini-3.7-flash（中）",
+    "DB_MODEL_ID": "gemini-3.8-flash（中）",
     "search_switch": False,
     "SEARCH_PROVIDER": "tavily",
     # SEARCH_PROVIDER の選択肢:
@@ -128,9 +128,15 @@ def migrate_config(config):
 
     # 廃止・旧世代モデルの自動置換 (model_registry を利用)
     try:
-        from model_registry import migrate_model_name
+        try:
+            from model_registry import migrate_model_name
+        except ImportError:
+            from model_registry import get_migrated_model_name as migrate_model_name
     except ImportError:
-        from scripts.model_registry import migrate_model_name
+        try:
+            from scripts.model_registry import migrate_model_name
+        except ImportError:
+            from scripts.model_registry import get_migrated_model_name as migrate_model_name
 
     for _key in ("MODEL_ID", "MODEL_ID_PRO", "MODEL_ID_GPT", "DB_MODEL_ID"):
         if _key in config:

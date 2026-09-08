@@ -279,7 +279,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     lbl_model_normal = tk.Label(normal_col, text=l_set.get("model_normal", "Normal Model:"), font=("Segoe UI", 9))
     lbl_model_normal.pack(anchor="w")
     gemini_models = model_registry.GEMINI_NORMAL_MODELS
-    model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-3.7-flash"))
+    model_var = tk.StringVar(gemini_frame, config.get("MODEL_ID", "gemini-3.8-flash"))
     tk.OptionMenu(normal_col, model_var, *gemini_models).pack(pady=2, fill="x")
 
     # 2. 思考レベル (中央)
@@ -319,7 +319,7 @@ def open_settings_window(parent, config_path, current_config, save_callback):
     lbl_model_pro = tk.Label(pro_col, text=l_set.get("model_pro", "Pro Model:"), font=("Segoe UI", 9))
     lbl_model_pro.pack(anchor="w")
     pro_models = model_registry.GEMINI_PRO_MODELS
-    model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.7-flash（中）"))
+    model_pro_var = tk.StringVar(gemini_frame, config.get("MODEL_ID_PRO", "gemini-3.8-flash（中）"))
     tk.OptionMenu(pro_col, model_pro_var, *pro_models).pack(pady=2, fill="x")
 
     # OpenAI Frame
@@ -1387,6 +1387,31 @@ def open_settings_window(parent, config_path, current_config, save_callback):
             except Exception:
                 pass
 
+            # 添削・クリーンアップボタン (各辞書ごと)
+            def _make_open_editor(target_f):
+                return lambda: open_dict_editor(target_f)
+
+            btn_edit_single = tk.Button(
+                item_frame,
+                text=l_set.get("btn_edit_dict", "添削"),
+                command=_make_open_editor(fname),
+                font=("", 8),
+                padx=6,
+                pady=1,
+                bg="#E0E0E0"
+            )
+            btn_edit_single.pack(side="right", padx=5)
+
+    def open_dict_editor(target_file="USER_LEARNED.json"):
+        try:
+            try:
+                from scripts.dictionary_editor import open_dictionary_editor
+            except ImportError:
+                from dictionary_editor import open_dictionary_editor
+            open_dictionary_editor(root, config, target_file)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open dictionary editor: {e}")
+
     refresh_dictionary_list()
 
     dict_btn_frame = tk.Frame(dict_container)
@@ -1397,6 +1422,18 @@ def open_settings_window(parent, config_path, current_config, save_callback):
             os.makedirs(dict_dir_path, exist_ok=True)
         if sys.platform == "win32":
             os.startfile(dict_dir_path)
+
+    # 1. 学習辞書を添削・整理ボタン (最も頻繁に使うショートカット)
+    btn_edit_learned = tk.Button(
+        dict_btn_frame,
+        text=l_set.get("btn_edit_learned", "学習辞書を添削・整理"),
+        command=lambda: open_dict_editor("USER_LEARNED.json"),
+        bg="#2196F3",
+        fg="white",
+        font=("", 9, "bold"),
+        padx=8
+    )
+    btn_edit_learned.pack(side="left", padx=(0, 8))
 
     btn_open_dict = tk.Button(dict_btn_frame, text=l_set.get("btn_open_dict", "辞書フォルダを開く"), command=open_dict_folder)
     btn_open_dict.pack(side="left", padx=(0, 8))

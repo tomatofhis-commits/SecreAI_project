@@ -165,7 +165,7 @@ def main(base_path=None):
     elif provider == "local":
         model_id = config.get("MODEL_ID_LOCAL", "llama3.2-vision:11b")
     else:  # gemini
-        model_id = config.get("MODEL_ID", "gemini-3.7-flash")
+        model_id = config.get("MODEL_ID", "gemini-3.8-flash")
 
     # APIキャッシュの初期化
     cache_enabled = config.get("API_CACHE_ENABLED", True)

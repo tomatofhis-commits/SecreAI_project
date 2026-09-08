@@ -1,4 +1,8 @@
-# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.6)
+# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.7)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python: 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)]()
 
 ![SecreAI Logo](SecreAI.ico)
 
@@ -7,11 +11,14 @@ SecreAIは、Google Geminiをコアエンジンに据え、ウェブ検索、画
 
 ---
 
-## 主要機能 / Key Features (Ver 1.3.6)
+## 主要機能 / Key Features (Ver 1.3.7)
 
 - **ユーザー辞書エンジン ＆ STT誤認識自動補正 (Ver 1.3.6) / User Dictionary Engine & STT Correction**:
   `dictionary/` フォルダ内のJSON辞書（MTG公式全カードデータ等）から最長一致Trie検索により用語を即時検出。音声認識の誤認識を全自動で正表記へ補正し、AIプロンプトへ知識を動的注入。  
   *Detects domain terms instantly using a longest-match Trie search across JSON dictionaries, auto-correcting speech recognition errors and dynamically injecting knowledge into AI prompts.*
+- **ユーザー辞書添削・クリーンアップ機能 (Ver 1.3.7) / Dictionary Review & Cleanup**:
+  会話や自動学習で意図しない項目が辞書に登録されてしまった場合でも、設定画面「辞書 / 知識」タブから不要な項目を一括削除・エイリアス修正可能。キャッシュ自動破棄とメモリ即時再構築により0秒で反映。  
+  *Easily review, edit, or delete unintended terms or aliases learned during conversation directly from the Settings UI with instant cache clearing and live reload.*
 - **非同期AI文脈判断 辞書詳細ログ補完 ＆ ワーキングメモリ自動注入 (Ver 1.3.6) / Intelligent Async Dictionary Logging & Working Memory Slot**:
   ユーザーの質問意図・AI返答・辞書候補から真に必要な情報のみを厳選してログ出力。ワーキングメモリに保持して次期プロンプトへ自動注入。  
   *Contextually evaluates and outputs only necessary dictionary details to the log, retaining them in working memory to automatically feed into the next prompt context.*
@@ -21,9 +28,9 @@ SecreAIは、Google Geminiをコアエンジンに据え、ウェブ検索、画
 - **設定UI起動の高速化＆スマートキャッシュ連携 / Instant Settings Startup & Smart Caching**:
   設定画面起動時の同期HTTPリクエストを完全撤廃し、即時起動（0ms遅延）を実現。Main起動時のバックグラウンド話者キャッシュ保存および非同期手動更新機能を追加。  
   *Eliminates synchronous HTTP requests during settings launch for instant opening, coupled with background speaker caching and async manual update triggers.*
-- **Gemini 3.7 Flash 標準搭載 & モデルレジストリ一元化 / Gemini 3.7 Flash & Unified Model Registry**:
-  Google最新モデル `gemini-3.7-flash` を標準搭載し、思考レベル制御（Thinking Budget）に完全対応。内部アーキテクチャのモデルレジストリ一元化により、高い堅牢性と拡張性を実現。  
-  *Features Google's newest `gemini-3.7-flash` as default with full thinking budget support, backed by a unified Model Registry architecture.*
+- **Gemini 3.8 Flash 標準搭載 & モデルレジストリ一元化 / Gemini 3.8 Flash & Unified Model Registry**:
+  Google最新モデル `gemini-3.8-flash` を標準搭載し、思考レベル制御（Thinking Budget）に完全対応。内部アーキテクチャのモデルレジストリ一元化により、高い堅牢性と拡張性を実現。  
+  *Features Google's newest `gemini-3.8-flash` as default with full thinking budget support, backed by a unified Model Registry architecture.*
 - **マルチモーダル対話 / Multimodal Interaction**: テキスト、音声、視覚（画面キャプチャ）を組み合わせた自然な対話。  
   *Natural conversations combining text, voice, and vision (screen capture).*
 - **ハイブリッド記憶 / Hybrid Memory**:
@@ -165,8 +172,10 @@ AIのロジック、データベース処理、バックグラウンド並列処
 本システムのメインとなるAIです。以下のモデルを選択可能です。  
 *The primary AI engine of the system. The following models are available:*
 
-- **Gemini-3.6-flash**: **[おすすめ / Recommended]** 思考レベル（高/中/低/最小）を調整可能な最新の超高速・高コスパモデル。  
-  *Latest ultra-fast, cost-effective model supporting customizable thinking levels (High/Medium/Low/Minimal).*
+- **Gemini-3.8-flash**: **[おすすめ / Recommended]** 思考レベル（高/中/低/最小）を調整可能な最新の超高速・高コスパモデル。推論・コーディング・マルチステップ自律タスクが大幅に向上。  
+  *Latest ultra-fast, cost-effective model supporting customizable thinking levels (High/Medium/Low/Minimal), significantly improved in reasoning and coding.*
+- **Gemini-3.6-flash**: 安定した実績を持つ高速・低コストモデル。  
+  *Stable and proven fast, low-cost model.*
 - **Gemini-3.5-flash-lite**: **[軽量 / Lightweight]** 思考レベル（高/中）に対応し、軽量かつ低コストで運用可能なモデル。  
   *Lightweight and low-cost model supporting thinking levels (High/Medium).*
 - **Gemini-3.1-pro-preview / Gemini-3-flash-preview**: 複雑な推論や高度な分析に対応するプレビューモデル。  

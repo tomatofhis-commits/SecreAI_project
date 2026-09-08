@@ -30,7 +30,7 @@ def encode_image_to_base64(image_path):
 
 def call_gemini_sync(query, image_obj, system_instr, config):
     try:
-        model_id = config.get("MODEL_ID", "gemini-3.7-flash")
+        model_id = config.get("MODEL_ID", "gemini-3.8-flash")
         from config_manager import parse_model_name
         actual_model_id, level = parse_model_name(model_id)
 

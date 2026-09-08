@@ -139,7 +139,7 @@ def generate_ai_text(prompt, config, system_instr=None, is_json=False):
     # --- C. Gemini プロバイダー (デフォルト) ---
     else:
         client = genai.Client(api_key=config.get("GEMINI_API_KEY", ""))
-        model_id = config.get("MODEL_ID_PRO" if system_instr else "MODEL_ID", "gemini-3.7-flash")
+        model_id = config.get("MODEL_ID_PRO" if system_instr else "MODEL_ID", "gemini-3.8-flash")
         
         from config_manager import parse_model_name
         actual_model_id, level = parse_model_name(model_id)

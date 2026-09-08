@@ -295,15 +295,23 @@ class DictionaryEngine:
                 pass
 
         entries_list = learned_data.setdefault("entries", [])
-        found = False
-        for item in entries_list:
+        existing_idx = None
+        target_item = None
+
+        for idx, item in enumerate(entries_list):
             if item.get("name") == entry.name:
-                item["aliases"] = list(set(item.get("aliases", []) + entry.aliases))
-                found = True
+                existing_idx = idx
+                target_item = item
                 break
 
-        if not found:
-            entries_list.append({
+        if existing_idx is not None:
+            # 既存項目のエイリアスを更新し、リストの先頭（最新）へ移動
+            target_item["aliases"] = list(set(target_item.get("aliases", []) + entry.aliases))
+            entries_list.pop(existing_idx)
+            entries_list.insert(0, target_item)
+        else:
+            # 新規項目をリストの先頭（最新）に挿入
+            entries_list.insert(0, {
                 "name": entry.name,
                 "aliases": entry.aliases,
                 "category": entry.category,
