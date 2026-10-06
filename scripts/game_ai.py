@@ -72,13 +72,34 @@ except ImportError:
         print("警告: dictionary_engine.py が見つかりません。辞書機能が無効化されています。")
 
 global_dict_engine = None
+current_enabled_dictionaries = None
+
 def get_dictionary_engine(root_dir, config=None):
-    global global_dict_engine
-    if global_dict_engine is None and DictionaryEngine:
+    global global_dict_engine, current_enabled_dictionaries
+    if not DictionaryEngine:
+        return None
+
+    # configが渡されていない場合は手動ロードを試みる
+    if config is None:
+        try:
+            config, _, _ = load_config_manual(root_dir)
+        except Exception:
+            config = {}
+
+    enabled_files = config.get("ENABLED_DICTIONARIES") if isinstance(config, dict) else None
+
+    # 初回初期化
+    if global_dict_engine is None:
         dict_path = os.path.join(root_dir, "dictionary")
         global_dict_engine = DictionaryEngine(dictionary_dir=dict_path)
-        enabled_files = config.get("ENABLED_DICTIONARIES") if isinstance(config, dict) else None
         global_dict_engine.initialize(enabled_files=enabled_files)
+        current_enabled_dictionaries = list(enabled_files) if isinstance(enabled_files, list) else enabled_files
+    else:
+        # 有効辞書リストの設定が変更されている場合は動的に再初期化（ホットリロード）
+        if current_enabled_dictionaries != enabled_files:
+            global_dict_engine.initialize(enabled_files=enabled_files)
+            current_enabled_dictionaries = list(enabled_files) if isinstance(enabled_files, list) else enabled_files
+
     return global_dict_engine
 
 
@@ -1882,7 +1903,7 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
             if learn_match:
                 canonical_name = learn_match.group(1).strip()
                 misrecognized_alias = learn_match.group(2).strip()
-                d_engine = get_dictionary_engine(root)
+                d_engine = get_dictionary_engine(root, config)
                 if d_engine and canonical_name and misrecognized_alias:
                     success = d_engine.add_learned_alias(canonical_name, misrecognized_alias, category="画面認識学習")
                     if success:

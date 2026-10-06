@@ -95,7 +95,7 @@ namespace SecreAI_Hub
             LoadLanguage();
 
             // Window Settings
-            Title = "SecreAI Hub v1.3.7 - Controller";
+            Title = "SecreAI Hub v1.3.8 - Controller";
             Width = 1150;
             Height = 880;
             Background = new SolidColorBrush(Color.FromRgb(18, 18, 20));
@@ -1081,6 +1081,12 @@ namespace SecreAI_Hub
                     var p = Process.Start(psi);
                     p.WaitForExit();
 
+                    // If Game AI server process is running, restart it to apply new settings cleanly
+                    if (_gameAiServerProcess != null && !_gameAiServerProcess.HasExited)
+                    {
+                        RestartGameAiServerProcess();
+                    }
+
                     // Reload configurations and synchronize without restarting
                     Dispatcher.BeginInvoke(new Action(() => {
                         LoadConfig();
@@ -1948,7 +1954,7 @@ namespace SecreAI_Hub
                         if (data != null && data.TryGetValue("tag_name", out tagObj))
                         {
                             string latestV = tagObj.ToString().TrimStart('v');
-                            string currentV = "1.3.7";
+                            string currentV = "1.3.8";
                             
                             if (string.Compare(latestV, currentV) > 0)
                             {

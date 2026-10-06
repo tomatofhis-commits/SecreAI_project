@@ -408,23 +408,17 @@ class DictionaryEditor:
 
     def _notify_engine_reload(self):
         """アプリ本体のメモリ上にある辞書エンジンを即時リロード"""
-        try:
-            # game_ai モジュールのシングルトンを再初期化
-            import game_ai
-            if hasattr(game_ai, "_dictionary_engine") and game_ai._dictionary_engine is not None:
-                game_ai._dictionary_engine.initialize()
-                logger.info("game_ai の辞書エンジンを即時再初期化しました。")
-        except Exception:
-            pass
-
-        try:
-            # scripts.game_ai 経由
-            from scripts import game_ai
-            if hasattr(game_ai, "_dictionary_engine") and game_ai._dictionary_engine is not None:
-                game_ai._dictionary_engine.initialize()
-                logger.info("scripts.game_ai の辞書エンジンを即時再初期化しました。")
-        except Exception:
-            pass
+        for mod_name in ("game_ai", "scripts.game_ai"):
+            try:
+                mod = __import__(mod_name, fromlist=["global_dict_engine", "_dictionary_engine", "current_enabled_dictionaries"])
+                engine = getattr(mod, "global_dict_engine", None) or getattr(mod, "_dictionary_engine", None)
+                if engine is not None and hasattr(engine, "initialize"):
+                    engine.initialize()
+                    logger.info(f"{mod_name} の辞書エンジンを即時再初期化しました。")
+                if hasattr(mod, "current_enabled_dictionaries"):
+                    setattr(mod, "current_enabled_dictionaries", None)
+            except Exception:
+                pass
 
     def _on_file_changed(self, event=None):
         new_file = self.file_var.get()

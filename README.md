@@ -1,4 +1,4 @@
-# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.7)
+# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.8)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python: 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
@@ -11,11 +11,11 @@ SecreAIは、Google Geminiをコアエンジンに据え、ウェブ検索、画
 
 ---
 
-## 主要機能 / Key Features (Ver 1.3.7)
+## 主要機能 / Key Features (Ver 1.3.8)
 
-- **ユーザー辞書エンジン ＆ STT誤認識自動補正 (Ver 1.3.6) / User Dictionary Engine & STT Correction**:
-  `dictionary/` フォルダ内のJSON辞書（MTG公式全カードデータ等）から最長一致Trie検索により用語を即時検出。音声認識の誤認識を全自動で正表記へ補正し、AIプロンプトへ知識を動的注入。  
-  *Detects domain terms instantly using a longest-match Trie search across JSON dictionaries, auto-correcting speech recognition errors and dynamically injecting knowledge into AI prompts.*
+- **ユーザー辞書の動的切り替え（ホットリロード） (Ver 1.3.8) / Dynamic Dictionary Hot-Reload**:
+  常駐サーバープロセスが起動した状態でも、設定画面でチェックを変更した辞書が次回対話から即座に反映されるよう辞書エンジンの動的再初期化ロジックを実装。設定画面終了時の常駐プロセス自動同期による二重の安全性を実現。  
+  *Dynamically reinitializes the dictionary engine when dictionary configurations are changed, instantly reflecting enabled/disabled dictionaries without requiring application restarts.*
 - **ユーザー辞書添削・クリーンアップ機能 (Ver 1.3.7) / Dictionary Review & Cleanup**:
   会話や自動学習で意図しない項目が辞書に登録されてしまった場合でも、設定画面「辞書 / 知識」タブから不要な項目を一括削除・エイリアス修正可能。キャッシュ自動破棄とメモリ即時再構築により0秒で反映。  
   *Easily review, edit, or delete unintended terms or aliases learned during conversation directly from the Settings UI with instant cache clearing and live reload.*
