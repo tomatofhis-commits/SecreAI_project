@@ -1,10 +1,10 @@
 ; ============================================================
-;  SecreAI + RTtranslator テスト版インストーラー (v1.3.2-test)
+;  SecreAI + RTtranslator テスト版インストーラー (v1.3.9-test)
 ;  Inno Setup 6 スクリプト (テスト専用構成)
 ; ============================================================
 
-#define MyAppName        "SecreAI (Test v1.3.2)"
-#define MyAppVersion     "1.3.2-test"
+#define MyAppName        "SecreAI (Test v1.3.9)"
+#define MyAppVersion     "1.3.9-test"
 #define MyAppPublisher   "SecreAI Dev Team"
 #define MyAppExeName     "secreAI.exe"
 
@@ -20,12 +20,12 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 ; インストール先をテスト専用ディレクトリに設定
-DefaultDirName={localappdata}\SecreAI_Test_v1.3.2
+DefaultDirName={localappdata}\SecreAI_Test_v1.3.9
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=d:\SecreAI_Build\installer_output
-OutputBaseFilename=SecreAI_Test_v1.3.2_Setup
+OutputBaseFilename=SecreAI_Test_v1.3.9_Setup
 SetupIconFile=d:\SecreAI_Build\SecreAI.ico
 Compression=lzma
 SolidCompression=yes
@@ -81,6 +81,7 @@ Source: "{#RTTDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
 ; 3. 追加データとドキュメント
 Source: "d:\SecreAI_Build\data\lang\*"; DestDir: "{app}\data\lang"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "d:\SecreAI_Build\data\kanji_readings.json"; DestDir: "{app}\data"; Flags: ignoreversion
 Source: "d:\SecreAI_Build\dictionary\README.md"; DestDir: "{app}\dictionary"; Flags: ignoreversion
 Source: "d:\SecreAI_Build\更新履歴.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "d:\SecreAI_Build\ReadMe.txt"; DestDir: "{app}"; Flags: ignoreversion

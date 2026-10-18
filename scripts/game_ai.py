@@ -59,6 +59,16 @@ except ImportError:
         WorkingMemoryManager = None
         print("警告: working_memory_manager.py が見つかりません。")
 
+# 多言語対応 固有名詞学習バリデータ (10言語対応)
+try:
+    from .alias_validator import get_learn_alias_prompt, validate_alias
+except ImportError:
+    try:
+        from alias_validator import get_learn_alias_prompt, validate_alias
+    except ImportError:
+        get_learn_alias_prompt = lambda lang="ja": ""
+        validate_alias = lambda c, a, lang="ja": (True, "Validator unavailable")
+
 global_working_memory = WorkingMemoryManager(max_context_chars=3000) if WorkingMemoryManager else None
 
 # 辞書エンジンのインポート (STT誤変換補正・知識注入)
@@ -1201,14 +1211,10 @@ def chat_with_ai(prompt, image=None, config=None, root=None, lang_data=None, dic
         else:
             send_log_to_hub("警告: search_switchはONですが、ja.json内にsearch_logicが見つかりません。", is_error=True)
 
-    # 画面・画像（Vision）解析時の固有名詞自己学習プロンプト
+    # 画面・画像（Vision）解析時の固有名詞自己学習プロンプト (10言語対応・短縮厳格版)
     if image:
-        system_instr += (
-            "\n【画像・画面からの固有名詞自己学習ルール】\n"
-            "画面上に明確に表示されている固有名詞（地名・カード名・モンスター名等）と、"
-            "ユーザーの音声入力テキストに明らかな誤認識・当て字のズレがある場合（例: 画面に「Göteborg/ヨーテボリ」があり音声が「両手掘り」など）、"
-            "回答の末尾に必ず `[LEARN_ALIAS: 正式名称 = 誤認識単語]` という形式で学習タグを出力してください。\n"
-        )
+        cur_lang = config.get("LANGUAGE", "ja") if config else "ja"
+        system_instr += get_learn_alias_prompt(cur_lang)
 
     answer_text = ""
     image_bytes = None
@@ -1898,16 +1904,27 @@ def main(mode="voice", chat_text=None, session_id=None, session_getter=None, ove
             res = chat_with_ai(query, Image.open(abs_path) if abs_path else None, config, root, lang_data, dict_context=dict_context_str)
 
         if res:
-            # 自己学習タグの抽出と辞書への即時登録 (Vision/OCR照合時)
+            # 自己学習タグの抽出と多言語高速精査 (Vision/OCR照合時)
             learn_match = re.search(r'\[LEARN_ALIAS:\s*(.*?)\s*=\s*(.*?)\]', res)
             if learn_match:
-                canonical_name = learn_match.group(1).strip()
-                misrecognized_alias = learn_match.group(2).strip()
-                d_engine = get_dictionary_engine(root, config)
-                if d_engine and canonical_name and misrecognized_alias:
-                    success = d_engine.add_learned_alias(canonical_name, misrecognized_alias, category="画面認識学習")
-                    if success:
-                        send_log_to_hub(f"システム: 【自己学習】画面上の『{canonical_name}』に基づき誤認識『{misrecognized_alias}』を辞書に学習しました。")
+                try:
+                    canonical_name = learn_match.group(1).strip()
+                    misrecognized_alias = learn_match.group(2).strip()
+                    cur_lang = config.get("LANGUAGE", "ja") if config else "ja"
+                    
+                    # 多言語高速足切りフィルタによる精査
+                    is_valid, v_reason = validate_alias(canonical_name, misrecognized_alias, lang_code=cur_lang)
+                    if is_valid:
+                        d_engine = get_dictionary_engine(root, config)
+                        if d_engine and canonical_name and misrecognized_alias:
+                            success = d_engine.add_learned_alias(canonical_name, misrecognized_alias, category="画面認識学習")
+                            if success:
+                                send_log_to_hub(f"システム: 【自己学習】画面上の『{canonical_name}』に基づき誤認識『{misrecognized_alias}』を辞書に学習しました。({v_reason})")
+                    else:
+                        send_log_to_hub(f"システム: 【自己学習スキップ】『{canonical_name} = {misrecognized_alias}』を除外しました ({v_reason})")
+                except Exception as learn_err:
+                    print(f"自己学習処理スキップ: {learn_err}")
+                
                 # 出力テキストから学習タグを除去
                 res = re.sub(r'\[LEARN_ALIAS:.*?\]', '', res).strip()
 

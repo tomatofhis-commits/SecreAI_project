@@ -1,4 +1,4 @@
-# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.8)
+# SecreAI - 高性能AI秘書システム / High-Performance AI Assistant System (Ver 1.3.9)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python: 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
@@ -11,8 +11,11 @@ SecreAIは、Google Geminiをコアエンジンに据え、ウェブ検索、画
 
 ---
 
-## 主要機能 / Key Features (Ver 1.3.8)
+## 主要機能 / Key Features (Ver 1.3.9)
 
+- **固有名詞自己学習の多層防御バリデータ ＆ 10言語音韻照合 (Ver 1.3.9) / Defense-in-Depth Proper Noun Validator & 10-Language Phonetic Matching**:
+  画像認識時の固有名詞自己学習において、文末の疑問符・質問文や日常会話フレーズを第1防壁で高速排除。第2防壁として2,153文字の常用・ゲーム漢字音訓データ（kanji_readings.json）による音読み・訓読み照合や欧文簡易Metaphone・韓国語ハングル数式分解を搭載し、カード名（嵐の目、ウギン 等）や当て字（ウギン＝右舷、ヨーテボリ＝両手掘り 等）の誤認識を完璧に学習しつつ無関係な単語混入を完全遮断。  
+  *Implements a robust two-layer validation architecture for visual proper noun learning: Layer 1 eliminates sentence/question structures, and Layer 2 verifies phonetic similarity across 10 languages (using kanji on-kun readings, Metaphone, and Hangul decomposition).*
 - **ユーザー辞書の動的切り替え（ホットリロード） (Ver 1.3.8) / Dynamic Dictionary Hot-Reload**:
   常駐サーバープロセスが起動した状態でも、設定画面でチェックを変更した辞書が次回対話から即座に反映されるよう辞書エンジンの動的再初期化ロジックを実装。設定画面終了時の常駐プロセス自動同期による二重の安全性を実現。  
   *Dynamically reinitializes the dictionary engine when dictionary configurations are changed, instantly reflecting enabled/disabled dictionaries without requiring application restarts.*

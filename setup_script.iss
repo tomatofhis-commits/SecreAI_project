@@ -1,10 +1,10 @@
 ; ============================================================
-;  SecreAI + RTtranslator 統合インストーラー (v1.3.8)
+;  SecreAI + RTtranslator 統合インストーラー (v1.3.9)
 ;  Inno Setup 6 スクリプト
 ; ============================================================
 
 #define MyAppName        "SecreAI"
-#define MyAppVersion     "1.3.8"
+#define MyAppVersion     "1.3.9"
 #define MyAppPublisher   "SecreAI Dev Team"
 #define MyAppExeName     "secreAI.exe"
 
@@ -87,6 +87,7 @@ Source: "{#RTTDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
 ; 3. 同梱漏れしていた追加データとドキュメント
 Source: "d:\SecreAI_Build\data\lang\*"; DestDir: "{app}\data\lang"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "d:\SecreAI_Build\data\kanji_readings.json"; DestDir: "{app}\data"; Flags: ignoreversion
 Source: "d:\SecreAI_Build\更新履歴.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "d:\SecreAI_Build\ReadMe.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "d:\SecreAI_Build\SecreAI.ico"; DestDir: "{app}"; Flags: ignoreversion

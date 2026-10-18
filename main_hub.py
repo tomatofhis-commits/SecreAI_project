@@ -66,7 +66,7 @@ except ImportError:
 # ------------------------
 # 🔹 GLOBAL CONFIGURATION 🔹
 # ------------------------
-VERSION = "1.3.8"
+VERSION = "1.3.9"
 CONFIG_VERSION = "2.0"
 APP_NAME = f"SecreAI - NextGen {VERSION}"
 
