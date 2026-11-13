@@ -22,7 +22,7 @@ DEFAULT_MODELS = {
     },
     "openai": {
         "normal": "gpt-5.4-mini",
-        "pro": "gpt-5.6-sol",
+        "pro": "gpt-6.1-sol",
         "db": "gpt-5.4-mini",
     },
     "local": {
@@ -36,44 +36,42 @@ DEFAULT_MODELS = {
 GEMINI_NORMAL_MODELS = [
     "gemini-3.1-flash-lite",
     "gemini-3.5-flash-lite",
-    "gemini-3-flash-preview",
     "gemini-3.6-flash",
     "gemini-3.8-flash",
-    "gemini-3.1-pro-preview"
+    "gemini-4-hydrogen",
+    "gemini-4-argon"
 ]
 
 GEMINI_PRO_MODELS = [
-    "gemini-3-flash-preview",
-    "gemini-3.6-flash（中）",
-    "gemini-3.6-flash（高）",
     "gemini-3.8-flash（中）",
     "gemini-3.8-flash（高）",
-    "gemini-3.1-pro-preview"
+    "gemini-4-hydrogen（中）",
+    "gemini-4-hydrogen（高）",
+    "gemini-4-argon（中）",
+    "gemini-4-argon（高）"
 ]
 
 GEMINI_DB_MODELS = [
-    "gemini-3.8-flash（高）",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3.8-flash",
+    "gemini-4-hydrogen",
+    "gemini-4-argon",
     "gemini-3.8-flash（中）",
-    "gemini-3.8-flash（低）",
-    "gemini-3.8-flash（最小）",
-    "gemini-3.6-flash（高）",
-    "gemini-3.6-flash（中）",
-    "gemini-3.6-flash（低）",
-    "gemini-3.6-flash（最小）",
-    "gemini-3.5-flash-lite（高）",
-    "gemini-3.5-flash-lite（中）",
-    "gemini-3.1-flash-lite（高）",
-    "gemini-3.1-flash-lite（中）",
-    "gemini-3-flash-preview",
-    "gemini-3.1-pro-preview"
+    "gemini-3.8-flash（高）",
+    "gemini-4-hydrogen（中）",
+    "gemini-4-hydrogen（高）",
+    "gemini-4-argon（中）",
+    "gemini-4-argon（高）"
 ]
 
 OPENAI_MODELS = [
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
+    "gpt-5.4-nano",
     "gpt-5.4-mini",
-    "gpt-5.4-nano"
+    "gpt-6-luna",
+    "gpt-6.1-terra",
+    "gpt-6.1-sol"
 ]
 
 # 思考レベル（Thinking Budget）をサポートするGeminiモデルID群
@@ -82,6 +80,8 @@ THINKING_SUPPORTED_MODELS = {
     "gemini-3.5-flash-lite",
     "gemini-3.6-flash",
     "gemini-3.8-flash",
+    "gemini-4-hydrogen",
+    "gemini-4-argon",
     "gemini-3.1-flash-lite-preview"
 }
 

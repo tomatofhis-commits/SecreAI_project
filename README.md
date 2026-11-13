@@ -172,31 +172,43 @@ AIのロジック、データベース処理、バックグラウンド並列処
 *An overview of AI model performance and cost considerations for new users.*
 
 ### 1. Google Gemini (メインエンジン / Main Engine)
-本システムのメインとなるAIです。以下のモデルを選択可能です。  
-*The primary AI engine of the system. The following models are available:*
+本システムのメインとなるAIです。通常用はコストの安い順に以下のモデルを選択可能です（複雑なモデル・データベース用では思考レベル中/高の指定にも対応）。  
+*The primary AI engine of the system. Standard models are listed in order of cost (lowest to highest); complex/DB roles also support Medium/High thinking levels:*
 
-- **Gemini-3.8-flash**: **[おすすめ / Recommended]** 思考レベル（高/中/低/最小）を調整可能な最新の超高速・高コスパモデル。推論・コーディング・マルチステップ自律タスクが大幅に向上。  
-  *Latest ultra-fast, cost-effective model supporting customizable thinking levels (High/Medium/Low/Minimal), significantly improved in reasoning and coding.*
-- **Gemini-3.6-flash**: 安定した実績を持つ高速・低コストモデル。  
-  *Stable and proven fast, low-cost model.*
-- **Gemini-3.5-flash-lite**: **[軽量 / Lightweight]** 思考レベル（高/中）に対応し、軽量かつ低コストで運用可能なモデル。  
-  *Lightweight and low-cost model supporting thinking levels (High/Medium).*
-- **Gemini-3.1-pro-preview / Gemini-3-flash-preview**: 複雑な推論や高度な分析に対応するプレビューモデル。  
-  *Preview models suitable for complex reasoning and advanced analysis.*
+- **gemini-3.1-flash-lite**: **[最安・超軽量 / Lowest Cost & Ultra-Light]** 最も安価で高速な超軽量モデル。日常の軽い会話や定型処理向け（目安：入力 \$0.075 / 出力 \$0.30 per 1M tokens）。  
+  *Lowest-cost, ultra-lightweight model for casual chat and routine tasks (~$0.075 input / $0.30 output per 1M tokens).*
+- **gemini-3.5-flash-lite**: **[軽量・思考レベル対応 / Lightweight & Thinking]** 軽量・低コストながら思考レベル調整にも対応し、精度とコストのバランスに優れたモデル（目安：入力 \$0.10 / 出力 \$0.40 per 1M tokens）。  
+  *Lightweight, low-cost model supporting thinking levels with a great balance of accuracy and cost (~$0.10 input / $0.40 output per 1M tokens).*
+- **gemini-3.6-flash**: **[低コスト・高速 / Low Cost & Fast]** 安定した速度とコストのバランスに優れたモデル（目安：入力 \$0.15 / 出力 \$0.60 per 1M tokens）。  
+  *Fast, low-cost model with reliable performance (~$0.15 input / $0.60 output per 1M tokens).*
+- **gemini-3.8-flash**: **[おすすめ・高コスパ / Recommended]** 思考レベル（高/中/低/最小）を調整可能な万能モデル。価格と性能のバランスが最も優れています（目安：入力 \$0.15〜\$0.30 / 出力 \$0.60〜\$1.20 per 1M tokens）。  
+  *Versatile model supporting customizable thinking levels (High/Medium/Low/Minimal) with the best price-performance balance (~$0.15–$0.30 input / $0.60–$1.20 output per 1M tokens).*
+- **gemini-4-hydrogen**: **[次世代標準 / Next-Gen Standard]** 3.8 Flash を上回る推論力と自然な応答を備えた新世代モデル（目安：入力 \$0.30〜\$0.50 / 出力 \$1.20〜\$2.50 per 1M tokens）。  
+  *Next-generation model offering stronger reasoning and natural responses (~$0.30–$0.50 input / $1.20–$2.50 output per 1M tokens).*
+- **gemini-4-argon**: **[最高性能 / Flagship]** 複雑な分析や高度な推論に最適な最上位モデル（目安：入力 \$1.25〜\$2.50 / 出力 \$5.00〜\$10.00 per 1M tokens）。  
+  *Flagship model ideal for complex analysis and deep reasoning (~$1.25–$2.50 input / $5.00–$10.00 output per 1M tokens).*
 
 > [!IMPORTANT]
 > **Gemini の利用制限と無料枠 / Gemini Free Tier & Limits**
-> - **完全無料での利用 / Completely Free Use**: APIキーをそのまま使う場合、各モデル1日20回程度に制限されます。また、入力したデータはAIの学習に使用される可能性があります。  
->   *Direct API key usage without credit cards limits requests to ~20/day per model, and inputs may be used for training.*
+> - **完全無料での利用 / Completely Free Use**: APIキーをそのまま使う場合、各モデル1日20回程度（Liteモデルなら1日500回程度）に制限されます。また、入力したデータはAIの学習に使用される可能性があります。  
+>   *Direct API key usage without credit cards limits requests to ~20/day per model (~500/day for Lite models), and inputs may be used for training.*
 > - **無料枠の活用 / Utilizing Free Credits**: クレジットカードを紐付けると、**300ドル分（有効期限3か月）の無料クレジット**がもらえます。個人利用の範囲では、この期間内はほぼ無料でフル活用可能です。  
 >   *Linking a credit card provides **$300 in free credits (valid for 3 months)**, covering most personal use for free.*
 
 ### 2. OpenAI (オプション / Optional)
-さらに高度な知能や、特定のモデルを使用したい場合に利用します。  
-*Used when specific models or higher intelligence levels are required.*
+さらに高度な知能や、特定のモデルを使用したい場合に利用します（データベース用も共通の選択肢から選べます）。  
+*Used when specific models or higher intelligence levels are required (shared across main and DB roles):*
 
-- **gpt-5.5 / gpt-5.4 / gpt-5.4-mini / gpt-5.4-nano / gpt-5**: 思考レベル付きのモデルも含め、業界最高水準の推論能力と知識量を持つモデルが選択可能です。  
-  *Industry-leading models featuring superior reasoning capabilities and knowledge bases.*
+- **gpt-5.4-nano**: **[超低コスト / Ultra-Low Cost]** 最も安価で高速な軽量モデル（目安：入力 \$0.10 / 出力 \$0.40 per 1M tokens）。  
+  *Fastest and most affordable lightweight model (~$0.10 input / $0.40 output per 1M tokens).*
+- **gpt-5.4-mini**: **[高コスパ / Cost-Effective]** 価格と精度のバランスが良く、日常会話やデータベース整理に最適（目安：入力 \$0.15 / 出力 \$0.60 per 1M tokens）。  
+  *Well-balanced price and accuracy, ideal for daily chat and DB organization (~$0.15 input / $0.60 output per 1M tokens).*
+- **gpt-6-luna**: **[新世代・軽量 / Next-Gen Light]** GPT-6 世代の軽快なモデル（目安：入力 \$0.25〜\$0.50 / 出力 \$1.00〜\$2.00 per 1M tokens）。  
+  *Agile GPT-6 generation model (~$0.25–$0.50 input / $1.00–$2.00 output per 1M tokens).*
+- **gpt-6.1-terra**: **[高性能 / High Performance]** 高度な推論・長文処理に優れた上位モデル（目安：入力 \$1.00〜\$2.00 / 出力 \$4.00〜\$8.00 per 1M tokens）。  
+  *High-performance model for advanced reasoning and complex tasks (~$1.00–$2.00 input / $4.00–$8.00 output per 1M tokens).*
+- **gpt-6.1-sol**: **[最高峰 / Flagship]** 最高水準の知能と知識量を持つフラッグシップモデル（目安：入力 \$2.50〜\$5.00 / 出力 \$10.00〜\$15.00 per 1M tokens）。  
+  *Flagship model with top-tier intelligence and knowledge (~$2.50–$5.00 input / $10.00–$15.00 output per 1M tokens).*
 
 > [!TIP]
 > **OpenAI のコストメリット / OpenAI Cost Advantage**

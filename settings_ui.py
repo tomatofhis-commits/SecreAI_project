@@ -1455,12 +1455,6 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["TAVILY_API_KEY"] = tavily_key_entry.get().strip()
         config["MODEL_ID_SUMMARY"] = summary_model_var.get()
         
-        # 思考レベル: gemini-3.1-flash-lite 以外は "medium" 固定 (※API側での実質無効扱いは別途考慮するが、基本のフォールバック値)
-        if config["MODEL_ID"] == "gemini-3.1-flash-lite":
-            config["THINKING_BUDGET"] = THINKING_OPTIONS.get(thinking_var.get(), "medium")
-        else:
-            config["THINKING_BUDGET"] = "medium"
-
         config["AI_PROVIDER"] = provider_var.get()
         config["GEMINI_API_KEY"] = gemini_key_entry.get()
         config["OPENAI_API_KEY"] = openai_key_entry.get()
@@ -1469,6 +1463,12 @@ def open_settings_window(parent, config_path, current_config, save_callback):
         config["MODEL_ID_GPT"] = gpt_model_var.get()
         config["LOCAL_LLM_PROVIDER"] = local_provider_var.get()
         config["MODEL_ID_LOCAL"] = llama_model_var.get()
+
+        # 思考レベル: 対応モデルの場合は選択値を保存、非対応時は "medium"
+        if model_registry.supports_thinking(config["MODEL_ID"]):
+            config["THINKING_BUDGET"] = THINKING_OPTIONS.get(thinking_var.get(), "medium")
+        else:
+            config["THINKING_BUDGET"] = "medium"
         
         config["LMSTUDIO_URL"] = lmstudio_url_entry.get()
         config["OLLAMA_URL"] = ollama_url_entry.get()
