@@ -95,7 +95,7 @@ namespace SecreAI_Hub
             LoadLanguage();
 
             // Window Settings
-            Title = "SecreAI Hub v1.3.9 - Controller";
+            Title = "SecreAI Hub v1.3.10 - Controller";
             Width = 1150;
             Height = 880;
             Background = new SolidColorBrush(Color.FromRgb(18, 18, 20));
